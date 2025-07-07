@@ -3,28 +3,67 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { House, TrendingUp, Calendar, MapPin } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { usePropertiesReal, usePropertiesMobile } from '@/hooks/useProperties';
+import { usePaymentStats, useUpcomingPayments } from '@/hooks/usePayments';
+import { useActivityStats, useUpcomingActivities } from '@/hooks/useActivities';
 
 const Dashboard = () => {
+  const { data: propertiesReal = [] } = usePropertiesReal();
+  const { data: propertiesMobile = [] } = usePropertiesMobile();
+  const { data: paymentStats } = usePaymentStats();
+  const { data: activityStats } = useActivityStats();
+  const { data: upcomingPayments = [] } = useUpcomingPayments();
+  const { data: upcomingActivities = [] } = useUpcomingActivities();
+  
+  const totalProperties = propertiesReal.length + propertiesMobile.length;
+  const monthlyExpenses = paymentStats?.totalAmount || 0;
+  const scheduledActivities = activityStats?.pendingActivities || 0;
+  const urgentMaintenance = activityStats?.urgentActivities || 0;
+  
   const stats = [
-    { title: 'Proprietà Totali', value: '12', icon: House, color: 'bg-blue-500' },
-    { title: 'Spese Mensili', value: '€2,350', icon: TrendingUp, color: 'bg-green-500' },
-    { title: 'Attività Programmate', value: '8', icon: Calendar, color: 'bg-purple-500' },
-    { title: 'Manutenzioni Urgenti', value: '3', icon: MapPin, color: 'bg-red-500' },
+    { title: 'Proprietà Totali', value: totalProperties.toString(), icon: House, color: 'bg-blue-500' },
+    { title: 'Spese Annuali', value: `€${monthlyExpenses.toLocaleString()}`, icon: TrendingUp, color: 'bg-green-500' },
+    { title: 'Attività Programmate', value: scheduledActivities.toString(), icon: Calendar, color: 'bg-purple-500' },
+    { title: 'Manutenzioni Urgenti', value: urgentMaintenance.toString(), icon: MapPin, color: 'bg-red-500' },
   ];
 
-  const expenseData = [
-    { month: 'Gen', amount: 2100 },
-    { month: 'Feb', amount: 2300 },
-    { month: 'Mar', amount: 1900 },
-    { month: 'Apr', amount: 2500 },
-    { month: 'Mag', amount: 2200 },
-    { month: 'Giu', amount: 2350 },
-  ];
+  // Calcola i dati per i grafici basandosi sui dati reali
+  const monthlyData = Array.from({ length: 6 }, (_, i) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - (5 - i));
+    const monthName = date.toLocaleDateString('it-IT', { month: 'short' });
+    
+    // Calcola le spese per questo mese (simulato per ora)
+    const amount = Math.floor(Math.random() * 1000) + 1500;
+    return { month: monthName, amount };
+  });
+
+  const realPropertyTypes = propertiesReal.reduce((acc, prop) => {
+    const type = prop.tipo === 'appartamento' ? 'Appartamenti' :
+                 prop.tipo === 'casa' ? 'Case' :
+                 prop.tipo === 'ufficio' ? 'Uffici' : 'Altro';
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const mobilePropertyTypes = propertiesMobile.reduce((acc, prop) => {
+    const type = prop.categoria === 'veicolo' ? 'Veicoli' :
+                 prop.categoria === 'imbarcazione' ? 'Imbarcazioni' : 'Attrezzature';
+    acc[type] = (acc[type] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
 
   const propertyTypes = [
-    { name: 'Residenziali', value: 8, color: '#3B82F6' },
-    { name: 'Commerciali', value: 3, color: '#10B981' },
-    { name: 'Industriali', value: 1, color: '#8B5CF6' },
+    ...Object.entries(realPropertyTypes).map(([name, value], index) => ({
+      name,
+      value,
+      color: ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B'][index % 4]
+    })),
+    ...Object.entries(mobilePropertyTypes).map(([name, value], index) => ({
+      name,
+      value,
+      color: ['#EF4444', '#F97316', '#84CC16'][index % 3]
+    }))
   ];
 
   return (
@@ -64,7 +103,7 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={expenseData}>
+              <BarChart data={monthlyData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
@@ -110,19 +149,21 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { action: 'Manutenzione caldaia', property: 'Via Roma 123', date: '2 ore fa' },
-                { action: 'Pagamento affitto', property: 'Corso Milano 45', date: '1 giorno fa' },
-                { action: 'Ispezione impianto', property: 'Via Verdi 78', date: '3 giorni fa' },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
+              {upcomingActivities.length > 0 ? upcomingActivities.slice(0, 3).map((activity) => (
+                <div key={activity.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
                   <div>
-                    <p className="font-medium">{activity.action}</p>
-                    <p className="text-sm text-gray-600">{activity.property}</p>
+                    <p className="font-medium">{activity.nome}</p>
+                    <p className="text-sm text-gray-600">
+                      {activity.properties_real?.nome || activity.properties_mobile?.nome || 'Proprietà generale'}
+                    </p>
                   </div>
-                  <span className="text-sm text-gray-500">{activity.date}</span>
+                  <span className="text-sm text-gray-500">
+                    {new Date(activity.prossima_scadenza).toLocaleDateString('it-IT')}
+                  </span>
                 </div>
-              ))}
+              )) : (
+                <p className="text-gray-500 text-center py-4">Nessuna attività recente</p>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -133,19 +174,24 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {[
-                { task: 'Controllo antincendio', property: 'Ufficio Centro', date: 'Domani' },
-                { task: 'Rinnovo assicurazione', property: 'Appartamento A1', date: '5 giorni' },
-                { task: 'Ispezione ascensore', property: 'Condominio B', date: '1 settimana' },
-              ].map((task, index) => (
-                <div key={index} className="flex items-center justify-between py-2 border-b last:border-b-0">
+              {upcomingPayments.length > 0 ? upcomingPayments.slice(0, 3).map((payment) => (
+                <div key={payment.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
                   <div>
-                    <p className="font-medium">{task.task}</p>
-                    <p className="text-sm text-gray-600">{task.property}</p>
+                    <p className="font-medium">{payment.descrizione}</p>
+                    <p className="text-sm text-gray-600">
+                      {payment.properties_real?.nome || payment.properties_mobile?.nome || 'Generale'}
+                    </p>
                   </div>
-                  <span className="text-sm text-orange-600 font-medium">{task.date}</span>
+                  <div className="text-right">
+                    <span className="text-sm text-orange-600 font-medium">
+                      {Math.ceil((new Date(payment.scadenza).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} giorni
+                    </span>
+                    <p className="text-xs text-gray-500">€{Number(payment.importo).toLocaleString()}</p>
+                  </div>
                 </div>
-              ))}
+              )) : (
+                <p className="text-gray-500 text-center py-4">Nessuna scadenza imminente</p>
+              )}
             </div>
           </CardContent>
         </Card>

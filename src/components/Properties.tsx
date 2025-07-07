@@ -6,117 +6,65 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapPin, Settings, Pencil, Car, Home, Calendar, Euro } from 'lucide-react';
-import { Property, PropertyImmobiliare, PropertyMobile } from '@/types/Property';
+import { usePropertiesReal, usePropertiesMobile } from '@/hooks/useProperties';
+import type { Tables } from '@/integrations/supabase/types';
 
 const Properties = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'immobiliare' | 'mobile'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'real' | 'mobile'>('all');
   
-  // Dati di esempio combinando proprietà immobiliari e mobili
-  const properties: Property[] = [
-    {
-      id: 1,
-      tipo: 'immobiliare',
-      indirizzo: 'Via Roma 123, Milano',
-      tipoImmobile: 'Appartamento',
-      stato: 'In Affitto',
-      dataAcquisto: '2020-03-15',
-      valoreAcquisto: 250000,
-      canoneAffittoMensile: 1200,
-      dataInizioContratto: '2023-01-01',
-      dataFineContratto: '2025-12-31',
-      nomeInquilino: 'Mario Rossi',
-      tassePagateAnno: 2500,
-      incassiAffittiAnno: 14400,
-      noteDocumentazione: 'Rogito disponibile, APE classe B'
-    },
-    {
-      id: 2,
-      tipo: 'immobiliare',
-      indirizzo: 'Corso Milano 45, Milano',
-      tipoImmobile: 'Ufficio',
-      stato: 'Libero',
-      dataAcquisto: '2019-06-20',
-      valoreAcquisto: 180000,
-      noteDocumentazione: 'Planimetrie aggiornate'
-    },
-    {
-      id: 3,
-      tipo: 'mobile',
-      tipoBeneMobile: 'Auto',
-      marca: 'BMW',
-      modello: 'Serie 3',
-      annoImmatricolazione: 2020,
-      targa: 'AB123CD',
-      dataAcquisto: '2020-09-10',
-      valoreAcquisto: 35000,
-      multe: [
-        { id: 1, data: '2023-05-15', importo: 80, descrizione: 'Eccesso di velocità' }
-      ],
-      documenti: 'Libretto, Certificato proprietà, Assicurazione',
-      interventiMeccanico: [
-        { id: 1, data: '2023-03-10', descrizione: 'Cambio olio e filtri', costo: 150 }
-      ],
-      scadenzaBollo: '2024-12-31',
-      scadenzaAssicurazione: '2024-08-15',
-      scadenzaRevisione: '2024-09-10'
-    },
-    {
-      id: 4,
-      tipo: 'mobile',
-      tipoBeneMobile: 'Moto',
-      marca: 'Yamaha',
-      modello: 'MT-07',
-      annoImmatricolazione: 2022,
-      targa: 'EF456GH',
-      dataAcquisto: '2022-04-20',
-      valoreAcquisto: 7500,
-      multe: [],
-      documenti: 'Libretto, Assicurazione',
-      interventiMeccanico: [],
-      scadenzaBollo: '2024-04-30',
-      scadenzaAssicurazione: '2024-07-20',
-      scadenzaRevisione: '2025-04-20'
-    }
-  ];
+  const { data: propertiesReal = [], isLoading: isLoadingReal } = usePropertiesReal();
+  const { data: propertiesMobile = [], isLoading: isLoadingMobile } = usePropertiesMobile();
+  
+  const isLoading = isLoadingReal || isLoadingMobile;
 
-  const filteredProperties = properties.filter(property => {
-    const matchesSearch = 
-      (property.tipo === 'immobiliare' && 
-       (property as PropertyImmobiliare).indirizzo.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (property.tipo === 'mobile' && 
-       (`${(property as PropertyMobile).marca} ${(property as PropertyMobile).modello} ${(property as PropertyMobile).targa}`)
-         .toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredPropertiesReal = propertiesReal.filter(property => {
+    const searchMatch = 
+      property.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.via.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      property.citta.toLowerCase().includes(searchTerm.toLowerCase());
     
-    const matchesType = filterType === 'all' || property.tipo === filterType;
-    
-    return matchesSearch && matchesType;
+    return searchMatch && (filterType === 'all' || filterType === 'real');
   });
+
+  const filteredPropertiesMobile = propertiesMobile.filter(property => {
+    const searchMatch = 
+      property.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (property.marca && property.marca.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (property.modello && property.modello.toLowerCase().includes(searchTerm.toLowerCase())) ||
+      (property.targa && property.targa.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    return searchMatch && (filterType === 'all' || filterType === 'mobile');
+  });
+
+  const totalFilteredProperties = filteredPropertiesReal.length + filteredPropertiesMobile.length;
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'In Affitto': return 'bg-green-100 text-green-800';
-      case 'Libero': return 'bg-yellow-100 text-yellow-800';
-      case 'In Manutenzione': return 'bg-red-100 text-red-800';
-      case 'In Vendita': return 'bg-blue-100 text-blue-800';
+      case 'ottimo': return 'bg-green-100 text-green-800';
+      case 'buono': return 'bg-blue-100 text-blue-800';
+      case 'discreto': return 'bg-yellow-100 text-yellow-800';
+      case 'da_ristrutturare': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
-  const isScadenzaVicina = (dataScadenza: string) => {
-    const scadenza = new Date(dataScadenza);
-    const oggi = new Date();
-    const diffGiorni = Math.ceil((scadenza.getTime() - oggi.getTime()) / (1000 * 3600 * 24));
-    return diffGiorni <= 30;
+  const getCategoryColor = (category: string) => {
+    switch (category) {
+      case 'veicolo': return 'bg-blue-100 text-blue-800';
+      case 'imbarcazione': return 'bg-cyan-100 text-cyan-800';
+      case 'attrezzatura': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
   };
 
-  const renderPropertyImmobiliare = (property: PropertyImmobiliare) => (
+  const renderPropertyReal = (property: Tables<'properties_real'>) => (
     <Card key={property.id} className="hover:shadow-lg transition-shadow duration-200">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             <Home className="w-5 h-5 text-blue-600" />
-            <CardTitle className="text-lg">{property.tipoImmobile}</CardTitle>
+            <CardTitle className="text-lg">{property.nome}</CardTitle>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm">
@@ -131,50 +79,44 @@ const Properties = () => {
       <CardContent className="space-y-4">
         <div className="flex items-center text-gray-600">
           <MapPin className="w-4 h-4 mr-2" />
-          <span className="text-sm">{property.indirizzo}</span>
+          <span className="text-sm">{property.via}, {property.citta} ({property.cap})</span>
         </div>
         
         <div className="flex gap-2 flex-wrap">
-          <Badge variant="outline">{property.tipoImmobile}</Badge>
-          <Badge className={getStatusColor(property.stato)}>
-            {property.stato}
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-gray-600">Valore Acquisto</p>
-            <p className="font-semibold">€{property.valoreAcquisto.toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Data Acquisto</p>
-            <p className="font-semibold">{new Date(property.dataAcquisto).toLocaleDateString()}</p>
-          </div>
-          {property.canoneAffittoMensile && (
-            <>
-              <div>
-                <p className="text-gray-600">Affitto Mensile</p>
-                <p className="font-semibold">€{property.canoneAffittoMensile}</p>
-              </div>
-              <div>
-                <p className="text-gray-600">Incassi Anno</p>
-                <p className="font-semibold">€{property.incassiAffittiAnno || 0}</p>
-              </div>
-            </>
+          <Badge variant="outline">{property.tipo}</Badge>
+          {property.stato_conservazione && (
+            <Badge className={getStatusColor(property.stato_conservazione)}>
+              {property.stato_conservazione}
+            </Badge>
           )}
         </div>
 
-        {property.nomeInquilino && (
-          <div className="pt-2 border-t">
-            <p className="text-gray-600 text-sm">Inquilino</p>
-            <p className="font-semibold">{property.nomeInquilino}</p>
-            {property.dataFineContratto && (
-              <p className="text-xs text-gray-500">
-                Contratto fino al {new Date(property.dataFineContratto).toLocaleDateString()}
-              </p>
-            )}
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          {property.valore_acquisto && (
+            <div>
+              <p className="text-gray-600">Valore Acquisto</p>
+              <p className="font-semibold">€{Number(property.valore_acquisto).toLocaleString()}</p>
+            </div>
+          )}
+          {property.metri_quadrati && (
+            <div>
+              <p className="text-gray-600">Metri Quadrati</p>
+              <p className="font-semibold">{property.metri_quadrati} m²</p>
+            </div>
+          )}
+          {property.valore_catastale && (
+            <div>
+              <p className="text-gray-600">Valore Catastale</p>
+              <p className="font-semibold">€{Number(property.valore_catastale).toLocaleString()}</p>
+            </div>
+          )}
+          {property.rendita && (
+            <div>
+              <p className="text-gray-600">Rendita Annua</p>
+              <p className="font-semibold">€{Number(property.rendita).toLocaleString()}</p>
+            </div>
+          )}
+        </div>
 
         <div className="flex gap-2 mt-4">
           <Button variant="outline" size="sm" className="flex-1">
@@ -188,13 +130,13 @@ const Properties = () => {
     </Card>
   );
 
-  const renderPropertyMobile = (property: PropertyMobile) => (
+  const renderPropertyMobile = (property: Tables<'properties_mobile'>) => (
     <Card key={property.id} className="hover:shadow-lg transition-shadow duration-200">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             <Car className="w-5 h-5 text-green-600" />
-            <CardTitle className="text-lg">{property.marca} {property.modello}</CardTitle>
+            <CardTitle className="text-lg">{property.nome}</CardTitle>
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" size="sm">
@@ -207,55 +149,46 @@ const Properties = () => {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <div className="flex items-center text-gray-600">
-          <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">{property.targa}</span>
-        </div>
+        {property.targa && (
+          <div className="flex items-center text-gray-600">
+            <span className="text-sm font-mono bg-gray-100 px-2 py-1 rounded">{property.targa}</span>
+          </div>
+        )}
         
         <div className="flex gap-2 flex-wrap">
-          <Badge variant="outline">{property.tipoBeneMobile}</Badge>
-          <Badge variant="outline">{property.annoImmatricolazione}</Badge>
+          <Badge className={getCategoryColor(property.categoria)}>{property.categoria}</Badge>
+          {property.anno && <Badge variant="outline">{property.anno}</Badge>}
+          {property.marca && property.modello && (
+            <Badge variant="outline">{property.marca} {property.modello}</Badge>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-4 text-sm">
-          <div>
-            <p className="text-gray-600">Valore Acquisto</p>
-            <p className="font-semibold">€{property.valoreAcquisto.toLocaleString()}</p>
-          </div>
-          <div>
-            <p className="text-gray-600">Data Acquisto</p>
-            <p className="font-semibold">{new Date(property.dataAcquisto).toLocaleDateString()}</p>
-          </div>
+          {property.valore_acquisto && (
+            <div>
+              <p className="text-gray-600">Valore Acquisto</p>
+              <p className="font-semibold">€{Number(property.valore_acquisto).toLocaleString()}</p>
+            </div>
+          )}
+          {property.valore_attuale && (
+            <div>
+              <p className="text-gray-600">Valore Attuale</p>
+              <p className="font-semibold">€{Number(property.valore_attuale).toLocaleString()}</p>
+            </div>
+          )}
+          {property.chilometraggio && (
+            <div>
+              <p className="text-gray-600">Chilometraggio</p>
+              <p className="font-semibold">{property.chilometraggio.toLocaleString()} km</p>
+            </div>
+          )}
+          {property.consumo_medio && (
+            <div>
+              <p className="text-gray-600">Consumo Medio</p>
+              <p className="font-semibold">{property.consumo_medio} l/100km</p>
+            </div>
+          )}
         </div>
-
-        <div className="space-y-2">
-          <h4 className="font-semibold text-sm flex items-center gap-1">
-            <Calendar className="w-4 h-4" />
-            Scadenze
-          </h4>
-          <div className="grid grid-cols-1 gap-1 text-xs">
-            <div className={`flex justify-between ${isScadenzaVicina(property.scadenzaBollo) ? 'text-red-600 font-semibold' : ''}`}>
-              <span>Bollo:</span>
-              <span>{new Date(property.scadenzaBollo).toLocaleDateString()}</span>
-            </div>
-            <div className={`flex justify-between ${isScadenzaVicina(property.scadenzaAssicurazione) ? 'text-red-600 font-semibold' : ''}`}>
-              <span>Assicurazione:</span>
-              <span>{new Date(property.scadenzaAssicurazione).toLocaleDateString()}</span>
-            </div>
-            <div className={`flex justify-between ${isScadenzaVicina(property.scadenzaRevisione) ? 'text-red-600 font-semibold' : ''}`}>
-              <span>Revisione:</span>
-              <span>{new Date(property.scadenzaRevisione).toLocaleDateString()}</span>
-            </div>
-          </div>
-        </div>
-
-        {property.multe.length > 0 && (
-          <div className="pt-2 border-t">
-            <p className="text-red-600 text-sm font-semibold">Multe Pendenti: {property.multe.length}</p>
-            <p className="text-red-600 text-xs">
-              Totale: €{property.multe.reduce((sum, multa) => sum + multa.importo, 0)}
-            </p>
-          </div>
-        )}
 
         <div className="flex gap-2 mt-4">
           <Button variant="outline" size="sm" className="flex-1">
@@ -291,24 +224,30 @@ const Properties = () => {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Tutte le proprietà</SelectItem>
-            <SelectItem value="immobiliare">Proprietà Immobiliari</SelectItem>
+            <SelectItem value="real">Proprietà Immobiliari</SelectItem>
             <SelectItem value="mobile">Proprietà Mobili</SelectItem>
           </SelectContent>
         </Select>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredProperties.map((property) => 
-          property.tipo === 'immobiliare' 
-            ? renderPropertyImmobiliare(property as PropertyImmobiliare)
-            : renderPropertyMobile(property as PropertyMobile)
-        )}
-      </div>
-
-      {filteredProperties.length === 0 && (
+      {isLoading ? (
         <div className="text-center py-12">
-          <p className="text-gray-500">Nessuna proprietà trovata con i criteri di ricerca attuali.</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto"></div>
+          <p className="mt-2 text-muted-foreground">Caricamento proprietà...</p>
         </div>
+      ) : (
+        <>
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+            {filteredPropertiesReal.map((property) => renderPropertyReal(property))}
+            {filteredPropertiesMobile.map((property) => renderPropertyMobile(property))}
+          </div>
+
+          {totalFilteredProperties === 0 && (
+            <div className="text-center py-12">
+              <p className="text-gray-500">Nessuna proprietà trovata con i criteri di ricerca attuali.</p>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
