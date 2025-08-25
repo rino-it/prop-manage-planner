@@ -2,9 +2,9 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Settings, Calendar, TrendingUp, MapPin, Clock } from 'lucide-react';
+import { Settings, Calendar, TrendingUp, MapPin, Clock, AlertTriangle } from 'lucide-react';
 
 const SuggestedPlan = () => {
   const [selectedProperty, setSelectedProperty] = useState('all');
@@ -127,13 +127,13 @@ const SuggestedPlan = () => {
     ]
   };
 
-  const getPriorityColor = (priority: string) => {
+  const getPriorityVariant = (priority: string) => {
     switch (priority) {
-      case 'Urgente': return 'bg-red-100 text-red-800 border-red-200';
-      case 'Alta': return 'bg-orange-100 text-orange-800 border-orange-200';
-      case 'Media': return 'bg-yellow-100 text-yellow-800 border-yellow-200';
-      case 'Bassa': return 'bg-green-100 text-green-800 border-green-200';
-      default: return 'bg-gray-100 text-gray-800 border-gray-200';
+      case 'Urgente': return 'danger';
+      case 'Alta': return 'warning';
+      case 'Media': return 'info';
+      case 'Bassa': return 'success';
+      default: return 'secondary';
     }
   };
 
@@ -145,8 +145,8 @@ const SuggestedPlan = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Piano Attività Suggerite</h1>
-        <Button className="bg-blue-600 hover:bg-blue-700">
+        <h1 className="text-3xl font-bold">Piano Attività Suggerite</h1>
+        <Button>
           Genera Report Completo
         </Button>
       </div>
@@ -155,9 +155,9 @@ const SuggestedPlan = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <TrendingUp className="w-6 h-6 text-blue-500 mr-2" />
+              <TrendingUp className="w-6 h-6 text-info mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Costo Stimato</p>
+                <p className="text-sm text-muted-foreground">Costo Stimato</p>
                 <p className="text-xl font-bold">€{totalEstimatedCost.toLocaleString()}</p>
               </div>
             </div>
@@ -167,10 +167,10 @@ const SuggestedPlan = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <Clock className="w-6 h-6 text-red-500 mr-2" />
+              <AlertTriangle className="w-6 h-6 text-danger mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Urgenti</p>
-                <p className="text-xl font-bold text-red-600">{urgentTasks}</p>
+                <p className="text-sm text-muted-foreground">Urgenti</p>
+                <p className="text-xl font-bold text-danger">{urgentTasks}</p>
               </div>
             </div>
           </CardContent>
@@ -179,10 +179,10 @@ const SuggestedPlan = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <Calendar className="w-6 h-6 text-orange-500 mr-2" />
+              <Calendar className="w-6 h-6 text-warning mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Alta Priorità</p>
-                <p className="text-xl font-bold text-orange-600">{highPriorityTasks}</p>
+                <p className="text-sm text-muted-foreground">Alta Priorità</p>
+                <p className="text-xl font-bold text-warning">{highPriorityTasks}</p>
               </div>
             </div>
           </CardContent>
@@ -191,10 +191,10 @@ const SuggestedPlan = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <Settings className="w-6 h-6 text-green-500 mr-2" />
+              <Settings className="w-6 h-6 text-success mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Attività Totali</p>
-                <p className="text-xl font-bold">{currentSuggestions.length}</p>
+                <p className="text-sm text-muted-foreground">Attività Totali</p>
+                <p className="text-xl font-bold text-success">{currentSuggestions.length}</p>
               </div>
             </div>
           </CardContent>
@@ -245,13 +245,13 @@ const SuggestedPlan = () => {
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2">
                       <h3 className="font-semibold text-lg">{suggestion.title}</h3>
-                      <Badge className={getPriorityColor(suggestion.priority)}>
+                      <StatusBadge variant={getPriorityVariant(suggestion.priority) as any}>
                         {suggestion.priority}
-                      </Badge>
-                      <Badge variant="outline">{suggestion.category}</Badge>
+                      </StatusBadge>
+                      <StatusBadge variant="outline">{suggestion.category}</StatusBadge>
                     </div>
                     
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mb-2">
+                    <div className="flex items-center gap-4 text-sm text-muted-foreground mb-2">
                       <div className="flex items-center">
                         <MapPin className="w-4 h-4 mr-1" />
                         {suggestion.property}
@@ -266,8 +266,8 @@ const SuggestedPlan = () => {
                       </div>
                     </div>
                     
-                    <p className="text-gray-700 mb-2">{suggestion.description}</p>
-                    <div className="bg-blue-50 p-2 rounded text-sm">
+                    <p className="text-foreground mb-2">{suggestion.description}</p>
+                    <div className="bg-info-subtle p-2 rounded text-sm">
                       <strong>Impatto previsto:</strong> {suggestion.impact}
                     </div>
                   </div>
@@ -286,7 +286,7 @@ const SuggestedPlan = () => {
           </div>
           
           {currentSuggestions.length === 0 && (
-            <div className="text-center py-8 text-gray-500">
+            <div className="text-center py-8 text-muted-foreground">
               <Settings className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p>Nessuna attività suggerita per questo obiettivo al momento.</p>
             </div>

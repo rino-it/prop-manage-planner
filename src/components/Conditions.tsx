@@ -2,9 +2,10 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { StatusBadge } from '@/components/ui/status-badge';
 import { Progress } from '@/components/ui/progress';
-import { MapPin, Settings, Calendar } from 'lucide-react';
+import { DataTable } from '@/components/ui/data-table';
+import { MapPin, Settings, Calendar, AlertTriangle } from 'lucide-react';
 
 const Conditions = () => {
   const [selectedProperty, setSelectedProperty] = useState('all');
@@ -51,28 +52,21 @@ const Conditions = () => {
     }
   ];
 
-  const getConditionColor = (condition: string) => {
+  const getConditionVariant = (condition: string) => {
     switch (condition) {
-      case 'Ottima': return 'bg-green-100 text-green-800';
-      case 'Buona': return 'bg-blue-100 text-blue-800';
-      case 'Discreta': return 'bg-yellow-100 text-yellow-800';
-      case 'Scarsa': return 'bg-red-100 text-red-800';
-      default: return 'bg-gray-100 text-gray-800';
+      case 'Ottima': return 'success';
+      case 'Buona': return 'info';
+      case 'Discreta': return 'warning';
+      case 'Scarsa': return 'danger';
+      default: return 'secondary';
     }
   };
 
   const getScoreColor = (score: number) => {
-    if (score >= 90) return 'text-green-600';
-    if (score >= 75) return 'text-blue-600';
-    if (score >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
-
-  const getProgressColor = (score: number) => {
-    if (score >= 90) return 'bg-green-500';
-    if (score >= 75) return 'bg-blue-500';
-    if (score >= 60) return 'bg-yellow-500';
-    return 'bg-red-500';
+    if (score >= 90) return 'text-success';
+    if (score >= 75) return 'text-info';
+    if (score >= 60) return 'text-warning';
+    return 'text-danger';
   };
 
   const avgScore = Math.round(conditions.reduce((sum, prop) => sum + prop.overallScore, 0) / conditions.length);
@@ -84,8 +78,8 @@ const Conditions = () => {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Monitoraggio Condizioni</h1>
-        <Button className="bg-blue-600 hover:bg-blue-700">
+        <h1 className="text-3xl font-bold">Monitoraggio Condizioni</h1>
+        <Button>
           Nuova Ispezione
         </Button>
       </div>
@@ -94,9 +88,9 @@ const Conditions = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <Settings className="w-6 h-6 text-blue-500 mr-2" />
+              <Settings className="w-6 h-6 text-info mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Punteggio Medio</p>
+                <p className="text-sm text-muted-foreground">Punteggio Medio</p>
                 <p className={`text-xl font-bold ${getScoreColor(avgScore)}`}>{avgScore}/100</p>
               </div>
             </div>
@@ -106,10 +100,10 @@ const Conditions = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <MapPin className="w-6 h-6 text-orange-500 mr-2" />
+              <AlertTriangle className="w-6 h-6 text-warning mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Richiedono Attenzione</p>
-                <p className="text-xl font-bold text-orange-600">{needsAttention}</p>
+                <p className="text-sm text-muted-foreground">Richiedono Attenzione</p>
+                <p className="text-xl font-bold text-warning">{needsAttention}</p>
               </div>
             </div>
           </CardContent>
@@ -118,10 +112,10 @@ const Conditions = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <Settings className="w-6 h-6 text-red-500 mr-2" />
+              <Settings className="w-6 h-6 text-danger mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Problemi Critici</p>
-                <p className="text-xl font-bold text-red-600">{criticalIssues}</p>
+                <p className="text-sm text-muted-foreground">Problemi Critici</p>
+                <p className="text-xl font-bold text-danger">{criticalIssues}</p>
               </div>
             </div>
           </CardContent>
@@ -130,10 +124,10 @@ const Conditions = () => {
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center">
-              <Calendar className="w-6 h-6 text-green-500 mr-2" />
+              <Calendar className="w-6 h-6 text-success mr-2" />
               <div>
-                <p className="text-sm text-gray-600">Ispez. Recenti</p>
-                <p className="text-xl font-bold text-green-600">2</p>
+                <p className="text-sm text-muted-foreground">Ispez. Recenti</p>
+                <p className="text-xl font-bold text-success">2</p>
               </div>
             </div>
           </CardContent>
@@ -151,39 +145,39 @@ const Conditions = () => {
                 </CardTitle>
                 <div className="flex items-center gap-4">
                   <div className="text-right">
-                    <p className="text-sm text-gray-600">Punteggio Generale</p>
+                    <p className="text-sm text-muted-foreground">Punteggio Generale</p>
                     <p className={`text-2xl font-bold ${getScoreColor(property.overallScore)}`}>
                       {property.overallScore}/100
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm text-gray-600">Ultima Ispezione</p>
-                    <p className="font-semibold">
-                      {new Date(property.lastInspection).toLocaleDateString('it-IT')}
-                    </p>
-                  </div>
+                    <div className="text-right">
+                      <p className="text-sm text-muted-foreground">Ultima Ispezione</p>
+                      <p className="font-semibold">
+                        {new Date(property.lastInspection).toLocaleDateString('it-IT')}
+                      </p>
+                    </div>
                 </div>
               </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {property.components.map((component, index) => (
-                  <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                  <div key={index} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h4 className="font-semibold">{component.name}</h4>
-                        <Badge className={getConditionColor(component.condition)}>
+                        <StatusBadge variant={getConditionVariant(component.condition) as any}>
                           {component.condition}
-                        </Badge>
+                        </StatusBadge>
                       </div>
-                      <p className="text-sm text-gray-600">
+                      <p className="text-sm text-muted-foreground">
                         Ultimo controllo: {new Date(component.lastCheck).toLocaleDateString('it-IT')}
                       </p>
                     </div>
                     <div className="flex items-center gap-4">
                       <div className="w-32">
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm text-gray-600">Punteggio</span>
+                          <span className="text-sm text-muted-foreground">Punteggio</span>
                           <span className={`font-semibold ${getScoreColor(component.score)}`}>
                             {component.score}/100
                           </span>
