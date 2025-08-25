@@ -7,10 +7,10 @@ export type Json =
   | Json[]
 
 export type Database = {
-  // Allows to automatically instanciate createClient with right options
+  // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "12.2.3 (519615d)"
+    PostgrestVersion: "13.0.4"
   }
   public: {
     Tables: {
@@ -96,6 +96,13 @@ export type Database = {
             referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "activities_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "property_performance"
+            referencedColumns: ["id"]
+          },
         ]
       }
       documents: {
@@ -171,6 +178,86 @@ export type Database = {
             referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "documents_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "property_performance"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      income: {
+        Row: {
+          created_at: string
+          data_incasso: string
+          descrizione: string
+          id: string
+          importo: number
+          inquilino: string | null
+          note: string | null
+          periodo_riferimento: string | null
+          property_mobile_id: string | null
+          property_real_id: string | null
+          stato: string | null
+          tipo_entrata: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_incasso?: string
+          descrizione: string
+          id?: string
+          importo: number
+          inquilino?: string | null
+          note?: string | null
+          periodo_riferimento?: string | null
+          property_mobile_id?: string | null
+          property_real_id?: string | null
+          stato?: string | null
+          tipo_entrata?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_incasso?: string
+          descrizione?: string
+          id?: string
+          importo?: number
+          inquilino?: string | null
+          note?: string | null
+          periodo_riferimento?: string | null
+          property_mobile_id?: string | null
+          property_real_id?: string | null
+          stato?: string | null
+          tipo_entrata?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "income_property_mobile_id_fkey"
+            columns: ["property_mobile_id"]
+            isOneToOne: false
+            referencedRelation: "properties_mobile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "income_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "income_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "property_performance"
+            referencedColumns: ["id"]
+          },
         ]
       }
       maintenance: {
@@ -219,6 +306,109 @@ export type Database = {
             columns: ["property_mobile_id"]
             isOneToOne: false
             referencedRelation: "properties_mobile"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          activity_id: string | null
+          created_at: string
+          data_invio: string | null
+          data_scadenza: string
+          document_id: string | null
+          giorni_preavviso: number | null
+          id: string
+          inviata: boolean | null
+          messaggio: string
+          payment_id: string | null
+          priorita: string | null
+          property_mobile_id: string | null
+          property_real_id: string | null
+          tipo: string
+          titolo: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_id?: string | null
+          created_at?: string
+          data_invio?: string | null
+          data_scadenza: string
+          document_id?: string | null
+          giorni_preavviso?: number | null
+          id?: string
+          inviata?: boolean | null
+          messaggio: string
+          payment_id?: string | null
+          priorita?: string | null
+          property_mobile_id?: string | null
+          property_real_id?: string | null
+          tipo: string
+          titolo: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          activity_id?: string | null
+          created_at?: string
+          data_invio?: string | null
+          data_scadenza?: string
+          document_id?: string | null
+          giorni_preavviso?: number | null
+          id?: string
+          inviata?: boolean | null
+          messaggio?: string
+          payment_id?: string | null
+          priorita?: string | null
+          property_mobile_id?: string | null
+          property_real_id?: string | null
+          tipo?: string
+          titolo?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_activity_id_fkey"
+            columns: ["activity_id"]
+            isOneToOne: false
+            referencedRelation: "activities"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_property_mobile_id_fkey"
+            columns: ["property_mobile_id"]
+            isOneToOne: false
+            referencedRelation: "properties_mobile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "property_performance"
             referencedColumns: ["id"]
           },
         ]
@@ -340,6 +530,13 @@ export type Database = {
             referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "payments_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "property_performance"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
@@ -383,6 +580,7 @@ export type Database = {
           anno: number | null
           categoria: Database["public"]["Enums"]["mobile_category"]
           chilometraggio: number | null
+          codice_identificativo: string | null
           consumo_medio: number | null
           costi_manutenzione_annuali: number | null
           costo_per_km: number | null
@@ -395,6 +593,9 @@ export type Database = {
           numero_serie: string | null
           numero_telaio: string | null
           porto_stazionamento: string | null
+          proprietario_legale: string | null
+          quota_possesso: number | null
+          stato: string | null
           targa: string | null
           updated_at: string
           user_id: string
@@ -405,6 +606,7 @@ export type Database = {
           anno?: number | null
           categoria: Database["public"]["Enums"]["mobile_category"]
           chilometraggio?: number | null
+          codice_identificativo?: string | null
           consumo_medio?: number | null
           costi_manutenzione_annuali?: number | null
           costo_per_km?: number | null
@@ -417,6 +619,9 @@ export type Database = {
           numero_serie?: string | null
           numero_telaio?: string | null
           porto_stazionamento?: string | null
+          proprietario_legale?: string | null
+          quota_possesso?: number | null
+          stato?: string | null
           targa?: string | null
           updated_at?: string
           user_id: string
@@ -427,6 +632,7 @@ export type Database = {
           anno?: number | null
           categoria?: Database["public"]["Enums"]["mobile_category"]
           chilometraggio?: number | null
+          codice_identificativo?: string | null
           consumo_medio?: number | null
           costi_manutenzione_annuali?: number | null
           costo_per_km?: number | null
@@ -439,6 +645,9 @@ export type Database = {
           numero_serie?: string | null
           numero_telaio?: string | null
           porto_stazionamento?: string | null
+          proprietario_legale?: string | null
+          quota_possesso?: number | null
+          stato?: string | null
           targa?: string | null
           updated_at?: string
           user_id?: string
@@ -450,16 +659,25 @@ export type Database = {
       properties_real: {
         Row: {
           anno_costruzione: number | null
+          canone_mensile: number | null
           cap: string
           citta: string
+          codice_identificativo: string | null
+          contatto_inquilino: string | null
           costi_gestione_annuali: number | null
           created_at: string
+          data_fine_contratto: string | null
+          data_inizio_contratto: string | null
           id: string
+          inquilino: string | null
           metri_quadrati: number | null
           nome: string
           numero_vani: number | null
+          proprietario_legale: string | null
           provincia: string
+          quota_possesso: number | null
           rendita: number | null
+          stato: string | null
           stato_conservazione:
             | Database["public"]["Enums"]["property_status"]
             | null
@@ -472,16 +690,25 @@ export type Database = {
         }
         Insert: {
           anno_costruzione?: number | null
+          canone_mensile?: number | null
           cap: string
           citta: string
+          codice_identificativo?: string | null
+          contatto_inquilino?: string | null
           costi_gestione_annuali?: number | null
           created_at?: string
+          data_fine_contratto?: string | null
+          data_inizio_contratto?: string | null
           id?: string
+          inquilino?: string | null
           metri_quadrati?: number | null
           nome: string
           numero_vani?: number | null
+          proprietario_legale?: string | null
           provincia: string
+          quota_possesso?: number | null
           rendita?: number | null
+          stato?: string | null
           stato_conservazione?:
             | Database["public"]["Enums"]["property_status"]
             | null
@@ -494,16 +721,25 @@ export type Database = {
         }
         Update: {
           anno_costruzione?: number | null
+          canone_mensile?: number | null
           cap?: string
           citta?: string
+          codice_identificativo?: string | null
+          contatto_inquilino?: string | null
           costi_gestione_annuali?: number | null
           created_at?: string
+          data_fine_contratto?: string | null
+          data_inizio_contratto?: string | null
           id?: string
+          inquilino?: string | null
           metri_quadrati?: number | null
           nome?: string
           numero_vani?: number | null
+          proprietario_legale?: string | null
           provincia?: string
+          quota_possesso?: number | null
           rendita?: number | null
+          stato?: string | null
           stato_conservazione?:
             | Database["public"]["Enums"]["property_status"]
             | null
@@ -568,10 +804,28 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      property_performance: {
+        Row: {
+          canone_mensile: number | null
+          codice_identificativo: string | null
+          id: string | null
+          nome: string | null
+          reddito_annuale: number | null
+          reddito_netto_annuale: number | null
+          reddito_teorico_annuale: number | null
+          roi_percentuale: number | null
+          spese_annuali: number | null
+          stato: string | null
+          valore_acquisto: number | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      generate_property_code: {
+        Args: { property_type: string; user_id: string }
+        Returns: string
+      }
     }
     Enums: {
       activity_type: "manutenzione" | "pulizia" | "ispezione" | "generale"
