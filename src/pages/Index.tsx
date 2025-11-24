@@ -1,5 +1,6 @@
-
 import React, { useState } from 'react';
+import Bookings from '@/components/Bookings';
+import Services from '@/components/Services';
 import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
 import Properties from '@/components/Properties';
@@ -13,6 +14,10 @@ const Index = () => {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'bookings':
+        return <Bookings />;
+      case 'services':
+        return <Services />;
       case 'dashboard':
         return <Dashboard />;
       case 'properties':

@@ -1,11 +1,11 @@
-
+import { AddPropertyDialog } from './AddPropertyDialog';
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { MapPin, Settings, Pencil, Car, Home, Calendar, Euro } from 'lucide-react';
+import { MapPin, Settings, Pencil, Car, Home } from 'lucide-react';
 import { usePropertiesReal, usePropertiesMobile } from '@/hooks/useProperties';
 import type { Tables } from '@/integrations/supabase/types';
 
@@ -206,9 +206,11 @@ const Properties = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-900">Gestione Proprietà</h1>
-        <Button className="bg-blue-600 hover:bg-blue-700">
-          Aggiungi Proprietà
-        </Button>
+        <AddPropertyDialog>
+          <Button className="bg-blue-600 hover:bg-blue-700">
+            Aggiungi Proprietà
+          </Button>
+        </AddPropertyDialog>
       </div>
 
       <div className="flex gap-4">

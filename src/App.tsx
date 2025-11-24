@@ -9,6 +9,10 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
+// IMPORT DEI PORTALI ESTERNI
+import GuestPortal from "./pages/GuestPortal";
+import TenantPortal from "./pages/TenantPortal";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -19,7 +23,19 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
+            {/* Login Admin */}
             <Route path="/auth" element={<Auth />} />
+
+            {/* --- ROTTE PUBBLICHE (Accessibili con link) --- */}
+            
+            {/* Portale Turista (Short Term) */}
+            <Route path="/guest/:id" element={<GuestPortal />} />
+            
+            {/* Portale Inquilino (Long Term) */}
+            <Route path="/tenant/:id" element={<TenantPortal />} />
+
+
+            {/* --- ROTTE PROTETTE (Solo Admin loggato) --- */}
             <Route 
               path="/" 
               element={
@@ -28,7 +44,8 @@ const App = () => (
                 </ProtectedRoute>
               } 
             />
-            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            
+            {/* Pagina 404 per tutto il resto */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
