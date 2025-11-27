@@ -7,10 +7,10 @@ import Services from '@/components/Services';
 import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
 import Properties from '@/components/Properties';
-import Revenue from '@/components/Revenue'; // <--- IMPORTATO
+import Revenue from '@/components/Revenue';
 import Expenses from '@/components/Expenses';
 import Activities from '@/components/Activities';
-import Conditions from '@/components/Conditions';
+import TenantManager from '@/components/TenantManager'; // <--- IMPORTATO
 import SuggestedPlan from '@/components/SuggestedPlan';
 
 const Index = () => {
@@ -26,12 +26,12 @@ const Index = () => {
     switch (activeTab) {
       case 'dashboard': return <Dashboard />;
       case 'bookings': return <Bookings />;
-      case 'revenue': return <Revenue />; // <--- NUOVO CASO
+      case 'revenue': return <Revenue />;
       case 'services': return <Services />;
       case 'properties': return <Properties />;
       case 'expenses': return <Expenses />;
       case 'activities': return <Activities />;
-      case 'conditions': return <Conditions />;
+      case 'tenants': return <TenantManager />; // <--- NUOVO CASO
       case 'plan': return <SuggestedPlan />;
       default: return <Dashboard />;
     }
@@ -39,7 +39,6 @@ const Index = () => {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      
       {/* SIDEBAR DESKTOP */}
       <div className="hidden md:block h-screen sticky top-0 border-r bg-white z-10">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />

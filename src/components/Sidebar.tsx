@@ -1,7 +1,7 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { House, Settings, Calendar, List, TrendingUp, MapPin, LogOut, Users, Sparkles, DollarSign } from 'lucide-react';
+import { House, Settings, Calendar, TrendingUp, MapPin, LogOut, Users, Sparkles, DollarSign, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface SidebarProps {
@@ -15,13 +15,13 @@ const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
   
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: House },
-    { id: 'bookings', label: 'Prenotazioni', icon: Users },
-    { id: 'revenue', label: 'Incassi', icon: DollarSign }, // <--- NUOVA VOCE
+    { id: 'bookings', label: 'Prenotazioni', icon: Calendar },
+    { id: 'tenants', label: 'Inquilini', icon: Users }, // <--- NUOVO (sostituisce Condizioni)
+    { id: 'revenue', label: 'Incassi', icon: DollarSign },
     { id: 'expenses', label: 'Spese', icon: TrendingUp },
     { id: 'services', label: 'Servizi Extra', icon: Sparkles },
     { id: 'properties', label: 'Proprietà', icon: MapPin },
-    { id: 'activities', label: 'Attività', icon: Calendar },
-    { id: 'conditions', label: 'Condizioni', icon: List },
+    { id: 'activities', label: 'Attività', icon: ClipboardList },
     { id: 'plan', label: 'Piano Suggerito', icon: Settings },
   ];
 
