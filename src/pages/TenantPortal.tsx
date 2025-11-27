@@ -39,7 +39,7 @@ export default function TenantPortal() {
     enabled: !!id
   });
 
-  // NUOVO: LISTA DOCUMENTI CARICATI
+  // LISTA DOCUMENTI CARICATI
   const { data: documents } = useQuery({
     queryKey: ['tenant-docs', id],
     queryFn: async () => {
@@ -49,7 +49,17 @@ export default function TenantPortal() {
     enabled: !!id
   });
 
-  // UPLOAD LOGIC (MODIFICATA PER NUOVA TABELLA)
+  // TICKET
+  const { data: myTickets } = useQuery({
+      queryKey: ['tenant-tickets', id],
+      queryFn: async () => {
+          const { data } = await supabase.from('tickets').select('*').eq('booking_id', id).order('created_at', { ascending: false });
+          return data || [];
+      },
+      enabled: !!id
+  });
+
+  // UPLOAD LOGIC
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       const file = event.target.files?.[0];
@@ -59,11 +69,9 @@ export default function TenantPortal() {
       const fileExt = file.name.split('.').pop();
       const fileName = `doc_${booking.id}_${Date.now()}.${fileExt}`;
       
-      // 1. Upload Storage
       const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file);
       if (uploadError) throw uploadError;
 
-      // 2. Insert DB (Tabella Storico)
       const { error: dbError } = await supabase.from('booking_documents').insert({
         booking_id: booking.id,
         filename: file.name,
@@ -82,16 +90,6 @@ export default function TenantPortal() {
       setUploading(false);
     }
   };
-
-  // ... (Resto del codice Ticket e Pagamenti invariato, lo ri-incollo per completezza del file)
-  const { data: myTickets } = useQuery({
-      queryKey: ['tenant-tickets', id],
-      queryFn: async () => {
-          const { data } = await supabase.from('tickets').select('*').eq('booking_id', id).order('created_at', { ascending: false });
-          return data || [];
-      },
-      enabled: !!id
-  });
 
   const createTicket = useMutation({
       mutationFn: async () => {
@@ -121,6 +119,12 @@ export default function TenantPortal() {
       return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100"><Clock className="w-3 h-3 mr-1"/> In Attesa</Badge>;
   };
 
+  const getIcon = (tipo: string) => {
+    if (tipo === 'bolletta_luce') return <Zap className="w-5 h-5 text-yellow-600" />;
+    if (tipo === 'bolletta_gas' || tipo === 'acqua') return <Droplet className="w-5 h-5 text-blue-600" />;
+    return <Home className="w-5 h-5 text-purple-600" />;
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 p-4 md:p-8 max-w-4xl mx-auto">
       <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm border">
@@ -141,14 +145,51 @@ export default function TenantPortal() {
           <TabsTrigger value="docs">Documenti</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="payments">
-           {/* (Codice Tab Pagamenti identico a prima, omesso per brevità, ma nel file finale ci va) */}
-           <div className="text-center text-gray-400 py-8">Sezione Pagamenti (Visualizzazione Standard)</div>
+        <TabsContent value="payments" className="space-y-4">
+          {payments?.map((pay) => (
+            <Card key={pay.id} className="border-l-4 overflow-hidden" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : '#f97316' }}>
+              <CardContent className="p-0">
+                <div className="flex items-center p-4">
+                  <div className="p-3 bg-gray-100 rounded-full mr-4">{getIcon(pay.tipo || '')}</div>
+                  <div className="flex-1">
+                    <p className="font-bold capitalize text-gray-900">{pay.tipo?.replace('_', ' ')}</p>
+                    <p className="text-sm text-gray-500">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold text-lg">€{pay.importo}</p>
+                    <Badge variant={pay.stato === 'pagato' ? 'default' : 'secondary'}>{pay.stato?.replace('_', ' ')}</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+          {payments?.length === 0 && <div className="text-center py-10 text-gray-400">Nessun pagamento registrato.</div>}
         </TabsContent>
 
-        <TabsContent value="support">
-           {/* (Codice Tab Assistenza identico a prima) */}
-           <Card><CardContent className="p-4 space-y-4"><Input placeholder="Oggetto" value={ticketForm.titolo} onChange={e=>setTicketForm({...ticketForm, titolo:e.target.value})}/><Textarea placeholder="Dettagli" value={ticketForm.descrizione} onChange={e=>setTicketForm({...ticketForm, descrizione:e.target.value})}/><Button onClick={()=>createTicket.mutate()} className="w-full">Invia</Button></CardContent></Card>
+        <TabsContent value="support" className="space-y-6">
+           <Card>
+                <CardHeader><CardTitle>Hai un problema?</CardTitle><CardDescription>Apri un ticket al proprietario.</CardDescription></CardHeader>
+                <CardContent className="space-y-4">
+                    <Input placeholder="Oggetto (es. Caldaia guasta)" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
+                    <Textarea placeholder="Descrivi il problema..." value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} />
+                    <Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}>
+                        <Send className="w-4 h-4 mr-2" /> Invia Segnalazione
+                    </Button>
+                </CardContent>
+            </Card>
+
+            <div className="space-y-3">
+                <h3 className="font-bold text-gray-700">I tuoi Ticket recenti</h3>
+                {myTickets?.map(t => (
+                    <div key={t.id} className="bg-white p-4 rounded-lg border flex justify-between items-center">
+                        <div>
+                            <p className="font-medium">{t.titolo}</p>
+                            <p className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM yyyy')}</p>
+                        </div>
+                        <Badge variant={t.stato === 'risolto' ? 'default' : 'destructive'}>{t.stato}</Badge>
+                    </div>
+                ))}
+            </div>
         </TabsContent>
 
         <TabsContent value="docs">
