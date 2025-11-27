@@ -7,17 +7,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Calendar as CalendarIcon, Plus, User, Eye, CheckCircle, XCircle, FileText, ExternalLink, Mail, Phone, Copy } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Palmtree, Home } from 'lucide-react';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
+import { Badge } from '@/components/ui/badge';
 
 export default function Bookings() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [selectedDoc, setSelectedDoc] = useState<any>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: properties } = usePropertiesReal();
@@ -27,7 +27,6 @@ export default function Bookings() {
     data_inizio: undefined as Date | undefined, data_fine: undefined as Date | undefined, tipo_affitto: 'breve'
   });
 
-  // LETTURA
   const { data: bookings, isLoading } = useQuery({
     queryKey: ['bookings'],
     queryFn: async () => {
@@ -40,20 +39,6 @@ export default function Bookings() {
     }
   });
 
-  // UPDATE STATO
-  const updateDocStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string, status: string }) => {
-      const { error } = await supabase.from('bookings').update({ stato_documenti: status }).eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      setSelectedDoc(null);
-      toast({ title: "Stato aggiornato" });
-    }
-  });
-
-  // CREA
   const createBooking = useMutation({
     mutationFn: async (newBooking: any) => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -64,6 +49,10 @@ export default function Bookings() {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
       setIsDialogOpen(false);
       toast({ title: 'Prenotazione creata' });
+      setFormData({
+        property_id: '', nome_ospite: '', email_ospite: '', telefono_ospite: '',
+        data_inizio: undefined, data_fine: undefined, tipo_affitto: 'breve'
+      });
     },
     onError: (err: any) => {
         toast({ title: "Errore", description: err.message, variant: "destructive" });
@@ -84,21 +73,14 @@ export default function Bookings() {
     });
   };
 
-  const getDocUrl = (path: string) => {
-    if (!path) return '';
-    return supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
-  };
-
-  // --- FUNZIONE CHE MANCAVA ---
   const copyLink = (booking: any) => {
     const baseUrl = window.location.origin;
+    // Logica intelligente: Link diverso in base al tipo
     const path = booking.tipo_affitto === 'breve' ? '/guest/' : '/tenant/';
     const fullUrl = `${baseUrl}${path}${booking.id}`;
     navigator.clipboard.writeText(fullUrl);
-    toast({ title: "Link Copiato!", description: "Incolla il link al cliente." });
+    toast({ title: "Link Copiato!", description: `Link per ${booking.tipo_affitto === 'breve' ? 'Turista' : 'Inquilino'} pronto.` });
   };
-
-  const isPdf = (path: string) => path?.toLowerCase().endsWith('.pdf');
 
   return (
     <div className="space-y-6">
@@ -113,10 +95,10 @@ export default function Bookings() {
              <DialogHeader><DialogTitle>Nuova Prenotazione</DialogTitle></DialogHeader>
              <form onSubmit={handleSubmit} className="space-y-4 mt-4">
                  
-                 <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                   <Label className="text-blue-800 font-bold mb-2 block">Tipo Contratto</Label>
+                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
+                   <Label className="text-slate-700 font-bold mb-2 block">Tipo Contratto</Label>
                    <Select onValueChange={(v) => setFormData({...formData, tipo_affitto: v})} defaultValue="breve">
-                      <SelectTrigger className="bg-white border-blue-200"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="breve">🏖️ Affitto Breve (Turistico)</SelectItem>
                         <SelectItem value="lungo">🏠 Lungo Termine (Inquilino)</SelectItem>
@@ -132,73 +114,62 @@ export default function Bookings() {
                     </Select>
                  </div>
                  <div className="grid gap-2">
-                    <Label>Ospite</Label>
+                    <Label>Ospite / Inquilino</Label>
                     <Input value={formData.nome_ospite} onChange={e => setFormData({...formData, nome_ospite: e.target.value})} placeholder="Mario Rossi" required />
                  </div>
                  <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2"><Label>Email</Label><Input value={formData.email_ospite} onChange={e => setFormData({...formData, email_ospite: e.target.value})} /></div>
-                    <div className="grid gap-2"><Label>Telefono</Label><Input value={formData.telefono_ospite} onChange={e => setFormData({...formData, telefono_ospite: e.target.value})} /></div>
-                 </div>
-                 <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2"><Label>Check-in</Label><Popover><PopoverTrigger asChild><Button variant={"outline"}>{formData.data_inizio ? format(formData.data_inizio, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger><PopoverContent className="p-0"><Calendar mode="single" selected={formData.data_inizio} onSelect={(d) => setFormData({...formData, data_inizio: d})} /></PopoverContent></Popover></div>
-                    <div className="grid gap-2"><Label>Check-out</Label><Popover><PopoverTrigger asChild><Button variant={"outline"}>{formData.data_fine ? format(formData.data_fine, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger><PopoverContent className="p-0"><Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} /></PopoverContent></Popover></div>
+                    <div className="grid gap-2"><Label>Check-in / Inizio</Label><Popover><PopoverTrigger asChild><Button variant={"outline"}>{formData.data_inizio ? format(formData.data_inizio, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger><PopoverContent className="p-0"><Calendar mode="single" selected={formData.data_inizio} onSelect={(d) => setFormData({...formData, data_inizio: d})} /></PopoverContent></Popover></div>
+                    <div className="grid gap-2"><Label>Check-out / Fine</Label><Popover><PopoverTrigger asChild><Button variant={"outline"}>{formData.data_fine ? format(formData.data_fine, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger><PopoverContent className="p-0"><Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} /></PopoverContent></Popover></div>
                  </div>
                  <Button type="submit" className="w-full">Salva</Button>
              </form>
           </DialogContent>
         </Dialog>
-
-        <Dialog open={!!selectedDoc} onOpenChange={() => setSelectedDoc(null)}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader><DialogTitle>Verifica Documento</DialogTitle></DialogHeader>
-            {selectedDoc && (
-              <div className="space-y-4">
-                <div className="bg-gray-100 p-4 rounded-lg flex justify-center items-center min-h-[300px]">
-                  {isPdf(selectedDoc.documenti_url) ? (
-                    <Button variant="outline" onClick={() => window.open(getDocUrl(selectedDoc.documenti_url), '_blank')}>Apri PDF</Button>
-                  ) : (
-                    <img src={getDocUrl(selectedDoc.documenti_url)} alt="Doc" className="max-h-[500px] w-auto object-contain" />
-                  )}
-                </div>
-                <div className="flex gap-2">
-                  <Button className="flex-1 bg-green-600" onClick={() => updateDocStatus.mutate({ id: selectedDoc.id, status: 'approvato' })}>Approva</Button>
-                  <Button className="flex-1 bg-red-600" onClick={() => updateDocStatus.mutate({ id: selectedDoc.id, status: 'rifiutato' })}>Rifiuta</Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {bookings?.map((booking) => (
-          <Card key={booking.id} className="border-l-4" style={{ borderLeftColor: booking.tipo_affitto === 'breve' ? '#22c55e' : '#a855f7' }}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-lg flex justify-between">
-                {booking.nome_ospite}
-                <span className="text-xs font-normal px-2 py-1 bg-gray-100 rounded">{booking.properties_real?.nome}</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="text-sm text-gray-600">
-                  {format(new Date(booking.data_inizio), 'dd MMM')} - {format(new Date(booking.data_fine), 'dd MMM')}
-                </div>
-                
-                {/* --- IL BOTTONE CHE MANCAVA --- */}
-                <Button variant="outline" size="sm" className="w-full border-blue-200 text-blue-600 hover:bg-blue-50" onClick={() => copyLink(booking)}>
-                    <Copy className="w-4 h-4 mr-2" /> Copia Link App
-                </Button>
-
-                {booking.stato_documenti === 'in_revisione' && (
-                  <Button size="sm" className="w-full bg-orange-500 hover:bg-orange-600" onClick={() => setSelectedDoc(booking)}>
-                    <Eye className="w-4 h-4 mr-2" /> Revisiona Doc
-                  </Button>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+        {bookings?.map((booking) => {
+            const isShort = booking.tipo_affitto === 'breve';
+            return (
+              <Card key={booking.id} className={`border-l-4 shadow-sm hover:shadow-md transition-shadow ${isShort ? 'border-l-orange-400' : 'border-l-purple-500'}`}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between items-start">
+                    <div>
+                        <CardTitle className="text-lg font-bold text-gray-800">{booking.nome_ospite}</CardTitle>
+                        <p className="text-sm text-gray-500 mt-1">{booking.properties_real?.nome}</p>
+                    </div>
+                    <Badge variant="secondary" className={isShort ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}>
+                        {isShort ? <Palmtree className="w-3 h-3 mr-1"/> : <Home className="w-3 h-3 mr-1"/>}
+                        {isShort ? 'Turista' : 'Inquilino'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="text-sm text-gray-600 flex items-center gap-2 bg-gray-50 p-2 rounded">
+                      <CalendarIcon className="w-4 h-4 text-gray-400" />
+                      {format(new Date(booking.data_inizio), 'dd MMM')} - {format(new Date(booking.data_fine), 'dd MMM yyyy')}
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                        <Button variant="outline" size="sm" className="w-full border-dashed border-gray-300 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200" onClick={() => copyLink(booking)}>
+                            <Copy className="w-4 h-4 mr-2" /> Link Portale
+                        </Button>
+                        {booking.documenti_caricati ? (
+                            <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={() => window.open(booking.documenti_url, '_blank')}>
+                                <Eye className="w-4 h-4 mr-2" /> Vedi Doc
+                            </Button>
+                        ) : (
+                            <Button size="sm" variant="ghost" className="w-full text-gray-400 cursor-not-allowed">
+                                No Documenti
+                            </Button>
+                        )}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+        })}
       </div>
     </div>
   );

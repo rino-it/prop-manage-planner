@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useCreatePropertyReal, useCreatePropertyMobile } from "@/hooks/useProperties";
 import { useToast } from "@/hooks/use-toast";
+import { Building2, Car, Key, CalendarClock } from "lucide-react";
 
 export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
@@ -16,7 +17,13 @@ export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
 
   // Stati per Immobile
   const [realForm, setRealForm] = useState({
-    nome: "", via: "", citta: "", cap: "", provincia: "", tipo: "appartamento" as const
+    nome: "", 
+    via: "", 
+    citta: "", 
+    cap: "", 
+    provincia: "", 
+    tipo: "appartamento" as const,
+    tipo_affitto: "breve" as const // <--- NUOVO CAMPO
   });
 
   // Stati per Mobile
@@ -27,7 +34,6 @@ export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
   const handleSubmitReal = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // 1. Recuperiamo l'utente PRIMA di tutto
       const { supabase } = await import("@/integrations/supabase/client");
       const { data: { user } } = await supabase.auth.getUser();
       
@@ -36,14 +42,14 @@ export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // 2. Ora usiamo l'ID sicuro
       await createReal.mutateAsync({
         ...realForm,
-        user_id: user.id // Qui ora c'è una stringa vera, non una promessa!
+        user_id: user.id
       });
       
       setOpen(false);
-      setRealForm({ nome: "", via: "", citta: "", cap: "", provincia: "", tipo: "appartamento" });
+      // Reset form
+      setRealForm({ nome: "", via: "", citta: "", cap: "", provincia: "", tipo: "appartamento", tipo_affitto: "breve" });
       toast({ title: "Successo", description: "Immobile salvato correttamente!" });
     } catch (error) {
       console.error(error);
@@ -87,20 +93,41 @@ export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
         
         <Tabs defaultValue="real" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="real">Immobile</TabsTrigger>
-            <TabsTrigger value="mobile">Bene Mobile</TabsTrigger>
+            <TabsTrigger value="real" className="flex gap-2"><Building2 className="w-4 h-4"/> Immobile</TabsTrigger>
+            <TabsTrigger value="mobile" className="flex gap-2"><Car className="w-4 h-4"/> Bene Mobile</TabsTrigger>
           </TabsList>
 
           {/* FORM IMMOBILE */}
           <TabsContent value="real">
             <form onSubmit={handleSubmitReal} className="space-y-4 py-4">
+              
+              {/* SELEZIONE TIPO GESTIONE (Nuova Logica) */}
+              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
+                <Label className="text-blue-800 font-semibold mb-2 flex items-center gap-2">
+                  <Key className="w-4 h-4" /> Strategia di Affitto
+                </Label>
+                <Select 
+                  onValueChange={(v: any) => setRealForm({...realForm, tipo_affitto: v})} 
+                  defaultValue="breve"
+                >
+                  <SelectTrigger className="bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="breve">🏖️ Affitto Breve (Turistico / Airbnb)</SelectItem>
+                    <SelectItem value="lungo">🏠 Lungo Termine (4+4 / Transitorio)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="grid gap-2">
                 <Label>Nome Identificativo</Label>
                 <Input required placeholder="Es. Casa Mare" value={realForm.nome} onChange={e => setRealForm({...realForm, nome: e.target.value})} />
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
-                  <Label>Tipo</Label>
+                  <Label>Tipo Immobile</Label>
                   <Select onValueChange={(v: any) => setRealForm({...realForm, tipo: v})} defaultValue="appartamento">
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -116,10 +143,12 @@ export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
                   <Input required value={realForm.citta} onChange={e => setRealForm({...realForm, citta: e.target.value})} />
                 </div>
               </div>
+              
               <div className="grid gap-2">
                 <Label>Indirizzo Completo</Label>
                 <Input required value={realForm.via} onChange={e => setRealForm({...realForm, via: e.target.value})} />
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>CAP</Label>
@@ -130,11 +159,12 @@ export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
                   <Input required value={realForm.provincia} onChange={e => setRealForm({...realForm, provincia: e.target.value})} />
                 </div>
               </div>
+
               <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">Salva Immobile</Button>
             </form>
           </TabsContent>
 
-          {/* FORM MOBILE */}
+          {/* FORM MOBILE (Invariato ma incluso per completezza) */}
           <TabsContent value="mobile">
             <form onSubmit={handleSubmitMobile} className="space-y-4 py-4">
               <div className="grid gap-2">
