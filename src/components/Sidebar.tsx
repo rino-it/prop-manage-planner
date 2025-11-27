@@ -1,13 +1,13 @@
 import React from 'react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
-import { House, Settings, Calendar, List, TrendingUp, MapPin, LogOut, Users, Sparkles } from 'lucide-react';
+import { House, Settings, Calendar, List, TrendingUp, MapPin, LogOut, Users, Sparkles, DollarSign } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onCloseMobile?: () => void; // Nuova prop per gestire la chiusura su mobile
+  onCloseMobile?: () => void;
 }
 
 const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
@@ -16,9 +16,10 @@ const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: House },
     { id: 'bookings', label: 'Prenotazioni', icon: Users },
+    { id: 'revenue', label: 'Incassi', icon: DollarSign }, // <--- NUOVA VOCE
+    { id: 'expenses', label: 'Spese', icon: TrendingUp },
     { id: 'services', label: 'Servizi Extra', icon: Sparkles },
     { id: 'properties', label: 'Proprietà', icon: MapPin },
-    { id: 'expenses', label: 'Spese', icon: TrendingUp },
     { id: 'activities', label: 'Attività', icon: Calendar },
     { id: 'conditions', label: 'Condizioni', icon: List },
     { id: 'plan', label: 'Piano Suggerito', icon: Settings },
@@ -27,7 +28,7 @@ const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
   const handleNavigation = (id: string) => {
     setActiveTab(id);
     if (onCloseMobile) {
-      onCloseMobile(); // Chiude il menu se siamo su mobile
+      onCloseMobile();
     }
   };
 

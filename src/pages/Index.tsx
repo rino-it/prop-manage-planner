@@ -7,6 +7,7 @@ import Services from '@/components/Services';
 import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
 import Properties from '@/components/Properties';
+import Revenue from '@/components/Revenue'; // <--- IMPORTATO
 import Expenses from '@/components/Expenses';
 import Activities from '@/components/Activities';
 import Conditions from '@/components/Conditions';
@@ -16,7 +17,6 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
-  // Funzione che chiude il menu mobile quando clicchi una voce
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setIsMobileOpen(false); 
@@ -24,9 +24,10 @@ const Index = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'bookings': return <Bookings />;
-      case 'services': return <Services />;
       case 'dashboard': return <Dashboard />;
+      case 'bookings': return <Bookings />;
+      case 'revenue': return <Revenue />; // <--- NUOVO CASO
+      case 'services': return <Services />;
       case 'properties': return <Properties />;
       case 'expenses': return <Expenses />;
       case 'activities': return <Activities />;
@@ -39,17 +40,17 @@ const Index = () => {
   return (
     <div className="flex min-h-screen bg-gray-50">
       
-      {/* --- SIDEBAR DESKTOP (Nascosta su mobile) --- */}
+      {/* SIDEBAR DESKTOP */}
       <div className="hidden md:block h-screen sticky top-0 border-r bg-white z-10">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
 
-      {/* --- CONTENUTO PRINCIPALE --- */}
+      {/* CONTENUTO PRINCIPALE */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         
-        {/* HEADER MOBILE (Visibile SOLO su mobile) */}
+        {/* HEADER MOBILE */}
         <div className="md:hidden bg-white border-b p-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-          <span className="font-bold text-lg text-gray-900">Property Manager</span>
+          <span className="font-bold text-lg text-gray-900">PropManager</span>
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">
@@ -57,8 +58,7 @@ const Index = () => {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="p-0 w-64">
-              {/* Inseriamo la Sidebar dentro il menu a scorrimento */}
-              <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} />
+              <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} onCloseMobile={() => setIsMobileOpen(false)} />
             </SheetContent>
           </Sheet>
         </div>
