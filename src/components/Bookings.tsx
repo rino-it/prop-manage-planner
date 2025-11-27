@@ -11,7 +11,6 @@ import { Calendar as CalendarIcon, Plus, Copy, Eye, Palmtree, Home } from 'lucid
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { Badge } from '@/components/ui/badge';
@@ -75,11 +74,19 @@ export default function Bookings() {
 
   const copyLink = (booking: any) => {
     const baseUrl = window.location.origin;
-    // Logica intelligente: Link diverso in base al tipo
     const path = booking.tipo_affitto === 'breve' ? '/guest/' : '/tenant/';
     const fullUrl = `${baseUrl}${path}${booking.id}`;
     navigator.clipboard.writeText(fullUrl);
     toast({ title: "Link Copiato!", description: `Link per ${booking.tipo_affitto === 'breve' ? 'Turista' : 'Inquilino'} pronto.` });
+  };
+
+  // FUNZIONE FIX: Genera l'URL pubblico corretto
+  const getDocUrl = (path: string) => {
+    if (!path) return '#';
+    // Se è già un URL completo (legacy), usalo così com'è
+    if (path.startsWith('http')) return path;
+    // Altrimenti chiedi a Supabase l'URL pubblico nel bucket 'documents'
+    return supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
   };
 
   return (
@@ -156,7 +163,11 @@ export default function Bookings() {
                             <Copy className="w-4 h-4 mr-2" /> Link Portale
                         </Button>
                         {booking.documenti_caricati ? (
-                            <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={() => window.open(booking.documenti_url, '_blank')}>
+                            <Button 
+                                size="sm" 
+                                className="w-full bg-green-600 hover:bg-green-700" 
+                                onClick={() => window.open(getDocUrl(booking.documenti_url), '_blank')}
+                            >
                                 <Eye className="w-4 h-4 mr-2" /> Vedi Doc
                             </Button>
                         ) : (
