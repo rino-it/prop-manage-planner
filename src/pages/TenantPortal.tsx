@@ -110,11 +110,11 @@ export default function TenantPortal() {
       if (dbError) throw dbError;
 
       toast({ title: "Documento inviato!", description: "Grazie per la collaborazione." });
-      // Forza ricaricamento dati per aggiornare la UI
       queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
       
     } catch (error: any) {
-      toast({ title: "Errore upload", description: error.message, variant: "destructive" });
+      console.error(error);
+      toast({ title: "Errore upload", description: "Controlla i permessi o riprova.", variant: "destructive" });
     } finally {
       setUploading(false);
     }
@@ -204,7 +204,7 @@ export default function TenantPortal() {
             </div>
         </TabsContent>
 
-        {/* TAB DOCUMENTI (UPLOAD) */}
+        {/* TAB DOCUMENTI (UPLOAD) - FIX BUTTON */}
         <TabsContent value="docs">
            <Card className="border-dashed border-2">
             <CardContent className="py-10 flex flex-col items-center text-center">
@@ -212,12 +212,20 @@ export default function TenantPortal() {
                 <h3 className="font-bold text-gray-900">Carica Documenti</h3>
                 <p className="text-sm text-gray-500 mb-4">Contratti firmati, ricevute bonifici, documenti identità.</p>
                 
-                <label className="cursor-pointer">
-                    <Button variant="outline" className="pointer-events-none" type="button">
-                        {uploading ? "Caricamento..." : "Seleziona File"}
-                    </Button>
-                    <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
-                </label>
+                <div className="flex justify-center">
+                    <label 
+                        className={`cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                    >
+                        <Upload className="w-4 h-4 mr-2" />
+                        {uploading ? "Caricamento in corso..." : "Seleziona File"}
+                        <input 
+                            type="file" 
+                            className="hidden" 
+                            onChange={handleFileUpload} 
+                            disabled={uploading} 
+                        />
+                    </label>
+                </div>
 
                 {booking.documenti_caricati && (
                     <div className="mt-6 bg-green-50 text-green-700 p-3 rounded-lg text-sm flex items-center">
