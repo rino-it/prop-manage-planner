@@ -29,7 +29,7 @@ export default function Expenses() {
     category: 'manutenzione',
     description: '',
     supplier: '', 
-    supplier_contact: '', // <--- NUOVO CAMPO TELEFONO
+    supplier_contact: '', 
     assigned_to: '',
     booking_id: ''
   });
@@ -81,9 +81,13 @@ export default function Expenses() {
     }
   }, [formData.property_id, formData.date, activeTab]);
 
-  // MUTATION: SPESA PROPRIETARIO
+  // MUTATION: SPESA PROPRIETARIO (FIX UTENTE)
   const createOwnerExpense = useMutation({
     mutationFn: async () => {
+      // 1. RECUPERA UTENTE
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Utente non loggato");
+
       await supabase.from('property_expenses').insert({
         property_id: formData.property_id,
         amount: parseFloat(formData.amount),
@@ -91,8 +95,9 @@ export default function Expenses() {
         category: formData.category,
         description: formData.description,
         supplier: formData.supplier,
-        supplier_contact: formData.supplier_contact, // <--- SALVIAMO IL NUMERO
-        assigned_to: formData.assigned_to
+        supplier_contact: formData.supplier_contact,
+        assigned_to: formData.assigned_to,
+        user_id: user.id // <--- FIX CRUCIALE
       });
     },
     onSuccess: () => {
@@ -100,20 +105,27 @@ export default function Expenses() {
       setIsDialogOpen(false);
       toast({ title: "Spesa Registrata" });
       setFormData({ ...formData, amount: '', description: '', supplier: '', supplier_contact: '' });
-    }
+    },
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // MUTATION: ADDEBITO INQUILINO
+  // MUTATION: ADDEBITO INQUILINO (FIX UTENTE)
   const createTenantCharge = useMutation({
     mutationFn: async () => {
       if (!formData.booking_id) throw new Error("Seleziona un inquilino!");
+      
+      // 1. RECUPERA UTENTE
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Utente non loggato");
+
       await supabase.from('tenant_payments').insert({
         booking_id: formData.booking_id,
         importo: parseFloat(formData.amount),
         data_scadenza: formData.date,
         category: 'rimborso_utenze',
         description: formData.description,
-        stato: 'da_pagare'
+        stato: 'da_pagare',
+        user_id: user.id // <--- FIX CRUCIALE
       });
     },
     onSuccess: () => {
@@ -121,7 +133,7 @@ export default function Expenses() {
       setIsDialogOpen(false);
       toast({ title: "Addebito Inviato" });
     },
-    onError: () => toast({ title: "Errore", description: "Manca l'inquilino", variant: "destructive" })
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
   const confirmPayment = useMutation({
@@ -207,7 +219,7 @@ export default function Expenses() {
                                 </Select>
                             </div>
                             
-                            {/* SEZIONE FORNITORE AGGIORNATA */}
+                            {/* SEZIONE FORNITORE */}
                             <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-2">
                                 <Label className="text-slate-700 font-semibold">Fornitore / Addetto</Label>
                                 <div className="grid grid-cols-2 gap-2">
@@ -326,6 +338,9 @@ export default function Expenses() {
                             <div className="flex items-center gap-4">
                                 <div className="text-right">
                                     <p className="font-bold">€{charge.importo}</p>
+                                    {charge.payment_date_declared && (
+                                        <p className="text-xs text-blue-600 font-medium">Dichiarato: {format(new Date(charge.payment_date_declared), 'dd MMM')}</p>
+                                    )}
                                 </div>
                                 {charge.stato !== 'pagato' ? (
                                     <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => confirmPayment.mutate(charge.id)}>
