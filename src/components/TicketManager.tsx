@@ -16,23 +16,20 @@ interface TicketManagerProps {
   ticket: any;
   isOpen: boolean;
   onClose: () => void;
-  onUpdate: () => void; // Per ricaricare la lista padre
+  onUpdate: () => void;
 }
 
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // Stati Locali
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedColleague, setSelectedColleague] = useState<string>('');
 
-  // Sincronizza note se cambia il ticket
   useEffect(() => {
     setNotes(ticket?.admin_notes || '');
   }, [ticket]);
 
-  // 1. CARICA COLLEGHI (Altri Admin/Proprietari)
   const { data: colleagues } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
@@ -41,7 +38,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
     }
   });
 
-  // AZIONE: Salva Note
   const saveNotes = async () => {
     const { error } = await supabase
       .from('tickets')
@@ -50,12 +46,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
 
     if (error) toast({ title: "Errore", variant: "destructive" });
     else {
-      toast({ title: "Aggiornamento salvato", description: "Le note sono state aggiornate." });
+      toast({ title: "Note salvate", description: "Aggiornamento registrato." });
       onUpdate();
     }
   };
 
-  // AZIONE: Risolvi Ticket
   const resolveTicket = async () => {
     const { error } = await supabase
       .from('tickets')
@@ -70,20 +65,43 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
     }
   };
 
-  // HELPER: WhatsApp Generator
-  const sendWhatsApp = (phone: string | null, message: string) => {
-    if (!phone) {
-      toast({ title: "Nessun telefono", description: "Manca il numero di telefono.", variant: "destructive" });
-      return;
-    }
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank');
+  // --- LOGICA MESSAGGI WHATSAPP POTENZIATA ---
+
+  const sendToColleague = () => {
+    if (!selectedColleague) return;
+    
+    // Costruiamo il messaggio completo
+    const msg = `Ciao, ti delego questo ticket.\n\n` +
+                `🎫 *TICKET:* ${ticket.titolo}\n` +
+                `📝 *DESCRIZIONE:* "${ticket.descrizione}"\n\n` +
+                `📌 *AGGIORNAMENTO:* Ho messo a promemoria per me e l'ospite che: ${notes || 'Nessuna nota aggiuntiva.'}\n` +
+                `🗓️ *SCADENZA:* ${date ? format(date, 'dd/MM/yyyy') : 'Da definire'}`;
+
+    window.open(`https://wa.me/${selectedColleague}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
-  // HELPER: Google Calendar
+  const sendToGuest = () => {
+    const phone = ticket.bookings?.telefono_ospite;
+    if (!phone) {
+        toast({ title: "Manca telefono ospite", variant: "destructive" });
+        return;
+    }
+
+    const msg = `Gentile ${ticket.bookings?.nome_ospite},\n` +
+                `in merito alla tua segnalazione: *"${ticket.titolo}"*\n\n` +
+                `ℹ️ *AGGIORNAMENTO:* ${notes || 'Abbiamo preso in carico la richiesta.'}\n` +
+                `🗓️ *INTERVENTO:* ${date ? format(date, 'dd/MM/yyyy') : 'Data da definire'}\n\n` +
+                `Cordiali saluti.`;
+
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+  };
+
+  // --- CALENDARIO GOOGLE ---
   const addToCalendar = () => {
     if (!date) return;
     const title = `Intervento: ${ticket.titolo}`;
-    const details = `Stato: ${notes}\nPresso: ${ticket.bookings?.properties_real?.nome}`;
+    // Anche nel calendario mettiamo tutto il testo
+    const details = `PROBLEMA: ${ticket.descrizione}\n\nAGGIORNAMENTO: ${notes}\n\nPRESSO: ${ticket.bookings?.properties_real?.nome}`;
     const d = format(date, 'yyyyMMdd');
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&details=${encodeURIComponent(details)}&dates=${d}/${d}`;
     window.open(url, '_blank');
@@ -100,19 +118,19 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
             Gestione Ticket: {ticket.titolo}
           </DialogTitle>
           <DialogDescription>
-            Ospite: {ticket.bookings?.nome_ospite} • Immobile: {ticket.bookings?.properties_real?.nome}
+            Originale: "{ticket.descrizione}"
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
           
-          {/* SEZIONE 1: AGGIORNAMENTO & AZIONI */}
+          {/* 1. NOTE OPERATIVE */}
           <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
             <Label className="text-blue-800 font-bold mb-2 flex items-center gap-2">
-              <Clock className="w-4 h-4" /> 1. Stato Avanzamento & Note
+              <Clock className="w-4 h-4" /> 1. Aggiornamento & Azioni
             </Label>
             <Textarea 
-              placeholder="Es: Contattato idraulico, attendo preventivo..." 
+              placeholder="Scrivi qui lo stato avanzamento (es. Chiamato idraulico, attendo pezzo di ricambio...)" 
               value={notes} 
               onChange={(e) => setNotes(e.target.value)}
               className="bg-white min-h-[80px]"
@@ -124,16 +142,15 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
             </div>
           </div>
 
-          {/* SEZIONE 2: PIANIFICAZIONE & DELEGA */}
+          {/* 2. PIANIFICAZIONE */}
           <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
             <Label className="text-orange-800 font-bold mb-4 flex items-center gap-2">
               <Share2 className="w-4 h-4" /> 2. Pianificazione & Delega
             </Label>
             
             <div className="grid md:grid-cols-2 gap-4">
-              {/* Colonna A: Calendario */}
               <div className="space-y-2">
-                <Label className="text-xs text-gray-500 uppercase">Aggiungi a Calendario</Label>
+                <Label className="text-xs text-gray-500 uppercase">Calendario</Label>
                 <div className="flex gap-2">
                   <Popover>
                     <PopoverTrigger asChild>
@@ -152,7 +169,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
                 </div>
               </div>
 
-              {/* Colonna B: Delega Colleghi */}
               <div className="space-y-2">
                 <Label className="text-xs text-gray-500 uppercase">Delega a Collega</Label>
                 <div className="flex gap-2">
@@ -171,7 +187,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
                   <Button 
                     size="icon" 
                     className="bg-green-600 hover:bg-green-700"
-                    onClick={() => sendWhatsApp(selectedColleague, `Ciao, ti delego il ticket "${ticket.titolo}". Note: ${notes}`)}
+                    onClick={sendToColleague} // Usa la nuova funzione ricca
                     disabled={!selectedColleague}
                   >
                     <Send className="w-4 h-4" />
@@ -181,7 +197,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
             </div>
           </div>
 
-          {/* SEZIONE 3: CHIUSURA & INTERVENTO */}
+          {/* 3. CHIUSURA */}
           <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
             <Label className="text-green-800 font-bold mb-4 flex items-center gap-2">
               <CheckCircle className="w-4 h-4" /> 3. Azioni sull'Ospite & Chiusura
@@ -191,14 +207,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
               <Button 
                 variant="outline" 
                 className="border-green-200 text-green-700 hover:bg-green-50 h-auto py-3 flex flex-col gap-1"
-                onClick={() => sendWhatsApp(
-                  ticket.bookings?.telefono_ospite, 
-                  `Gentile ${ticket.bookings?.nome_ospite}, in merito al ticket "${ticket.titolo}": ${notes || 'Intervento programmato'}. Data prevista: ${date ? format(date, 'dd/MM') : 'da definire'}.`
-                )}
+                onClick={sendToGuest} // Usa la nuova funzione ricca
               >
                 <MessageCircle className="w-5 h-5 mb-1" />
-                <span>Avvisa Ospite</span>
-                <span className="text-[10px] font-normal opacity-70">Invia data intervento</span>
+                <span>Aggiorna Ospite</span>
+                <span className="text-[10px] font-normal opacity-70">Invia stato avanzamento</span>
               </Button>
 
               <Button 
