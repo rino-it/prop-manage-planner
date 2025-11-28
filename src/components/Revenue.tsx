@@ -206,7 +206,7 @@ export default function Revenue() {
                                     <span className="text-xs text-gray-400 bg-white border px-1 rounded">{rev.bookings?.properties_real?.nome}</span>
                                 </div>
                                 <p className="text-sm text-gray-500 capitalize flex items-center gap-2">
-                                    {rev.category?.replace('_', ' ') || 'Generico'} • {rev.description}
+                                    {rev.category?.replace('_', ' ') || 'Generico'} • {rev.notes} {/* <--- USA NOTES ORA */}
                                     {isOverdue && <Badge variant="destructive" className="h-5 text-[10px]">SCADUTO</Badge>}
                                 </p>
                             </div>
@@ -214,7 +214,6 @@ export default function Revenue() {
                         
                         <div className="flex items-center gap-4 justify-between md:justify-end w-full md:w-auto">
                             <div className="text-right">
-                                {/* CORRETTO: Usa rev.importo invece di rev.amount */}
                                 <p className={`font-bold ${rev.stato === 'pagato' ? 'text-green-600' : 'text-slate-600'}`}>€{rev.importo}</p>
                                 <p className="text-xs text-gray-400">Scad: {format(new Date(rev.data_scadenza), 'dd MMM yyyy')}</p>
                             </div>

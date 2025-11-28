@@ -6,12 +6,12 @@ import { addMonths, format } from 'date-fns';
 export interface PaymentEntry {
   id: string;
   booking_id: string;
-  importo: number; // <--- CORRETTO: Nome colonna DB
+  importo: number; // Mappato correttamente
   category: 'canone_locazione' | 'rimborso_utenze' | 'deposito_cauzionale' | 'extra';
   data_scadenza: string;
   payment_date?: string | null;
   stato: 'da_pagare' | 'pagato' | 'scaduto' | 'annullato';
-  description: string;
+  notes: string; // <--- CORRETTO: Nome colonna DB è 'notes'
   is_recurring?: boolean;
   recurrence_group_id?: string;
   bookings?: {
@@ -54,7 +54,7 @@ export const useRevenue = () => {
         date_start: Date, 
         months: number, 
         category: string, 
-        description: string,
+        description: string, // Dal form arriva come 'description'
         is_recurring: boolean 
     }) => {
       const { booking_id, amount, date_start, months, category, description, is_recurring } = params;
@@ -67,12 +67,18 @@ export const useRevenue = () => {
 
       for (let i = 0; i < iterations; i++) {
         const dueDate = addMonths(date_start, i);
+        
+        // Costruiamo la nota (es. "Affitto (Rata 1/12)")
+        const noteText = is_recurring 
+            ? `${description} (Rata ${i+1}/${months})` 
+            : description;
+
         paymentsToInsert.push({
             booking_id,
-            importo: amount, // <--- MAPPING FONDAMENTALE: Input 'amount' diventa 'importo' nel DB
+            importo: amount, // MAPPING: amount -> importo
             data_scadenza: format(dueDate, 'yyyy-MM-dd'),
             category,
-            description: is_recurring ? `${description} (Rata ${i+1}/${months})` : description,
+            notes: noteText, // <--- MAPPING: description -> notes
             stato: 'da_pagare',
             is_recurring,
             recurrence_group_id: groupId,
