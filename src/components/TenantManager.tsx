@@ -1,20 +1,24 @@
 import React, { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Users, Ticket, Wallet, MessageCircle, Calendar as CalendarIcon, ExternalLink, Download, Share2 } from 'lucide-react';
+import { Users, Ticket, Wallet, MessageCircle, ExternalLink, Download, Share2, UserCog } from 'lucide-react';
 import { format } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
+import TicketManager from '@/components/TicketManager'; // <--- IMPORTATO IL NUOVO COMPONENTE
 
 export default function TenantManager() {
-  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   
+  // STATI PER I DIALOG
   const [selectedTicketTenant, setSelectedTicketTenant] = useState<string | null>(null);
   const [selectedPaymentTenant, setSelectedPaymentTenant] = useState<string | null>(null);
+  
+  // NUOVO STATO: Apre il pannello di gestione ticket avanzato
+  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
 
   // 1. CARICA INQUILINI
   const { data: tenants, isLoading } = useQuery({
@@ -29,14 +33,14 @@ export default function TenantManager() {
     }
   });
 
-  // 2. CARICA TICKET
+  // 2. CARICA TICKET (Solo quando apro il dialog storico)
   const { data: tickets } = useQuery({
     queryKey: ['tenant-tickets-detail', selectedTicketTenant],
     queryFn: async () => {
       if (!selectedTicketTenant) return [];
       const { data } = await supabase
         .from('tickets')
-        .select('*')
+        .select('*, bookings(nome_ospite, telefono_ospite, properties_real(nome))')
         .eq('booking_id', selectedTicketTenant)
         .order('created_at', { ascending: false });
       return data || [];
@@ -44,7 +48,7 @@ export default function TenantManager() {
     enabled: !!selectedTicketTenant
   });
 
-  // 3. CARICA PAGAMENTI
+  // 3. CARICA PAGAMENTI (Solo quando apro il dialog pagamenti)
   const { data: payments } = useQuery({
     queryKey: ['tenant-payments-detail', selectedPaymentTenant],
     queryFn: async () => {
@@ -59,6 +63,7 @@ export default function TenantManager() {
     enabled: !!selectedPaymentTenant
   });
 
+  // HELPER FUNCTIONS (WhatsApp, Calendar, etc.)
   const sendWhatsApp = (phone: string, amount: number, date: string, type: string) => {
     if (!phone) return alert("Nessun telefono salvato per questo inquilino");
     const text = `Ciao, ti ricordo la scadenza di €${amount} relativa a ${type} per il giorno ${format(new Date(date), 'dd/MM/yyyy')}. Grazie.`;
@@ -73,7 +78,6 @@ export default function TenantManager() {
     window.open(url, '_blank');
   };
 
-  // --- FUNZIONE MIGLIORATA PER APPLE / MOBILE ---
   const downloadIcs = async (amount: number, date: string, propertyName: string) => {
     const title = `Incasso Affitto: ${propertyName}`;
     const d = format(new Date(date), 'yyyyMMdd');
@@ -93,21 +97,19 @@ export default function TenantManager() {
     const fileName = `incasso_${d}.ics`;
     const file = new File([icsContent], fileName, { type: 'text/calendar' });
 
-    // 1. TENTATIVO MOBILE (Condivisione Nativa iOS/Android)
     if (navigator.canShare && navigator.canShare({ files: [file] })) {
         try {
             await navigator.share({
                 files: [file],
                 title: title,
-                text: 'Aggiungi questo evento al tuo calendario'
+                text: 'Aggiungi evento al calendario'
             });
-            return; // Se ha funzionato, fermati qui
+            return;
         } catch (error) {
-            console.log("Condivisione annullata o non supportata, passo al download.");
+            console.log("Condivisione annullata");
         }
     }
 
-    // 2. FALLBACK DESKTOP (Download Classico)
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     const link = document.createElement('a');
     link.href = window.URL.createObjectURL(blob);
@@ -126,6 +128,7 @@ export default function TenantManager() {
         <Badge variant="outline" className="bg-blue-50 text-blue-700 px-3 py-1">{tenants?.length} Attivi</Badge>
       </div>
       
+      {/* GRIGLIA INQUILINI */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {tenants?.map((booking) => (
             <Card key={booking.id} className="hover:shadow-lg transition-all border-t-4 border-t-purple-600">
@@ -175,7 +178,7 @@ export default function TenantManager() {
         ))}
       </div>
 
-      {/* --- DIALOG STORICO TICKET --- */}
+      {/* --- DIALOG STORICO TICKET (Con Bottone GESTISCI) --- */}
       <Dialog open={!!selectedTicketTenant} onOpenChange={(open) => !open && setSelectedTicketTenant(null)}>
         <DialogContent className="max-w-md">
             <DialogHeader>
@@ -191,7 +194,19 @@ export default function TenantManager() {
                                 <Badge variant={t.stato === 'risolto' ? 'secondary' : 'destructive'} className="text-[10px]">{t.stato}</Badge>
                             </div>
                             <p className="text-gray-600 text-xs mb-2">{t.descrizione}</p>
-                            <p className="text-gray-400 text-[10px] text-right">{format(new Date(t.created_at), 'dd MMM yyyy')}</p>
+                            
+                            <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
+                                <span className="text-gray-400 text-[10px]">{format(new Date(t.created_at), 'dd MMM')}</span>
+                                {/* BOTTONE CHE APRE IL NUOVO TICKET MANAGER */}
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    className="h-7 text-xs bg-white border-blue-200 text-blue-700 hover:bg-blue-50"
+                                    onClick={() => setTicketManagerOpen(t)} 
+                                >
+                                    <UserCog className="w-3 h-3 mr-1" /> Gestisci
+                                </Button>
+                            </div>
                         </div>
                     ))}
                     {tickets?.length === 0 && <p className="text-center py-10 text-gray-400">Nessun ticket presente.</p>}
@@ -226,31 +241,14 @@ export default function TenantManager() {
                                         <Badge variant={p.stato === 'pagato' ? 'default' : 'outline'}>{p.stato}</Badge>
                                     </div>
                                 </div>
-                                
                                 <div className="grid grid-cols-3 gap-2">
-                                    <Button 
-                                        size="sm" 
-                                        className="bg-green-600 hover:bg-green-700 text-white text-xs"
-                                        onClick={() => sendWhatsApp(phone || '', p.importo, p.data_scadenza, p.tipo || 'rata')}
-                                    >
+                                    <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white text-xs" onClick={() => sendWhatsApp(phone || '', p.importo, p.data_scadenza, p.tipo || 'rata')}>
                                         <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
                                     </Button>
-                                    
-                                    <Button 
-                                        size="sm" 
-                                        variant="outline" 
-                                        className="text-blue-600 border-blue-200 hover:bg-blue-50 text-xs"
-                                        onClick={() => addToGoogleCal(p.importo, p.data_scadenza, propName)}
-                                    >
+                                    <Button size="sm" variant="outline" className="text-blue-600 border-blue-200 hover:bg-blue-50 text-xs" onClick={() => addToGoogleCal(p.importo, p.data_scadenza, propName)}>
                                         <ExternalLink className="w-3 h-3 mr-1" /> Google
                                     </Button>
-
-                                    <Button 
-                                        size="sm" 
-                                        variant="outline" 
-                                        className="text-gray-600 border-gray-200 hover:bg-gray-100 text-xs"
-                                        onClick={() => downloadIcs(p.importo, p.data_scadenza, propName)}
-                                    >
+                                    <Button size="sm" variant="outline" className="text-gray-600 border-gray-200 hover:bg-gray-100 text-xs" onClick={() => downloadIcs(p.importo, p.data_scadenza, propName)}>
                                         <Share2 className="w-3 h-3 mr-1" /> Apple/iCal
                                     </Button>
                                 </div>
@@ -262,6 +260,19 @@ export default function TenantManager() {
             </ScrollArea>
         </DialogContent>
       </Dialog>
+
+      {/* --- NUOVO COMPONENTE: TICKET MANAGER --- */}
+      {ticketManagerOpen && (
+        <TicketManager 
+            ticket={ticketManagerOpen} 
+            isOpen={!!ticketManagerOpen} 
+            onClose={() => setTicketManagerOpen(null)}
+            onUpdate={() => {
+                queryClient.invalidateQueries({ queryKey: ['tenant-tickets-detail'] });
+            }}
+        />
+      )}
+
     </div>
   );
 }
