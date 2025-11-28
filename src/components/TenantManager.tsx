@@ -6,14 +6,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Users, Ticket, Wallet, MessageCircle, Calendar as CalendarIcon, ExternalLink, Download } from 'lucide-react';
+import { Users, Ticket, Wallet, MessageCircle, Calendar as CalendarIcon, ExternalLink, Download, Share2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 
 export default function TenantManager() {
   const navigate = useNavigate();
   
-  // STATI PER I DIALOG (Tengono l'ID dell'inquilino selezionato)
   const [selectedTicketTenant, setSelectedTicketTenant] = useState<string | null>(null);
   const [selectedPaymentTenant, setSelectedPaymentTenant] = useState<string | null>(null);
 
@@ -30,7 +29,7 @@ export default function TenantManager() {
     }
   });
 
-  // 2. CARICA TICKET (Solo quando apro il dialog)
+  // 2. CARICA TICKET
   const { data: tickets } = useQuery({
     queryKey: ['tenant-tickets-detail', selectedTicketTenant],
     queryFn: async () => {
@@ -45,7 +44,7 @@ export default function TenantManager() {
     enabled: !!selectedTicketTenant
   });
 
-  // 3. CARICA PAGAMENTI (Solo quando apro il dialog)
+  // 3. CARICA PAGAMENTI
   const { data: payments } = useQuery({
     queryKey: ['tenant-payments-detail', selectedPaymentTenant],
     queryFn: async () => {
@@ -54,20 +53,18 @@ export default function TenantManager() {
         .from('tenant_payments')
         .select('*')
         .eq('booking_id', selectedPaymentTenant)
-        .order('data_scadenza', { ascending: true }); // Dal più vecchio al futuro
+        .order('data_scadenza', { ascending: true });
       return data || [];
     },
     enabled: !!selectedPaymentTenant
   });
 
-  // HELPER: WhatsApp Link
   const sendWhatsApp = (phone: string, amount: number, date: string, type: string) => {
     if (!phone) return alert("Nessun telefono salvato per questo inquilino");
     const text = `Ciao, ti ricordo la scadenza di €${amount} relativa a ${type} per il giorno ${format(new Date(date), 'dd/MM/yyyy')}. Grazie.`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // HELPER: Google Calendar Link
   const addToGoogleCal = (amount: number, date: string, propertyName: string) => {
     const title = `Incasso Affitto: ${propertyName}`;
     const details = `Importo atteso: €${amount}`;
@@ -76,8 +73,8 @@ export default function TenantManager() {
     window.open(url, '_blank');
   };
 
-  // HELPER: Apple Calendar (ICS File)
-  const downloadIcs = (amount: number, date: string, propertyName: string) => {
+  // --- FUNZIONE MIGLIORATA PER APPLE / MOBILE ---
+  const downloadIcs = async (amount: number, date: string, propertyName: string) => {
     const title = `Incasso Affitto: ${propertyName}`;
     const d = format(new Date(date), 'yyyyMMdd');
     
@@ -93,10 +90,28 @@ export default function TenantManager() {
       'END:VCALENDAR'
     ].join('\n');
 
+    const fileName = `incasso_${d}.ics`;
+    const file = new File([icsContent], fileName, { type: 'text/calendar' });
+
+    // 1. TENTATIVO MOBILE (Condivisione Nativa iOS/Android)
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        try {
+            await navigator.share({
+                files: [file],
+                title: title,
+                text: 'Aggiungi questo evento al tuo calendario'
+            });
+            return; // Se ha funzionato, fermati qui
+        } catch (error) {
+            console.log("Condivisione annullata o non supportata, passo al download.");
+        }
+    }
+
+    // 2. FALLBACK DESKTOP (Download Classico)
     const blob = new Blob([icsContent], { type: 'text/calendar;charset=utf-8' });
     const link = document.createElement('a');
     link.href = window.URL.createObjectURL(blob);
-    link.setAttribute('download', `incasso_${d}.ics`);
+    link.setAttribute('download', fileName);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -123,7 +138,6 @@ export default function TenantManager() {
                     </CardTitle>
                     <p className="text-sm text-gray-500 mt-1 truncate max-w-[200px]">{booking.properties_real?.nome}</p>
                   </div>
-                  {/* Rating Visivo (Semplificato) */}
                   <div className={`h-8 w-8 rounded-full flex items-center justify-center font-bold text-sm text-white ${
                       (booking.tenant_profiles?.[0]?.compliance_score || 100) > 80 ? 'bg-green-500' : 'bg-yellow-500'
                   }`}>
@@ -133,7 +147,6 @@ export default function TenantManager() {
               </CardHeader>
               
               <CardContent className="space-y-4 pt-4">
-                {/* BOTTONI AZIONE PRINCIPALI */}
                 <div className="grid grid-cols-2 gap-3">
                     <Button 
                         variant="outline" 
@@ -187,7 +200,7 @@ export default function TenantManager() {
         </DialogContent>
       </Dialog>
 
-      {/* --- DIALOG PIANO PAGAMENTI (Action Center) --- */}
+      {/* --- DIALOG PIANO PAGAMENTI --- */}
       <Dialog open={!!selectedPaymentTenant} onOpenChange={(open) => !open && setSelectedPaymentTenant(null)}>
         <DialogContent className="max-w-lg">
             <DialogHeader>
@@ -197,7 +210,6 @@ export default function TenantManager() {
             <ScrollArea className="h-[500px] pr-4">
                 <div className="space-y-3 mt-2">
                     {payments?.map(p => {
-                        // Troviamo i dati dell'inquilino corrente per il numero di telefono
                         const currentTenant = tenants?.find(t => t.id === selectedPaymentTenant);
                         const phone = currentTenant?.telefono_ospite;
                         const propName = currentTenant?.properties_real?.nome || 'Affitto';
@@ -215,7 +227,6 @@ export default function TenantManager() {
                                     </div>
                                 </div>
                                 
-                                {/* ACTION BUTTONS */}
                                 <div className="grid grid-cols-3 gap-2">
                                     <Button 
                                         size="sm" 
@@ -240,19 +251,13 @@ export default function TenantManager() {
                                         className="text-gray-600 border-gray-200 hover:bg-gray-100 text-xs"
                                         onClick={() => downloadIcs(p.importo, p.data_scadenza, propName)}
                                     >
-                                        <Download className="w-3 h-3 mr-1" /> Apple
+                                        <Share2 className="w-3 h-3 mr-1" /> Apple/iCal
                                     </Button>
                                 </div>
                             </div>
                         );
                     })}
-                    {payments?.length === 0 && (
-                        <div className="text-center py-10 text-gray-400 bg-gray-50 rounded border border-dashed">
-                            <Wallet className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                            <p>Nessun pagamento programmato.</p>
-                            <p className="text-xs mt-1">Vai in "Incassi" o crea un piano rateale.</p>
-                        </div>
-                    )}
+                    {payments?.length === 0 && <p className="text-center py-10 text-gray-400">Nessun pagamento programmato.</p>}
                 </div>
             </ScrollArea>
         </DialogContent>
