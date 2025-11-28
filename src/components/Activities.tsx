@@ -9,29 +9,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
-import { Calendar, CheckCircle, AlertTriangle, Clock, Plus, MessageSquare, CalendarPlus, MessageCircle, Wrench } from 'lucide-react';
+import { Calendar, MessageSquare, UserCog, Plus, CheckCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { cn } from '@/lib/utils';
+import TicketManager from '@/components/TicketManager'; // <--- IL NOSTRO SUPER COMPONENTE
 
 export default function Activities() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  
+  // STATI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  
-  // Stato per la schedulazione
-  const [scheduleDate, setScheduleDate] = useState<Date | undefined>(new Date());
-  const [selectedTicket, setSelectedTicket] = useState<any>(null);
-  
+  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); // Per aprire il pannello gestione
+
   const [formData, setFormData] = useState({
     titolo: '',
     descrizione: '',
-    priorita: 'media'
+    priorita: 'media',
+    booking_id: 'none' // Opzionale: collegare a una prenotazione specifica se serve
   });
 
-  // 1. LEGGI I TICKET
+  // 1. CARICA TUTTI I TICKET (Globali)
   const { data: tickets, isLoading } = useQuery({
     queryKey: ['tickets'],
     queryFn: async () => {
@@ -52,57 +50,30 @@ export default function Activities() {
     }
   });
 
-  // 2. CREA TICKET
+  // 2. CREA TICKET INTERNO
   const createTicket = useMutation({
     mutationFn: async (newTicket: any) => {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('tickets').insert({
+      // Se non è collegato a un booking, lasciamo booking_id null
+      const payload = {
         ...newTicket,
         user_id: user?.id,
         creato_da: 'manager',
-        stato: 'aperto'
-      });
+        stato: 'aperto',
+        booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id
+      };
+      
+      const { error } = await supabase.from('tickets').insert(payload);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
-      setFormData({ titolo: '', descrizione: '', priorita: 'media' });
-      toast({ title: "Ticket creato" });
+      setFormData({ titolo: '', descrizione: '', priorita: 'media', booking_id: 'none' });
+      toast({ title: "Ticket creato", description: "Aggiunto alla lista attività." });
     },
     onError: () => toast({ title: "Errore", variant: "destructive" })
   });
-
-  // 3. RISOLVI TICKET
-  const resolveTicket = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('tickets').update({ stato: 'risolto' }).eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      toast({ title: "Ticket risolto!" });
-    }
-  });
-
-  // --- LOGICA SCHEDULAZIONE ---
-  const handleWhatsApp = (ticket: any) => {
-    if (!scheduleDate) return;
-    const phone = ticket.bookings?.telefono_ospite || ''; 
-    const dateStr = format(scheduleDate, 'dd/MM/yyyy');
-    const text = `Ciao ${ticket.bookings?.nome_ospite}, in merito alla segnalazione "${ticket.titolo}", confermo l'intervento tecnico per il giorno ${dateStr}. Cordiali saluti.`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
-  };
-
-  const handleGCalendar = (ticket: any) => {
-    if (!scheduleDate) return;
-    const title = `Intervento: ${ticket.titolo}`;
-    const details = `Problema: ${ticket.descrizione}\nPresso: ${ticket.bookings?.properties_real?.nome}`;
-    // Formato data YYYYMMDD
-    const dateStr = format(scheduleDate, 'yyyyMMdd'); 
-    const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&details=${encodeURIComponent(details)}&dates=${dateStr}/${dateStr}`;
-    window.open(url, '_blank');
-  };
 
   const getPriorityColor = (p: string) => {
     if (p === 'alta' || p === 'critica') return 'bg-red-100 text-red-800 border-red-200';
@@ -115,9 +86,10 @@ export default function Activities() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Ticket & Manutenzioni</h1>
-          <p className="text-gray-500">Gestisci le segnalazioni e pianifica gli interventi.</p>
+          <p className="text-gray-500">Gestione centralizzata di tutte le segnalazioni.</p>
         </div>
         
+        {/* DIALOG NUOVO TICKET */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-blue-600 hover:bg-blue-700">
@@ -129,7 +101,7 @@ export default function Activities() {
             <div className="space-y-4 mt-4">
               <div className="grid gap-2">
                 <Label>Titolo Problema</Label>
-                <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} />
+                <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Controllo Caldaia Generale" />
               </div>
               <div className="grid gap-2">
                 <Label>Priorità</Label>
@@ -147,7 +119,7 @@ export default function Activities() {
                 <Label>Descrizione</Label>
                 <Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} />
               </div>
-              <Button className="w-full" onClick={() => createTicket.mutate(formData)}>Salva Ticket</Button>
+              <Button className="w-full bg-blue-600" onClick={() => createTicket.mutate(formData)}>Salva Ticket</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -156,12 +128,14 @@ export default function Activities() {
       {/* LISTA TICKET */}
       <div className="grid gap-4">
         {isLoading ? <p>Caricamento...</p> : tickets?.map((ticket) => (
-          <Card key={ticket.id} className={`border-l-4 shadow-sm ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-70' : 'border-l-red-500'}`}>
+          <Card key={ticket.id} className={`border-l-4 shadow-sm transition-all hover:shadow-md ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-60 bg-gray-50' : 'border-l-red-500'}`}>
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                
+                {/* INFO TICKET */}
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
-                    <h3 className="font-bold text-lg">{ticket.titolo}</h3>
+                    <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
                     <Badge variant="outline" className={getPriorityColor(ticket.priorita || 'media')}>
                       {ticket.priorita}
                     </Badge>
@@ -171,52 +145,57 @@ export default function Activities() {
                       </Badge>
                     )}
                   </div>
+                  
                   <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
+                  
+                  {/* METADATI */}
                   <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-                    <span className="flex items-center bg-gray-100 px-2 py-1 rounded"><Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}</span>
+                    <span className="flex items-center bg-gray-100 px-2 py-1 rounded border">
+                        <Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}
+                    </span>
                     {ticket.bookings?.properties_real?.nome && (
-                      <span className="font-medium text-gray-700">🏠 {ticket.bookings.properties_real.nome}</span>
+                      <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                        🏠 {ticket.bookings.properties_real.nome}
+                      </span>
                     )}
                     {ticket.bookings?.nome_ospite && (
-                      <span>👤 {ticket.bookings.nome_ospite}</span>
+                      <span className="font-medium text-blue-700">
+                        👤 {ticket.bookings.nome_ospite}
+                      </span>
+                    )}
+                    {ticket.supplier && (
+                        <span className="font-medium text-purple-700">
+                            🛠️ {ticket.supplier}
+                        </span>
                     )}
                   </div>
                 </div>
                 
-                <div className="flex flex-col gap-2 w-full md:w-auto">
-                   {/* BOTTONE SCHEDULA (POPOVER) */}
-                   {ticket.stato !== 'risolto' && (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button size="sm" variant="outline" className="w-full border-orange-200 text-orange-700 hover:bg-orange-50">
-                             <Wrench className="w-4 h-4 mr-2" /> Schedula
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 p-4" align="end">
-                          <div className="space-y-4">
-                            <h4 className="font-semibold leading-none border-b pb-2">Pianifica Intervento</h4>
-                            <CalendarComponent mode="single" selected={scheduleDate} onSelect={setScheduleDate} className="rounded-md border shadow-sm" />
-                            <div className="grid grid-cols-2 gap-2">
-                                <Button size="sm" className="w-full bg-green-600 hover:bg-green-700" onClick={() => handleWhatsApp(ticket)}>
-                                    <MessageCircle className="w-4 h-4 mr-2" /> WhatsApp
-                                </Button>
-                                <Button size="sm" variant="outline" className="w-full" onClick={() => handleGCalendar(ticket)}>
-                                    <CalendarPlus className="w-4 h-4 mr-2" /> GCal
-                                </Button>
-                            </div>
-                          </div>
-                        </PopoverContent>
-                      </Popover>
-                   )}
-
+                {/* AZIONI */}
+                <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
                    {ticket.stato !== 'risolto' ? (
-                      <Button size="sm" variant="outline" className="w-full text-green-600 border-green-200 hover:bg-green-50" onClick={() => resolveTicket.mutate(ticket.id)}>
-                        <CheckCircle className="w-4 h-4 mr-2" /> Risolvi
+                      <Button 
+                        size="sm" 
+                        className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm"
+                        onClick={() => setTicketManagerOpen(ticket)} // APRE IL SUPER PANNELLO
+                      >
+                         <UserCog className="w-4 h-4 mr-2" /> Gestisci
                       </Button>
                    ) : (
-                      <Badge variant="outline" className="w-full justify-center py-1 bg-green-50 text-green-700 border-green-200">
-                          <CheckCircle className="w-3 h-3 mr-1" /> Risolto
-                      </Badge>
+                      <div className="flex flex-col gap-2">
+                          <Badge variant="outline" className="w-full justify-center py-1 bg-green-50 text-green-700 border-green-200">
+                              <CheckCircle className="w-3 h-3 mr-1" /> Risolto
+                          </Badge>
+                          {/* Permetti comunque di riaprire/rivedere lo storico */}
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="w-full text-xs text-gray-400 hover:text-gray-600"
+                            onClick={() => setTicketManagerOpen(ticket)}
+                          >
+                             Vedi dettagli
+                          </Button>
+                      </div>
                    )}
                 </div>
               </div>
@@ -224,6 +203,18 @@ export default function Activities() {
           </Card>
         ))}
       </div>
+
+      {/* INTEGRAZIONE TICKET MANAGER */}
+      {ticketManagerOpen && (
+        <TicketManager 
+            ticket={ticketManagerOpen} 
+            isOpen={!!ticketManagerOpen} 
+            onClose={() => setTicketManagerOpen(null)}
+            onUpdate={() => {
+                queryClient.invalidateQueries({ queryKey: ['tickets'] }); // Ricarica la lista globale
+            }}
+        />
+      )}
     </div>
   );
 }
