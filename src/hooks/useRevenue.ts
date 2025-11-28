@@ -6,7 +6,7 @@ import { addMonths, format } from 'date-fns';
 export interface PaymentEntry {
   id: string;
   booking_id: string;
-  amount: number;
+  importo: number; // <--- CORRETTO: Nome colonna DB
   category: 'canone_locazione' | 'rimborso_utenze' | 'deposito_cauzionale' | 'extra';
   data_scadenza: string;
   payment_date?: string | null;
@@ -26,7 +26,7 @@ export const useRevenue = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // 1. OTTIENI TUTTI I PAGAMENTI (Libro Mastro)
+  // 1. OTTIENI TUTTI I PAGAMENTI
   const { data: revenues, isLoading } = useQuery({
     queryKey: ['revenue-payments'],
     queryFn: async () => {
@@ -39,14 +39,14 @@ export const useRevenue = () => {
             properties_real (nome)
           )
         `)
-        .order('data_scadenza', { ascending: true }); // Ordina per scadenza
+        .order('data_scadenza', { ascending: true });
       
       if (error) throw error;
       return data;
     },
   });
 
-  // 2. CREA PIANO RATEALE (Logica Smart)
+  // 2. CREA PIANO RATEALE
   const createPaymentPlan = useMutation({
     mutationFn: async (params: { 
         booking_id: string, 
@@ -61,7 +61,7 @@ export const useRevenue = () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       const paymentsToInsert = [];
-      const groupId = is_recurring ? crypto.randomUUID() : null; // ID Gruppo per collegare le rate
+      const groupId = is_recurring ? crypto.randomUUID() : null;
 
       const iterations = is_recurring ? months : 1;
 
@@ -69,7 +69,7 @@ export const useRevenue = () => {
         const dueDate = addMonths(date_start, i);
         paymentsToInsert.push({
             booking_id,
-            amount,
+            importo: amount, // <--- MAPPING FONDAMENTALE: Input 'amount' diventa 'importo' nel DB
             data_scadenza: format(dueDate, 'yyyy-MM-dd'),
             category,
             description: is_recurring ? `${description} (Rata ${i+1}/${months})` : description,
@@ -90,14 +90,14 @@ export const useRevenue = () => {
     onError: (error: any) => toast({ title: "Errore", description: error.message, variant: "destructive" })
   });
 
-  // 3. SEGNA COME INCASSATO (Cash In)
+  // 3. SEGNA COME INCASSATO
   const markAsPaid = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('tenant_payments')
         .update({ 
             stato: 'pagato', 
-            payment_date: new Date().toISOString() // Data Valuta = Oggi
+            payment_date: new Date().toISOString()
         })
         .eq('id', id);
       if (error) throw error;
@@ -108,7 +108,7 @@ export const useRevenue = () => {
     }
   });
 
-  // 4. ELIMINA (Singolo o Gruppo)
+  // 4. ELIMINA
   const deletePayment = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('tenant_payments').delete().eq('id', id);

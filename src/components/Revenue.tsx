@@ -28,10 +28,9 @@ export default function Revenue() {
     category: 'canone_locazione',
     description: '',
     is_recurring: false,
-    months: '12' // Default 1 anno
+    months: '12'
   });
 
-  // CARICA INQUILINI ATTIVI PER LA PROPRIETÀ SELEZIONATA
   const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants', selectedProp],
     queryFn: async () => {
@@ -40,7 +39,7 @@ export default function Revenue() {
             .from('bookings')
             .select('id, nome_ospite, tipo_affitto')
             .eq('property_id', selectedProp)
-            .eq('tipo_affitto', 'lungo'); // Solo inquilini veri
+            .eq('tipo_affitto', 'lungo');
         return data || [];
     },
     enabled: !!selectedProp
@@ -60,13 +59,12 @@ export default function Revenue() {
     });
     
     setIsDialogOpen(false);
-    // Reset parziale
     setFormData({ ...formData, amount: '', description: '' });
   };
 
-  // CALCOLO KPI (SOLDI VERI VS PREVISTI)
-  const totalCollected = revenues?.filter(r => r.stato === 'pagato').reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
-  const totalPending = revenues?.filter(r => r.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
+  // CALCOLO KPI (USA 'importo')
+  const totalCollected = revenues?.filter(r => r.stato === 'pagato').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
+  const totalPending = revenues?.filter(r => r.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
 
   return (
     <div className="space-y-6">
@@ -86,7 +84,6 @@ export default function Revenue() {
             <DialogHeader><DialogTitle>Registra Entrata / Piano</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               
-              {/* SELEZIONE SOGGETTO */}
               <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                     <Label>Proprietà</Label>
@@ -108,7 +105,6 @@ export default function Revenue() {
                   </div>
               </div>
 
-              {/* DETTAGLI FINANZIARI */}
               <div className="grid grid-cols-2 gap-4">
                  <div className="grid gap-2">
                     <Label>Importo (€)</Label>
@@ -133,7 +129,6 @@ export default function Revenue() {
                 </Select>
               </div>
 
-              {/* AUTOMAZIONE RICORRENZA */}
               <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
                   <div className="flex items-center justify-between">
                       <Label className="flex items-center gap-2 cursor-pointer">
@@ -170,7 +165,6 @@ export default function Revenue() {
         </Dialog>
       </div>
 
-      {/* KPI DASHBOARD */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card className="bg-green-50 border-green-200">
           <CardContent className="p-6 flex items-center gap-4">
@@ -193,7 +187,6 @@ export default function Revenue() {
         </Card>
       </div>
 
-      {/* TABELLA FLUSSI */}
       <Card>
         <CardHeader><CardTitle>Flusso di Cassa</CardTitle></CardHeader>
         <CardContent>
@@ -213,7 +206,7 @@ export default function Revenue() {
                                     <span className="text-xs text-gray-400 bg-white border px-1 rounded">{rev.bookings?.properties_real?.nome}</span>
                                 </div>
                                 <p className="text-sm text-gray-500 capitalize flex items-center gap-2">
-                                    {rev.category.replace('_', ' ')} • {rev.description}
+                                    {rev.category?.replace('_', ' ') || 'Generico'} • {rev.description}
                                     {isOverdue && <Badge variant="destructive" className="h-5 text-[10px]">SCADUTO</Badge>}
                                 </p>
                             </div>
@@ -221,7 +214,8 @@ export default function Revenue() {
                         
                         <div className="flex items-center gap-4 justify-between md:justify-end w-full md:w-auto">
                             <div className="text-right">
-                                <p className={`font-bold ${rev.stato === 'pagato' ? 'text-green-600' : 'text-slate-600'}`}>€{rev.amount}</p>
+                                {/* CORRETTO: Usa rev.importo invece di rev.amount */}
+                                <p className={`font-bold ${rev.stato === 'pagato' ? 'text-green-600' : 'text-slate-600'}`}>€{rev.importo}</p>
                                 <p className="text-xs text-gray-400">Scad: {format(new Date(rev.data_scadenza), 'dd MMM yyyy')}</p>
                             </div>
                             
