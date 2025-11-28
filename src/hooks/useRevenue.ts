@@ -1,75 +1,130 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { addMonths, format } from 'date-fns';
 
-export interface RevenueEntry {
+export interface PaymentEntry {
   id: string;
-  property_id: string;
+  booking_id: string;
   amount: number;
-  category: 'affitto' | 'extra' | 'rimborso' | 'conguaglio' | 'deposito';
-  date: string;
+  category: 'canone_locazione' | 'rimborso_utenze' | 'deposito_cauzionale' | 'extra';
+  data_scadenza: string;
+  payment_date?: string | null;
+  stato: 'da_pagare' | 'pagato' | 'scaduto' | 'annullato';
   description: string;
+  is_recurring?: boolean;
+  recurrence_group_id?: string;
+  bookings?: {
+    nome_ospite: string;
+    properties_real?: {
+        nome: string;
+    }
+  };
 }
 
 export const useRevenue = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // 1. OTTIENI TUTTI GLI INCASSI
+  // 1. OTTIENI TUTTI I PAGAMENTI (Libro Mastro)
   const { data: revenues, isLoading } = useQuery({
-    queryKey: ['revenues'],
+    queryKey: ['revenue-payments'],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from('revenue_entries')
+        .from('tenant_payments')
         .select(`
           *,
-          properties_real (nome)
+          bookings (
+            nome_ospite,
+            properties_real (nome)
+          )
         `)
-        .order('date', { ascending: false });
+        .order('data_scadenza', { ascending: true }); // Ordina per scadenza
       
       if (error) throw error;
       return data;
     },
   });
 
-  // 2. AGGIUNGI NUOVO INCASSO
-  const addRevenue = useMutation({
-    mutationFn: async (newRevenue: Omit<RevenueEntry, 'id'>) => {
+  // 2. CREA PIANO RATEALE (Logica Smart)
+  const createPaymentPlan = useMutation({
+    mutationFn: async (params: { 
+        booking_id: string, 
+        amount: number, 
+        date_start: Date, 
+        months: number, 
+        category: string, 
+        description: string,
+        is_recurring: boolean 
+    }) => {
+      const { booking_id, amount, date_start, months, category, description, is_recurring } = params;
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Utente non loggato");
-
-      const { error } = await supabase
-        .from('revenue_entries')
-        .insert({ ...newRevenue, user_id: user.id });
       
+      const paymentsToInsert = [];
+      const groupId = is_recurring ? crypto.randomUUID() : null; // ID Gruppo per collegare le rate
+
+      const iterations = is_recurring ? months : 1;
+
+      for (let i = 0; i < iterations; i++) {
+        const dueDate = addMonths(date_start, i);
+        paymentsToInsert.push({
+            booking_id,
+            amount,
+            data_scadenza: format(dueDate, 'yyyy-MM-dd'),
+            category,
+            description: is_recurring ? `${description} (Rata ${i+1}/${months})` : description,
+            stato: 'da_pagare',
+            is_recurring,
+            recurrence_group_id: groupId,
+            user_id: user?.id
+        });
+      }
+
+      const { error } = await supabase.from('tenant_payments').insert(paymentsToInsert);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['revenues'] });
-      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] }); // Aggiornerà la dashboard
-      toast({ title: "Incasso Registrato", description: "I dati finanziari sono aggiornati." });
+      queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
+      toast({ title: "Piano Registrato", description: "Le scadenze sono state generate." });
     },
-    onError: (error: any) => {
-      toast({ title: "Errore", description: error.message, variant: "destructive" });
+    onError: (error: any) => toast({ title: "Errore", description: error.message, variant: "destructive" })
+  });
+
+  // 3. SEGNA COME INCASSATO (Cash In)
+  const markAsPaid = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('tenant_payments')
+        .update({ 
+            stato: 'pagato', 
+            payment_date: new Date().toISOString() // Data Valuta = Oggi
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
+      toast({ title: "Incasso Confermato", description: "Soldi registrati in cassa." });
     }
   });
 
-  // 3. ELIMINA INCASSO
-  const deleteRevenue = useMutation({
+  // 4. ELIMINA (Singolo o Gruppo)
+  const deletePayment = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.from('revenue_entries').delete().eq('id', id);
+      const { error } = await supabase.from('tenant_payments').delete().eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['revenues'] });
-      toast({ title: "Eliminato", description: "Voce rimossa correttamente." });
+      queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
+      toast({ title: "Eliminato" });
     }
   });
 
   return {
     revenues,
     isLoading,
-    addRevenue,
-    deleteRevenue
+    createPaymentPlan,
+    markAsPaid,
+    deletePayment
   };
 };

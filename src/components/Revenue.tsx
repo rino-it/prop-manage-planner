@@ -1,135 +1,247 @@
 import React, { useState } from 'react';
 import { useRevenue } from '@/hooks/useRevenue';
 import { usePropertiesReal } from '@/hooks/useProperties';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { TrendingUp, Plus, DollarSign, Calendar as CalendarIcon, Trash2 } from 'lucide-react';
-import { format } from 'date-fns';
+import { Switch } from '@/components/ui/switch';
+import { TrendingUp, Plus, DollarSign, Calendar as CalendarIcon, Trash2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { format, isPast, isToday } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 export default function Revenue() {
-  const { revenues, addRevenue, deleteRevenue, isLoading } = useRevenue();
+  const { revenues, createPaymentPlan, markAsPaid, deletePayment, isLoading } = useRevenue();
   const { data: properties } = usePropertiesReal();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
+  // FORM STATE
+  const [selectedProp, setSelectedProp] = useState('');
   const [formData, setFormData] = useState({
+    booking_id: '',
     amount: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
-    category: 'affitto',
-    property_id: '',
-    description: ''
+    date_start: format(new Date(), 'yyyy-MM-dd'),
+    category: 'canone_locazione',
+    description: '',
+    is_recurring: false,
+    months: '12' // Default 1 anno
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.amount || !formData.property_id) return;
+  // CARICA INQUILINI ATTIVI PER LA PROPRIETÀ SELEZIONATA
+  const { data: activeTenants } = useQuery({
+    queryKey: ['active-tenants', selectedProp],
+    queryFn: async () => {
+        if (!selectedProp) return [];
+        const { data } = await supabase
+            .from('bookings')
+            .select('id, nome_ospite, tipo_affitto')
+            .eq('property_id', selectedProp)
+            .eq('tipo_affitto', 'lungo'); // Solo inquilini veri
+        return data || [];
+    },
+    enabled: !!selectedProp
+  });
+
+  const handleSubmit = async () => {
+    if (!formData.amount || !formData.booking_id) return;
     
-    await addRevenue.mutateAsync({
-      ...formData,
+    await createPaymentPlan.mutateAsync({
+      booking_id: formData.booking_id,
       amount: parseFloat(formData.amount),
-      category: formData.category as any
+      date_start: new Date(formData.date_start),
+      category: formData.category,
+      description: formData.description || 'Rata canone',
+      is_recurring: formData.is_recurring,
+      months: parseInt(formData.months)
     });
     
     setIsDialogOpen(false);
+    // Reset parziale
     setFormData({ ...formData, amount: '', description: '' });
   };
 
-  const totalRevenue = revenues?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
+  // CALCOLO KPI (SOLDI VERI VS PREVISTI)
+  const totalCollected = revenues?.filter(r => r.stato === 'pagato').reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
+  const totalPending = revenues?.filter(r => r.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Gestione Incassi</h1>
+        <div>
+            <h1 className="text-3xl font-bold text-gray-900">Incassi & Piani</h1>
+            <p className="text-gray-500">Gestisci i flussi di cassa e le morosità.</p>
+        </div>
+        
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-green-600 hover:bg-green-700">
-              <Plus className="w-4 h-4 mr-2" /> Registra Incasso
+            <Button className="bg-green-600 hover:bg-green-700 shadow-sm">
+              <Plus className="w-4 h-4 mr-2" /> Nuovo Incasso
             </Button>
           </DialogTrigger>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Nuovo Incasso</DialogTitle></DialogHeader>
-            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
-              <div className="grid gap-2">
-                <Label>Proprietà</Label>
-                <Select onValueChange={(v) => setFormData({...formData, property_id: v})}>
-                  <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                  <SelectContent>
-                    {properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+          <DialogContent className="sm:max-w-[500px]">
+            <DialogHeader><DialogTitle>Registra Entrata / Piano</DialogTitle></DialogHeader>
+            <div className="space-y-4 mt-4">
+              
+              {/* SELEZIONE SOGGETTO */}
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                    <Label>Proprietà</Label>
+                    <Select onValueChange={(v) => setSelectedProp(v)}>
+                      <SelectTrigger><SelectValue placeholder="Scegli casa..." /></SelectTrigger>
+                      <SelectContent>
+                        {properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Inquilino</Label>
+                    <Select onValueChange={(v) => setFormData({...formData, booking_id: v})} disabled={!selectedProp}>
+                      <SelectTrigger><SelectValue placeholder={!selectedProp ? "Prima la casa" : "Seleziona..."} /></SelectTrigger>
+                      <SelectContent>
+                        {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
               </div>
+
+              {/* DETTAGLI FINANZIARI */}
               <div className="grid grid-cols-2 gap-4">
                  <div className="grid gap-2">
                     <Label>Importo (€)</Label>
-                    <Input type="number" required value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
+                    <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} placeholder="0.00" />
                  </div>
                  <div className="grid gap-2">
-                    <Label>Data</Label>
-                    <Input type="date" required value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} />
+                    <Label>Data Scadenza</Label>
+                    <Input type="date" value={formData.date_start} onChange={e => setFormData({...formData, date_start: e.target.value})} />
                  </div>
               </div>
+
               <div className="grid gap-2">
-                <Label>Categoria</Label>
-                <Select onValueChange={(v) => setFormData({...formData, category: v})} defaultValue="affitto">
+                <Label>Categoria Fiscale</Label>
+                <Select onValueChange={(v) => setFormData({...formData, category: v})} defaultValue="canone_locazione">
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="affitto">Canone Affitto</SelectItem>
-                    <SelectItem value="extra">Extra / Pulizie</SelectItem>
-                    <SelectItem value="deposito">Deposito Cauzionale</SelectItem>
-                    <SelectItem value="rimborso">Rimborso Utenze</SelectItem>
+                    <SelectItem value="canone_locazione">🏠 Canone Locazione (Reddito)</SelectItem>
+                    <SelectItem value="rimborso_utenze">💡 Rimborso Utenze (Giroconto)</SelectItem>
+                    <SelectItem value="deposito_cauzionale">🔒 Deposito Cauzionale (Debito)</SelectItem>
+                    <SelectItem value="extra">⭐ Extra / Altro</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+
+              {/* AUTOMAZIONE RICORRENZA */}
+              <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2 cursor-pointer">
+                          <RefreshCw className="w-4 h-4 text-blue-600" />
+                          Genera Piano Rateale
+                      </Label>
+                      <Switch checked={formData.is_recurring} onCheckedChange={(c) => setFormData({...formData, is_recurring: c})} />
+                  </div>
+                  
+                  {formData.is_recurring && (
+                      <div className="pt-2 animate-in fade-in slide-in-from-top-2">
+                          <Label className="text-xs text-gray-500 mb-1 block">Numero di rate mensili</Label>
+                          <Input 
+                            type="number" 
+                            value={formData.months} 
+                            onChange={e => setFormData({...formData, months: e.target.value})} 
+                            className="bg-white"
+                          />
+                          <p className="text-[10px] text-gray-400 mt-1">Verranno create {formData.months} scadenze future.</p>
+                      </div>
+                  )}
+              </div>
+
               <div className="grid gap-2">
                 <Label>Note</Label>
-                <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Es. Bonifico Mario Rossi" />
+                <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Es. Affitto Maggio" />
               </div>
-              <Button type="submit" className="w-full bg-green-600">Salva</Button>
-            </form>
+              
+              <Button onClick={handleSubmit} className="w-full bg-green-600 hover:bg-green-700 font-bold">
+                  {formData.is_recurring ? `Genera Piano (${formData.months} Rate)` : 'Registra Incasso Singolo'}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
 
-      {/* KPI CARD */}
-      <Card className="bg-green-50 border-green-200">
-        <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-4 bg-green-100 rounded-full text-green-700"><DollarSign className="w-8 h-8" /></div>
+      {/* KPI DASHBOARD */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="bg-green-50 border-green-200">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-4 bg-green-100 rounded-full text-green-700"><CheckCircle className="w-8 h-8" /></div>
             <div>
-                <p className="text-sm text-green-700 font-medium">Totale Incassato</p>
-                <h2 className="text-3xl font-bold text-green-900">€ {totalRevenue.toLocaleString()}</h2>
+                <p className="text-sm text-green-700 font-medium uppercase tracking-wider">Incassato (Reale)</p>
+                <h2 className="text-3xl font-bold text-green-900">€ {totalCollected.toLocaleString()}</h2>
             </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-orange-50 border-orange-200">
+          <CardContent className="p-6 flex items-center gap-4">
+            <div className="p-4 bg-orange-100 rounded-full text-orange-700"><CalendarIcon className="w-8 h-8" /></div>
+            <div>
+                <p className="text-sm text-orange-700 font-medium uppercase tracking-wider">In Attesa / Previsto</p>
+                <h2 className="text-3xl font-bold text-orange-900">€ {totalPending.toLocaleString()}</h2>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-      {/* TABELLA */}
+      {/* TABELLA FLUSSI */}
       <Card>
-        <CardHeader><CardTitle>Storico Movimenti</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Flusso di Cassa</CardTitle></CardHeader>
         <CardContent>
-            <div className="space-y-2">
-                {isLoading ? <p>Caricamento...</p> : revenues?.map((rev) => (
-                    <div key={rev.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50">
-                        <div className="flex items-center gap-4">
-                            <div className="p-2 bg-green-100 text-green-700 rounded-full"><TrendingUp className="w-5 h-5" /></div>
+            <div className="space-y-1">
+                {isLoading ? <p className="p-4 text-center">Caricamento...</p> : revenues?.map((rev) => {
+                    const isOverdue = rev.stato === 'da_pagare' && isPast(new Date(rev.data_scadenza)) && !isToday(new Date(rev.data_scadenza));
+                    
+                    return (
+                    <div key={rev.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border-b last:border-0 hover:bg-slate-50 transition-colors ${isOverdue ? 'bg-red-50/50' : ''}`}>
+                        <div className="flex items-center gap-4 mb-2 md:mb-0">
+                            <div className={`p-2 rounded-full ${rev.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                                <DollarSign className="w-5 h-5" />
+                            </div>
                             <div>
-                                <p className="font-bold text-gray-900">{rev.properties_real?.nome || 'Generale'}</p>
-                                <p className="text-sm text-gray-500 capitalize">{rev.category} • {rev.description}</p>
+                                <div className="flex items-center gap-2">
+                                    <p className="font-bold text-gray-900">{rev.bookings?.nome_ospite || 'N/A'}</p>
+                                    <span className="text-xs text-gray-400 bg-white border px-1 rounded">{rev.bookings?.properties_real?.nome}</span>
+                                </div>
+                                <p className="text-sm text-gray-500 capitalize flex items-center gap-2">
+                                    {rev.category.replace('_', ' ')} • {rev.description}
+                                    {isOverdue && <Badge variant="destructive" className="h-5 text-[10px]">SCADUTO</Badge>}
+                                </p>
                             </div>
                         </div>
-                        <div className="flex items-center gap-6">
+                        
+                        <div className="flex items-center gap-4 justify-between md:justify-end w-full md:w-auto">
                             <div className="text-right">
-                                <p className="font-bold text-green-600">+ €{rev.amount}</p>
-                                <p className="text-xs text-gray-400">{format(new Date(rev.date), 'dd MMM yyyy')}</p>
+                                <p className={`font-bold ${rev.stato === 'pagato' ? 'text-green-600' : 'text-slate-600'}`}>€{rev.amount}</p>
+                                <p className="text-xs text-gray-400">Scad: {format(new Date(rev.data_scadenza), 'dd MMM yyyy')}</p>
                             </div>
-                            <Button variant="ghost" size="icon" className="text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => deleteRevenue.mutate(rev.id)}>
-                                <Trash2 className="w-4 h-4" />
-                            </Button>
+                            
+                            <div className="flex gap-1">
+                                {rev.stato !== 'pagato' ? (
+                                    <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8 text-xs" onClick={() => markAsPaid.mutate(rev.id)}>
+                                        Incassa
+                                    </Button>
+                                ) : (
+                                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 h-8 px-3">Pagato</Badge>
+                                )}
+                                
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-600 hover:bg-red-50" onClick={() => deletePayment.mutate(rev.id)}>
+                                    <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
                         </div>
                     </div>
-                ))}
-                {revenues?.length === 0 && <div className="text-center py-8 text-gray-400">Nessun incasso registrato.</div>}
+                )})}
+                {revenues?.length === 0 && <div className="text-center py-12 text-gray-400">Nessun movimento registrato.</div>}
             </div>
         </CardContent>
       </Card>
