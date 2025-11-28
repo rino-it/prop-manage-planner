@@ -6,11 +6,11 @@ export const useTenants = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // 1. OTTIENI LISTA INQUILINI (Solo Affitti Lunghi)
+  // 1. LETTURA DIRETTA (Senza funzioni rpc strane)
   const { data: tenants, isLoading } = useQuery({
     queryKey: ['tenants'],
     queryFn: async () => {
-      // Join tra bookings e tenant_profiles
+      // Leggiamo le prenotazioni 'lungo' e agganciamo i profili
       const { data, error } = await supabase
         .from('bookings')
         .select(`
@@ -21,12 +21,16 @@ export const useTenants = () => {
         .eq('tipo_affitto', 'lungo')
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error("Errore caricamento inquilini:", error);
+        throw error;
+      }
+      
       return data;
     },
   });
 
-  // 2. AGGIORNA SCORE E NOTE
+  // 2. AGGIORNAMENTO DATI
   const updateProfile = useMutation({
     mutationFn: async ({ id, updates }: { id: string, updates: any }) => {
       const { error } = await supabase
@@ -37,7 +41,7 @@ export const useTenants = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenants'] });
-      toast({ title: "Profilo Aggiornato", description: "Le note sull'inquilino sono state salvate." });
+      toast({ title: "Salvato", description: "Note aggiornate correttamente." });
     },
     onError: () => {
       toast({ title: "Errore", variant: "destructive" });
