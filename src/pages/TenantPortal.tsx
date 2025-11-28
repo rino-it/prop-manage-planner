@@ -20,7 +20,7 @@ export default function TenantPortal() {
   const [ticketForm, setTicketForm] = useState({ titolo: '', descrizione: '' });
   const [uploading, setUploading] = useState(false);
 
-  // DATI BASE
+  // 1. DATI CONTRATTO
   const { data: booking, isLoading } = useQuery({
     queryKey: ['tenant-booking', id],
     queryFn: async () => {
@@ -30,16 +30,21 @@ export default function TenantPortal() {
     enabled: !!id
   });
 
+  // 2. PAGAMENTI
   const { data: payments } = useQuery({
     queryKey: ['tenant-payments', id],
     queryFn: async () => {
-      const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', id).order('data_scadenza', { ascending: false });
+      const { data } = await supabase
+        .from('tenant_payments')
+        .select('*')
+        .eq('booking_id', id)
+        .order('data_scadenza', { ascending: false });
       return data || [];
     },
     enabled: !!id
   });
 
-  // LISTA DOCUMENTI CARICATI
+  // 3. DOCUMENTI
   const { data: documents } = useQuery({
     queryKey: ['tenant-docs', id],
     queryFn: async () => {
@@ -49,7 +54,7 @@ export default function TenantPortal() {
     enabled: !!id
   });
 
-  // TICKET
+  // 4. TICKET
   const { data: myTickets } = useQuery({
       queryKey: ['tenant-tickets', id],
       queryFn: async () => {
@@ -59,7 +64,7 @@ export default function TenantPortal() {
       enabled: !!id
   });
 
-  // UPLOAD LOGIC
+  // UPLOAD
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       const file = event.target.files?.[0];
@@ -81,7 +86,7 @@ export default function TenantPortal() {
 
       if (dbError) throw dbError;
 
-      toast({ title: "Caricato!", description: "Il documento è in attesa di approvazione." });
+      toast({ title: "Caricato!", description: "In attesa di approvazione." });
       queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
       
     } catch (error: any) {
@@ -91,6 +96,7 @@ export default function TenantPortal() {
     }
   };
 
+  // TICKET CREATE
   const createTicket = useMutation({
       mutationFn: async () => {
         if (!booking) return;
@@ -110,7 +116,7 @@ export default function TenantPortal() {
       }
   });
 
-  if (isLoading || !booking) return <div className="p-8 text-center">Caricamento...</div>;
+  if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale...</div>;
   const daPagare = payments?.filter(p => p.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
 
   const getStatusBadge = (status: string) => {
@@ -138,7 +144,7 @@ export default function TenantPortal() {
         </div>
       </div>
 
-      <Tabs defaultValue="docs" className="w-full">
+      <Tabs defaultValue="payments" className="w-full">
         <TabsList className="grid w-full grid-cols-3 mb-4">
           <TabsTrigger value="payments">Pagamenti</TabsTrigger>
           <TabsTrigger value="support">Assistenza</TabsTrigger>
@@ -146,51 +152,57 @@ export default function TenantPortal() {
         </TabsList>
 
         <TabsContent value="payments" className="space-y-4">
-          {payments?.map((pay) => ({/* ... dentro {payments?.map((pay) => ( ... */}
-<Card key={pay.id} className="border-l-4 overflow-hidden mb-3" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : pay.stato === 'in_verifica' ? '#eab308' : '#f97316' }}>
-  <CardContent className="p-0">
-    <div className="flex items-center p-4">
-      <div className="p-3 bg-gray-100 rounded-full mr-4">{getIcon(pay.tipo || '')}</div>
-      <div className="flex-1">
-        <p className="font-bold capitalize text-gray-900">{pay.tipo?.replace('_', ' ') || 'Spesa'}</p>
-        <p className="text-sm text-gray-500">{pay.description || 'Rata'}</p>
-        <p className="text-xs text-gray-400">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
-      </div>
-      <div className="text-right flex flex-col items-end gap-2">
-        <p className="font-bold text-lg">€{pay.importo}</p>
-        
-        {/* LOGICA STATI */}
-        {pay.stato === 'pagato' ? (
-            <Badge className="bg-green-100 text-green-800">Pagato</Badge>
-        ) : pay.stato === 'in_verifica' ? (
-            <Badge className="bg-yellow-100 text-yellow-800">In Verifica</Badge>
-        ) : (
-            <Button 
-                size="sm" 
-                variant="outline"
-                className="text-xs border-blue-200 text-blue-700"
-                onClick={async () => {
-                    if(!confirm("Confermi di aver effettuato questo pagamento?")) return;
-                    await supabase.from('tenant_payments').update({ 
-                        stato: 'in_verifica',
-                        payment_date_declared: new Date().toISOString()
-                    }).eq('id', pay.id);
-                    queryClient.invalidateQueries({ queryKey: ['tenant-payments'] });
-                    toast({ title: "Segnalazione Inviata", description: "Il proprietario verificherà l'incasso." });
-                }}
-            >
-                Segnala Pagamento
-            </Button>
-        )}
-      </div>
-    </div>
-  </CardContent>
-</Card>))}
+          {payments?.map((pay) => (
+            <Card key={pay.id} className="border-l-4 overflow-hidden" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : pay.stato === 'in_verifica' ? '#eab308' : '#f97316' }}>
+              <CardContent className="p-0">
+                <div className="flex items-center p-4">
+                  <div className="p-3 bg-gray-100 rounded-full mr-4">{getIcon(pay.tipo || '')}</div>
+                  <div className="flex-1">
+                    <p className="font-bold capitalize text-gray-900">{pay.tipo?.replace('_', ' ') || 'Rata'}</p>
+                    <p className="text-sm text-gray-500">{pay.description}</p>
+                    <p className="text-xs text-gray-400">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                  </div>
+                  <div className="text-right flex flex-col items-end gap-2">
+                    <p className="font-bold text-lg">€{pay.importo}</p>
+                    
+                    {/* BOTTONI AZIONE PAGAMENTO */}
+                    {pay.stato === 'pagato' ? (
+                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Pagato</Badge>
+                    ) : pay.stato === 'in_verifica' ? (
+                        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">In Verifica</Badge>
+                    ) : (
+                        <Button 
+                            size="sm" 
+                            variant="outline"
+                            className="text-xs border-blue-200 text-blue-700 h-8"
+                            onClick={async () => {
+                                if(!confirm("Confermi di aver effettuato questo pagamento?")) return;
+                                const { error } = await supabase.from('tenant_payments').update({ 
+                                    stato: 'in_verifica',
+                                    payment_date_declared: new Date().toISOString()
+                                }).eq('id', pay.id);
+                                
+                                if (!error) {
+                                    queryClient.invalidateQueries({ queryKey: ['tenant-payments'] });
+                                    toast({ title: "Segnalazione Inviata", description: "Il proprietario verificherà l'incasso." });
+                                } else {
+                                    toast({ title: "Errore", variant: "destructive" });
+                                }
+                            }}
+                        >
+                            Segnala Pagamento
+                        </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
           {payments?.length === 0 && <div className="text-center py-10 text-gray-400">Nessun pagamento registrato.</div>}
         </TabsContent>
 
         <TabsContent value="support" className="space-y-6">
-           <Card>
+            <Card>
                 <CardHeader><CardTitle>Hai un problema?</CardTitle><CardDescription>Apri un ticket al proprietario.</CardDescription></CardHeader>
                 <CardContent className="space-y-4">
                     <Input placeholder="Oggetto (es. Caldaia guasta)" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
@@ -221,6 +233,7 @@ export default function TenantPortal() {
                 <Upload className="w-10 h-10 text-gray-300 mb-2" />
                 <h3 className="font-bold text-gray-900">Carica Documenti</h3>
                 <p className="text-sm text-gray-500 mb-4">Contratti, ricevute, documenti.</p>
+                
                 <div className="flex justify-center">
                     <label className={`cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         {uploading ? "Attendi..." : "Seleziona File"}
