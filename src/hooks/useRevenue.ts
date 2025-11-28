@@ -6,12 +6,12 @@ import { addMonths, format } from 'date-fns';
 export interface PaymentEntry {
   id: string;
   booking_id: string;
-  importo: number; // Mappato correttamente
+  importo: number;
   category: 'canone_locazione' | 'rimborso_utenze' | 'deposito_cauzionale' | 'extra';
   data_scadenza: string;
   payment_date?: string | null;
   stato: 'da_pagare' | 'pagato' | 'scaduto' | 'annullato';
-  notes: string; // <--- CORRETTO: Nome colonna DB è 'notes'
+  notes: string;
   is_recurring?: boolean;
   recurrence_group_id?: string;
   bookings?: {
@@ -46,7 +46,7 @@ export const useRevenue = () => {
     },
   });
 
-  // 2. CREA PIANO RATEALE
+  // 2. CREA PIANO RATEALE (Con Fix User ID)
   const createPaymentPlan = useMutation({
     mutationFn: async (params: { 
         booking_id: string, 
@@ -54,11 +54,16 @@ export const useRevenue = () => {
         date_start: Date, 
         months: number, 
         category: string, 
-        description: string, // Dal form arriva come 'description'
+        description: string, 
         is_recurring: boolean 
     }) => {
       const { booking_id, amount, date_start, months, category, description, is_recurring } = params;
+      
+      // RECUPERO UTENTE SICURO
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Utente non loggato. Ricarica la pagina.");
+      }
       
       const paymentsToInsert = [];
       const groupId = is_recurring ? crypto.randomUUID() : null;
@@ -68,21 +73,20 @@ export const useRevenue = () => {
       for (let i = 0; i < iterations; i++) {
         const dueDate = addMonths(date_start, i);
         
-        // Costruiamo la nota (es. "Affitto (Rata 1/12)")
         const noteText = is_recurring 
             ? `${description} (Rata ${i+1}/${months})` 
             : description;
 
         paymentsToInsert.push({
             booking_id,
-            importo: amount, // MAPPING: amount -> importo
+            importo: amount,
             data_scadenza: format(dueDate, 'yyyy-MM-dd'),
             category,
-            notes: noteText, // <--- MAPPING: description -> notes
+            notes: noteText,
             stato: 'da_pagare',
             is_recurring,
             recurrence_group_id: groupId,
-            user_id: user?.id
+            user_id: user.id // <--- QUESTO È IL PUNTO CRITICO CHE MANCAVA O ERA NULL
         });
       }
 
