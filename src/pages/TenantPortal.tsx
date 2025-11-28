@@ -146,23 +146,46 @@ export default function TenantPortal() {
         </TabsList>
 
         <TabsContent value="payments" className="space-y-4">
-          {payments?.map((pay) => (
-            <Card key={pay.id} className="border-l-4 overflow-hidden" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : '#f97316' }}>
-              <CardContent className="p-0">
-                <div className="flex items-center p-4">
-                  <div className="p-3 bg-gray-100 rounded-full mr-4">{getIcon(pay.tipo || '')}</div>
-                  <div className="flex-1">
-                    <p className="font-bold capitalize text-gray-900">{pay.tipo?.replace('_', ' ')}</p>
-                    <p className="text-sm text-gray-500">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold text-lg">€{pay.importo}</p>
-                    <Badge variant={pay.stato === 'pagato' ? 'default' : 'secondary'}>{pay.stato?.replace('_', ' ')}</Badge>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+          {payments?.map((pay) => ({/* ... dentro {payments?.map((pay) => ( ... */}
+<Card key={pay.id} className="border-l-4 overflow-hidden mb-3" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : pay.stato === 'in_verifica' ? '#eab308' : '#f97316' }}>
+  <CardContent className="p-0">
+    <div className="flex items-center p-4">
+      <div className="p-3 bg-gray-100 rounded-full mr-4">{getIcon(pay.tipo || '')}</div>
+      <div className="flex-1">
+        <p className="font-bold capitalize text-gray-900">{pay.tipo?.replace('_', ' ') || 'Spesa'}</p>
+        <p className="text-sm text-gray-500">{pay.description || 'Rata'}</p>
+        <p className="text-xs text-gray-400">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
+      </div>
+      <div className="text-right flex flex-col items-end gap-2">
+        <p className="font-bold text-lg">€{pay.importo}</p>
+        
+        {/* LOGICA STATI */}
+        {pay.stato === 'pagato' ? (
+            <Badge className="bg-green-100 text-green-800">Pagato</Badge>
+        ) : pay.stato === 'in_verifica' ? (
+            <Badge className="bg-yellow-100 text-yellow-800">In Verifica</Badge>
+        ) : (
+            <Button 
+                size="sm" 
+                variant="outline"
+                className="text-xs border-blue-200 text-blue-700"
+                onClick={async () => {
+                    if(!confirm("Confermi di aver effettuato questo pagamento?")) return;
+                    await supabase.from('tenant_payments').update({ 
+                        stato: 'in_verifica',
+                        payment_date_declared: new Date().toISOString()
+                    }).eq('id', pay.id);
+                    queryClient.invalidateQueries({ queryKey: ['tenant-payments'] });
+                    toast({ title: "Segnalazione Inviata", description: "Il proprietario verificherà l'incasso." });
+                }}
+            >
+                Segnala Pagamento
+            </Button>
+        )}
+      </div>
+    </div>
+  </CardContent>
+</Card>))}
           {payments?.length === 0 && <div className="text-center py-10 text-gray-400">Nessun pagamento registrato.</div>}
         </TabsContent>
 
