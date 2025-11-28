@@ -1,7 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { useRevenue } from '@/hooks/useRevenue';
 import { usePropertiesReal } from '@/hooks/useProperties';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,22 +10,14 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { TrendingUp, Plus, DollarSign, Calendar as CalendarIcon, Trash2, CheckCircle, RefreshCw, Upload, FileText, Loader2, Eye } from 'lucide-react';
+import { TrendingUp, Plus, DollarSign, Calendar as CalendarIcon, Trash2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
 import { format, isPast, isToday } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
 
 export default function Revenue() {
   const { revenues, createPaymentPlan, markAsPaid, deletePayment, isLoading } = useRevenue();
   const { data: properties } = usePropertiesReal();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  // UPLOAD STATE
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [selectedPaymentId, setSelectedPaymentId] = useState<string | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
 
   // FORM STATE
   const [selectedProp, setSelectedProp] = useState('');
@@ -53,58 +45,6 @@ export default function Revenue() {
     enabled: !!selectedProp
   });
 
-  // MUTATION: UPLOAD CONTABILE
-  const uploadReceipt = useMutation({
-    mutationFn: async ({ id, file }: { id: string; file: File }) => {
-      setIsUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `receipts/${id}/${Date.now()}.${fileExt}`;
-
-      // 1. Upload su Storage
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(fileName, file);
-      
-      if (uploadError) throw uploadError;
-
-      // 2. Aggiorna Database
-      const { error: dbError } = await supabase
-        .from('tenant_payments')
-        .update({ documento_url: fileName })
-        .eq('id', id);
-
-      if (dbError) throw dbError;
-      
-      return fileName;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
-      toast({ title: "Contabile Caricata", description: "Documento associato con successo." });
-      setIsUploading(false);
-      setSelectedPaymentId(null);
-    },
-    onError: (error: any) => {
-      setIsUploading(false);
-      toast({ title: "Errore Upload", description: error.message, variant: "destructive" });
-    }
-  });
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0] && selectedPaymentId) {
-      uploadReceipt.mutate({ id: selectedPaymentId, file: e.target.files[0] });
-    }
-  };
-
-  const triggerUpload = (id: string) => {
-    setSelectedPaymentId(id);
-    setTimeout(() => fileInputRef.current?.click(), 0);
-  };
-
-  const openDocument = (path: string) => {
-    const { data } = supabase.storage.from('documents').getPublicUrl(path);
-    window.open(data.publicUrl, '_blank');
-  };
-
   const handleSubmit = async () => {
     if (!formData.amount || !formData.booking_id) return;
     
@@ -122,25 +62,16 @@ export default function Revenue() {
     setFormData({ ...formData, amount: '', description: '' });
   };
 
-  // CALCOLO KPI
+  // CALCOLO KPI (USA 'importo')
   const totalCollected = revenues?.filter(r => r.stato === 'pagato').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
   const totalPending = revenues?.filter(r => r.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
 
   return (
     <div className="space-y-6">
-      {/* INPUT FILE NASCOSTO PER UPLOAD */}
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        className="hidden" 
-        accept="image/*,.pdf"
-        onChange={handleFileChange}
-      />
-
       <div className="flex items-center justify-between">
         <div>
             <h1 className="text-3xl font-bold text-gray-900">Incassi & Piani</h1>
-            <p className="text-gray-500">Gestisci i flussi di cassa e le contabili.</p>
+            <p className="text-gray-500">Gestisci i flussi di cassa e le morosità.</p>
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -275,28 +206,15 @@ export default function Revenue() {
                                     <span className="text-xs text-gray-400 bg-white border px-1 rounded">{rev.bookings?.properties_real?.nome}</span>
                                 </div>
                                 <p className="text-sm text-gray-500 capitalize flex items-center gap-2">
-                                    {rev.category?.replace('_', ' ') || 'Generico'} • {rev.notes} 
+                                    {rev.category?.replace('_', ' ') || 'Generico'} • {rev.description}
                                     {isOverdue && <Badge variant="destructive" className="h-5 text-[10px]">SCADUTO</Badge>}
                                 </p>
                             </div>
                         </div>
                         
                         <div className="flex items-center gap-4 justify-between md:justify-end w-full md:w-auto">
-                            
-                            {/* DOCUMENTO UPLOAD/VIEW */}
-                            <div className="flex gap-1">
-                                {rev.documento_url ? (
-                                    <Button size="icon" variant="outline" className="h-8 w-8 text-blue-600 border-blue-200" onClick={() => openDocument(rev.documento_url!)} title="Vedi Contabile">
-                                        <Eye className="w-4 h-4" />
-                                    </Button>
-                                ) : (
-                                    <Button size="icon" variant="ghost" className="h-8 w-8 text-gray-400 hover:text-gray-600" onClick={() => triggerUpload(rev.id)} disabled={isUploading} title="Carica Contabile">
-                                        {isUploading && selectedPaymentId === rev.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                                    </Button>
-                                )}
-                            </div>
-
-                            <div className="text-right min-w-[80px]">
+                            <div className="text-right">
+                                {/* CORRETTO: Usa rev.importo invece di rev.amount */}
                                 <p className={`font-bold ${rev.stato === 'pagato' ? 'text-green-600' : 'text-slate-600'}`}>€{rev.importo}</p>
                                 <p className="text-xs text-gray-400">Scad: {format(new Date(rev.data_scadenza), 'dd MMM yyyy')}</p>
                             </div>
