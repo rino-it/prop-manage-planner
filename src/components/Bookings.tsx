@@ -6,8 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, Palmtree, Home } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, Palmtree, Home, Pencil, Trash2, Save } from 'lucide-react';
 import { format } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -25,7 +26,11 @@ export default function Bookings() {
   const [reviewOpen, setReviewOpen] = useState<string | null>(null);
   const [selectedDocs, setSelectedDocs] = useState<any[]>([]);
 
-  // Form State
+  // STATI PER MODIFICA ED ELIMINAZIONE
+  const [editingBooking, setEditingBooking] = useState<any>(null); // Prenotazione in fase di modifica
+  const [deleteId, setDeleteId] = useState<string | null>(null);   // ID da cancellare
+
+  // Form State Creazione
   const [formData, setFormData] = useState({
     property_id: '', nome_ospite: '', email_ospite: '', telefono_ospite: '',
     data_inizio: undefined as Date | undefined, data_fine: undefined as Date | undefined, 
@@ -45,25 +50,57 @@ export default function Bookings() {
   const createBooking = useMutation({
     mutationFn: async (newBooking: any) => {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('bookings').insert({ 
-        ...newBooking, 
-        user_id: user?.id 
-      });
+      const { error } = await supabase.from('bookings').insert({ ...newBooking, user_id: user?.id });
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      setNewBookingOpen(false); // Chiude il dialog
-      toast({ title: 'Prenotazione creata', description: 'Ora puoi vederla nella lista.' });
-      // Reset form
+      setNewBookingOpen(false);
+      toast({ title: 'Prenotazione creata' });
       setFormData({
         property_id: '', nome_ospite: '', email_ospite: '', telefono_ospite: '',
         data_inizio: undefined, data_fine: undefined, tipo_affitto: 'breve'
       });
     },
-    onError: (err: any) => {
-        toast({ title: "Errore", description: err.message, variant: "destructive" });
-    }
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
+  });
+
+  // MUTATION: Modifica Prenotazione
+  const updateBooking = useMutation({
+    mutationFn: async (updatedData: any) => {
+      const { error } = await supabase
+        .from('bookings')
+        .update({
+          data_inizio: format(updatedData.data_inizio, 'yyyy-MM-dd'),
+          data_fine: format(updatedData.data_fine, 'yyyy-MM-dd'),
+          email_ospite: updatedData.email_ospite,
+          telefono_ospite: updatedData.telefono_ospite,
+          tipo_affitto: updatedData.tipo_affitto
+        })
+        .eq('id', updatedData.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      setEditingBooking(null);
+      toast({ title: 'Prenotazione aggiornata' });
+    },
+    onError: (err: any) => toast({ title: "Errore modifica", description: err.message, variant: "destructive" })
+  });
+
+  // MUTATION: Elimina Prenotazione
+  const deleteBooking = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('bookings').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      setDeleteId(null);
+      toast({ title: 'Prenotazione eliminata', variant: "destructive" });
+    },
+    onError: (err: any) => toast({ title: "Errore eliminazione", description: err.message, variant: "destructive" })
   });
 
   // MUTATION: Gestione Documenti
@@ -119,12 +156,11 @@ export default function Bookings() {
         </Button>
       </div>
 
-      {/* DIALOG NUOVA PRENOTAZIONE (RIPRISTINATO COMPLETO) */}
+      {/* DIALOG NUOVA PRENOTAZIONE */}
       <Dialog open={newBookingOpen} onOpenChange={setNewBookingOpen}>
         <DialogContent className="sm:max-w-[600px]">
             <DialogHeader><DialogTitle>Nuova Prenotazione</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
-                
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
                 <Label className="text-slate-700 font-bold mb-2 block">Tipo Contratto</Label>
                 <Select onValueChange={(v) => setFormData({...formData, tipo_affitto: v})} defaultValue="breve">
@@ -135,7 +171,6 @@ export default function Bookings() {
                     </SelectContent>
                 </Select>
                 </div>
-
                 <div className="grid gap-2">
                 <Label>Immobile</Label>
                 <Select onValueChange={(v) => setFormData({...formData, property_id: v})}>
@@ -156,7 +191,61 @@ export default function Bookings() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG REVISIONE DOCUMENTI */}
+      {/* DIALOG MODIFICA PRENOTAZIONE */}
+      {editingBooking && (
+        <Dialog open={!!editingBooking} onOpenChange={(open) => !open && setEditingBooking(null)}>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader><DialogTitle>Modifica Prenotazione</DialogTitle></DialogHeader>
+                <div className="space-y-4 mt-4">
+                    {/* CAMPI BLOCCATI */}
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-gray-100 rounded border border-gray-200">
+                        <div>
+                            <Label className="text-gray-500 text-xs uppercase">Immobile (Bloccato)</Label>
+                            <p className="font-bold text-gray-700">{editingBooking.properties_real?.nome}</p>
+                        </div>
+                        <div>
+                            <Label className="text-gray-500 text-xs uppercase">Ospite (Bloccato)</Label>
+                            <p className="font-bold text-gray-700">{editingBooking.nome_ospite}</p>
+                        </div>
+                    </div>
+
+                    {/* CAMPI MODIFICABILI */}
+                    <div className="grid gap-2">
+                        <Label>Tipo Contratto</Label>
+                        <Select value={editingBooking.tipo_affitto} onValueChange={(v) => setEditingBooking({...editingBooking, tipo_affitto: v})}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="breve">Affitto Breve</SelectItem>
+                                <SelectItem value="lungo">Lungo Termine</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Email</Label>
+                            <Input value={editingBooking.email_ospite || ''} onChange={e => setEditingBooking({...editingBooking, email_ospite: e.target.value})} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Telefono</Label>
+                            <Input value={editingBooking.telefono_ospite || ''} onChange={e => setEditingBooking({...editingBooking, telefono_ospite: e.target.value})} />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2"><Label>Inizio</Label><Popover><PopoverTrigger asChild><Button variant={"outline"}>{editingBooking.data_inizio ? format(new Date(editingBooking.data_inizio), "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger><PopoverContent className="p-0"><Calendar mode="single" selected={new Date(editingBooking.data_inizio)} onSelect={(d) => d && setEditingBooking({...editingBooking, data_inizio: d})} /></PopoverContent></Popover></div>
+                        <div className="grid gap-2"><Label>Fine</Label><Popover><PopoverTrigger asChild><Button variant={"outline"}>{editingBooking.data_fine ? format(new Date(editingBooking.data_fine), "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger><PopoverContent className="p-0"><Calendar mode="single" selected={new Date(editingBooking.data_fine)} onSelect={(d) => d && setEditingBooking({...editingBooking, data_fine: d})} /></PopoverContent></Popover></div>
+                    </div>
+
+                    <Button onClick={() => updateBooking.mutate(editingBooking)} className="w-full bg-orange-600 hover:bg-orange-700">
+                        <Save className="w-4 h-4 mr-2" /> Salva Modifiche
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+      )}
+
+      {/* DIALOG REVISIONE DOCUMENTI (Invariato) */}
       <Dialog open={!!reviewOpen} onOpenChange={(open) => !open && setReviewOpen(null)}>
         <DialogContent className="max-w-2xl">
             <DialogHeader><DialogTitle>Revisione Documenti</DialogTitle></DialogHeader>
@@ -171,30 +260,34 @@ export default function Bookings() {
                             </div>
                         </div>
                         <div className="flex items-center gap-2">
-                            <Button variant="outline" size="sm" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}>
-                                <Eye className="w-4 h-4" />
-                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4" /></Button>
                             {doc.status === 'in_revisione' ? (
                                 <>
-                                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })}>
-                                        <Check className="w-4 h-4" />
-                                    </Button>
-                                    <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'rifiutato' })}>
-                                        <X className="w-4 h-4" />
-                                    </Button>
+                                    <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })}><Check className="w-4 h-4" /></Button>
+                                    <Button size="sm" className="bg-red-600 hover:bg-red-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'rifiutato' })}><X className="w-4 h-4" /></Button>
                                 </>
-                            ) : (
-                                <Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'}>
-                                    {doc.status.toUpperCase()}
-                                </Badge>
-                            )}
+                            ) : (<Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'}>{doc.status.toUpperCase()}</Badge>)}
                         </div>
                     </div>
                 ))}
-                {selectedDocs.length === 0 && <p className="text-center text-gray-500 py-10">Nessun documento caricato da questo inquilino.</p>}
+                {selectedDocs.length === 0 && <p className="text-center text-gray-500 py-10">Nessun documento caricato.</p>}
             </div>
         </DialogContent>
       </Dialog>
+
+      {/* ALERT ELIMINAZIONE */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Sei sicuro?</AlertDialogTitle>
+                <AlertDialogDescription>Questa azione è irreversibile. La prenotazione e tutti i documenti associati verranno cancellati.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deleteId && deleteBooking.mutate(deleteId)} className="bg-red-600 hover:bg-red-700">Elimina</AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* LISTA BOOKINGS */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -209,7 +302,6 @@ export default function Bookings() {
                     <p className="text-sm text-gray-500 mt-1">{booking.properties_real?.nome}</p>
                 </div>
                 <Badge variant="secondary" className={isShort ? 'bg-orange-100 text-orange-700' : 'bg-purple-100 text-purple-700'}>
-                    {isShort ? <Palmtree className="w-3 h-3 mr-1"/> : <Home className="w-3 h-3 mr-1"/>}
                     {isShort ? 'Turista' : 'Inquilino'}
                 </Badge>
                 </div>
@@ -221,14 +313,26 @@ export default function Bookings() {
                     {format(new Date(booking.data_inizio), 'dd MMM')} - {format(new Date(booking.data_fine), 'dd MMM yyyy')}
                 </div>
                 
+                {/* BOTTONI PRINCIPALI */}
                 <div className="grid grid-cols-2 gap-2">
                     <Button variant="outline" size="sm" onClick={() => copyLink(booking)}>
                         <Copy className="w-4 h-4 mr-2" /> Link
                     </Button>
-                    <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => loadDocuments(booking.id)}>
-                        <FileText className="w-4 h-4 mr-2" /> Doc
+                    <Button size="sm" className="bg-blue-600 hover:bg-blue-700" onClick={() => loadDocuments(booking.id)}>
+                        <FileText className="w-4 h-4 mr-2" /> Doc ({selectedDocs.length || '?'})
                     </Button>
                 </div>
+
+                {/* BOTTONI MODIFICA ED ELIMINA */}
+                <div className="flex justify-end gap-2 border-t pt-3">
+                    <Button variant="ghost" size="sm" className="text-gray-500 hover:text-orange-600" onClick={() => setEditingBooking(booking)}>
+                        <Pencil className="w-4 h-4 mr-1" /> Modifica
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-gray-500 hover:text-red-600 hover:bg-red-50" onClick={() => setDeleteId(booking.id)}>
+                        <Trash2 className="w-4 h-4" />
+                    </Button>
+                </div>
+
                 </div>
             </CardContent>
             </Card>
