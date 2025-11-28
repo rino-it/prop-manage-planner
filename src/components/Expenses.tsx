@@ -122,10 +122,10 @@ export default function Expenses() {
         booking_id: formData.booking_id,
         importo: parseFloat(formData.amount),
         data_scadenza: formData.date,
-        category: 'rimborso_utenze',
+        tipo: 'rimborso_utenze', // ✅ CORRETTO: Corrisponde alla colonna 'tipo' del DB
         description: formData.description,
         stato: 'da_pagare',
-        user_id: user.id // <--- FIX CRUCIALE
+        user_id: user.id
       });
     },
     onSuccess: () => {
