@@ -49,7 +49,8 @@ export default function Expenses() {
     queryFn: async () => {
       const { data } = await supabase.from('tenant_payments')
         .select('*, bookings(nome_ospite, properties_real(nome))')
-        .neq('category', 'canone_locazione')
+        // Escludiamo i canoni di locazione per vedere solo gli addebiti extra/rimborsi
+        .neq('tipo', 'canone_locazione') 
         .order('data_scadenza', { ascending: false });
       return data || [];
     }
@@ -81,10 +82,9 @@ export default function Expenses() {
     }
   }, [formData.property_id, formData.date, activeTab]);
 
-  // MUTATION: SPESA PROPRIETARIO (FIX UTENTE)
+  // MUTATION: SPESA PROPRIETARIO
   const createOwnerExpense = useMutation({
     mutationFn: async () => {
-      // 1. RECUPERA UTENTE
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Utente non loggato");
 
@@ -97,7 +97,7 @@ export default function Expenses() {
         supplier: formData.supplier,
         supplier_contact: formData.supplier_contact,
         assigned_to: formData.assigned_to,
-        user_id: user.id // <--- FIX CRUCIALE
+        user_id: user.id
       });
     },
     onSuccess: () => {
@@ -109,20 +109,20 @@ export default function Expenses() {
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // MUTATION: ADDEBITO INQUILINO (FIX UTENTE)
+  // MUTATION: ADDEBITO INQUILINO (CORRETTO)
   const createTenantCharge = useMutation({
     mutationFn: async () => {
       if (!formData.booking_id) throw new Error("Seleziona un inquilino!");
       
-      // 1. RECUPERA UTENTE
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Utente non loggato");
 
+      // Qui inviamo 'tipo' invece di 'category' e 'description' correttamente
       await supabase.from('tenant_payments').insert({
         booking_id: formData.booking_id,
         importo: parseFloat(formData.amount),
         data_scadenza: formData.date,
-        tipo: 'rimborso_utenze', // ✅ CORRETTO: Corrisponde alla colonna 'tipo' del DB
+        tipo: 'rimborso_utenze', // <--- CORRETTO PER IL DB
         description: formData.description,
         stato: 'da_pagare',
         user_id: user.id
@@ -219,7 +219,6 @@ export default function Expenses() {
                                 </Select>
                             </div>
                             
-                            {/* SEZIONE FORNITORE */}
                             <div className="bg-slate-50 p-3 rounded border border-slate-200 space-y-2">
                                 <Label className="text-slate-700 font-semibold">Fornitore / Addetto</Label>
                                 <div className="grid grid-cols-2 gap-2">
