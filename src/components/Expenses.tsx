@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format, isWithinInterval } from 'date-fns';
-import { TrendingDown, Users, Building2, Calendar, Share2, CheckCircle, Clock, Search, MessageCircle, Phone } from 'lucide-react';
+import { TrendingDown, Users, Building2, Share2, CheckCircle, Clock, Search, MessageCircle, Pencil, Trash2, Save } from 'lucide-react';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
@@ -20,7 +21,11 @@ export default function Expenses() {
   const { data: properties } = usePropertiesReal();
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // STATI FORM
+  // STATI MODIFICA ED ELIMINAZIONE
+  const [editingCharge, setEditingCharge] = useState<any>(null);
+  const [deleteChargeId, setDeleteChargeId] = useState<string | null>(null);
+
+  // STATI FORM CREAZIONE
   const [activeTab, setActiveTab] = useState('owner');
   const [formData, setFormData] = useState({
     property_id: '',
@@ -49,7 +54,6 @@ export default function Expenses() {
     queryFn: async () => {
       const { data } = await supabase.from('tenant_payments')
         .select('*, bookings(nome_ospite, properties_real(nome))')
-        // Escludiamo i canoni di locazione per vedere solo gli addebiti extra/rimborsi
         .neq('tipo', 'canone_locazione') 
         .order('data_scadenza', { ascending: false });
       return data || [];
@@ -109,20 +113,18 @@ export default function Expenses() {
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // MUTATION: ADDEBITO INQUILINO (CORRETTO)
+  // MUTATION: ADDEBITO INQUILINO
   const createTenantCharge = useMutation({
     mutationFn: async () => {
       if (!formData.booking_id) throw new Error("Seleziona un inquilino!");
-      
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Utente non loggato");
 
-      // Qui inviamo 'tipo' invece di 'category' e 'description' correttamente
       await supabase.from('tenant_payments').insert({
         booking_id: formData.booking_id,
         importo: parseFloat(formData.amount),
         data_scadenza: formData.date,
-        tipo: 'rimborso_utenze', // <--- CORRETTO PER IL DB
+        tipo: 'rimborso_utenze',
         description: formData.description,
         stato: 'da_pagare',
         user_id: user.id
@@ -134,6 +136,41 @@ export default function Expenses() {
       toast({ title: "Addebito Inviato" });
     },
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
+  });
+
+  // MUTATION: AGGIORNA ADDEBITO (NUOVO)
+  const updateTenantCharge = useMutation({
+    mutationFn: async (updatedData: any) => {
+        const { error } = await supabase
+            .from('tenant_payments')
+            .update({
+                importo: parseFloat(updatedData.amount),
+                data_scadenza: updatedData.date,
+                description: updatedData.description
+            })
+            .eq('id', updatedData.id);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['tenant-charges'] });
+        setEditingCharge(null);
+        toast({ title: "Modifica salvata" });
+    },
+    onError: (err: any) => toast({ title: "Errore modifica", description: err.message, variant: "destructive" })
+  });
+
+  // MUTATION: ELIMINA ADDEBITO (NUOVO)
+  const deleteTenantCharge = useMutation({
+    mutationFn: async (id: string) => {
+        const { error } = await supabase.from('tenant_payments').delete().eq('id', id);
+        if (error) throw error;
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['tenant-charges'] });
+        setDeleteChargeId(null);
+        toast({ title: "Addebito eliminato" });
+    },
+    onError: (err: any) => toast({ title: "Errore eliminazione", description: err.message, variant: "destructive" })
   });
 
   const confirmPayment = useMutation({
@@ -334,13 +371,35 @@ export default function Expenses() {
                                     )}
                                 </div>
                             </div>
-                            <div className="flex items-center gap-4">
-                                <div className="text-right">
+                            
+                            <div className="flex items-center gap-3">
+                                <div className="text-right min-w-[80px]">
                                     <p className="font-bold">€{charge.importo}</p>
                                     {charge.payment_date_declared && (
                                         <p className="text-xs text-blue-600 font-medium">Dichiarato: {format(new Date(charge.payment_date_declared), 'dd MMM')}</p>
                                     )}
                                 </div>
+
+                                {/* Pulsanti Modifica/Elimina */}
+                                <div className="flex gap-1">
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-blue-500 hover:bg-blue-50"
+                                        onClick={() => setEditingCharge({ ...charge, amount: charge.importo, date: charge.data_scadenza, description: charge.description })}
+                                    >
+                                        <Pencil className="w-4 h-4" />
+                                    </Button>
+                                    <Button 
+                                        variant="ghost" 
+                                        size="icon" 
+                                        className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50"
+                                        onClick={() => setDeleteChargeId(charge.id)}
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                </div>
+
                                 {charge.stato !== 'pagato' ? (
                                     <Button size="sm" className="bg-green-600 hover:bg-green-700" onClick={() => confirmPayment.mutate(charge.id)}>
                                         <CheckCircle className="w-4 h-4 mr-2" /> Conferma
@@ -351,10 +410,72 @@ export default function Expenses() {
                             </div>
                         </div>
                     ))}
+                    {tenantCharges?.length === 0 && <div className="p-6 text-center text-gray-500">Nessun addebito presente.</div>}
                 </CardContent>
             </Card>
         </TabsContent>
       </Tabs>
+
+      {/* DIALOG MODIFICA */}
+      {editingCharge && (
+        <Dialog open={!!editingCharge} onOpenChange={(open) => !open && setEditingCharge(null)}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Modifica Addebito</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                    <div className="grid gap-2">
+                        <Label>Descrizione</Label>
+                        <Input 
+                            value={editingCharge.description} 
+                            onChange={(e) => setEditingCharge({...editingCharge, description: e.target.value})} 
+                        />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Importo (€)</Label>
+                            <Input 
+                                type="number"
+                                value={editingCharge.amount} 
+                                onChange={(e) => setEditingCharge({...editingCharge, amount: e.target.value})} 
+                            />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Data Scadenza</Label>
+                            <Input 
+                                type="date"
+                                value={editingCharge.date} 
+                                onChange={(e) => setEditingCharge({...editingCharge, date: e.target.value})} 
+                            />
+                        </div>
+                    </div>
+                    <Button className="w-full bg-blue-600" onClick={() => updateTenantCharge.mutate(editingCharge)}>
+                        <Save className="w-4 h-4 mr-2" /> Salva Modifiche
+                    </Button>
+                </div>
+            </DialogContent>
+        </Dialog>
+      )}
+
+      {/* ALERT ELIMINAZIONE */}
+      <AlertDialog open={!!deleteChargeId} onOpenChange={(open) => !open && setDeleteChargeId(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Sei sicuro?</AlertDialogTitle>
+                <AlertDialogDescription>Questa azione eliminerà definitivamente l'addebito.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                <AlertDialogAction 
+                    className="bg-red-600 hover:bg-red-700"
+                    onClick={() => deleteChargeId && deleteTenantCharge.mutate(deleteChargeId)}
+                >
+                    Elimina
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }
