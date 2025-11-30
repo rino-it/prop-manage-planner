@@ -2,13 +2,13 @@ import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock, Star, CreditCard, Ticket, ExternalLink, Image as ImageIcon } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -44,7 +44,24 @@ export default function TenantPortal() {
     enabled: !!id
   });
 
-  // 3. DOCUMENTI
+  // 3. SERVIZI & VOUCHER (Context-Aware anche per Tenant)
+  const { data: services } = useQuery({
+    queryKey: ['tenant-services', booking?.property_id],
+    queryFn: async () => {
+      if (!booking?.property_id) return [];
+      const { data } = await supabase.from('services').select('*').eq('attivo', true);
+      
+      // FILTRO: Mostra solo servizi globali o specifici per questa casa
+      return (data || []).filter(s => 
+        !s.property_ids || 
+        s.property_ids.length === 0 || 
+        s.property_ids.includes(booking.property_id)
+      );
+    },
+    enabled: !!booking?.property_id
+  });
+
+  // 4. DOCUMENTI
   const { data: documents } = useQuery({
     queryKey: ['tenant-docs', id],
     queryFn: async () => {
@@ -54,7 +71,7 @@ export default function TenantPortal() {
     enabled: !!id
   });
 
-  // 4. TICKET
+  // 5. TICKET
   const { data: myTickets } = useQuery({
       queryKey: ['tenant-tickets', id],
       queryFn: async () => {
@@ -64,49 +81,30 @@ export default function TenantPortal() {
       enabled: !!id
   });
 
-  // UPLOAD
+  // AZIONI (Upload, Ticket, Voucher)
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       const file = event.target.files?.[0];
       if (!file || !booking) return;
-
       setUploading(true);
       const fileExt = file.name.split('.').pop();
       const fileName = `doc_${booking.id}_${Date.now()}.${fileExt}`;
-      
-      const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file);
-      if (uploadError) throw uploadError;
-
+      const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
+      if (upError) throw upError;
       const { error: dbError } = await supabase.from('booking_documents').insert({
-        booking_id: booking.id,
-        filename: file.name,
-        file_url: fileName,
-        status: 'in_revisione'
+        booking_id: booking.id, filename: file.name, file_url: fileName, status: 'in_revisione'
       });
-
       if (dbError) throw dbError;
-
       toast({ title: "Caricato!", description: "In attesa di approvazione." });
       queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
-      
-    } catch (error: any) {
-      toast({ title: "Errore", description: error.message, variant: "destructive" });
-    } finally {
-      setUploading(false);
-    }
+    } catch (error: any) { toast({ title: "Errore", description: error.message, variant: "destructive" }); } finally { setUploading(false); }
   };
 
-  // TICKET CREATE
   const createTicket = useMutation({
       mutationFn: async () => {
         if (!booking) return;
         await supabase.from('tickets').insert({
-          booking_id: booking.id,
-          property_real_id: booking.property_id,
-          titolo: ticketForm.titolo,
-          descrizione: ticketForm.descrizione,
-          stato: 'aperto',
-          creato_da: 'ospite'
+          booking_id: booking.id, property_real_id: booking.property_id, titolo: ticketForm.titolo, descrizione: ticketForm.descrizione, stato: 'aperto', creato_da: 'ospite'
         });
       },
       onSuccess: () => {
@@ -116,13 +114,17 @@ export default function TenantPortal() {
       }
   });
 
+  const handleVoucherDownload = (serviceTitle: string) => {
+    alert(`[SIMULAZIONE PDF]\n\nSconto Inquilino: ${serviceTitle}\nPer: ${booking.nome_ospite}`);
+  };
+
   if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale...</div>;
   const daPagare = payments?.filter(p => p.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
 
   const getStatusBadge = (status: string) => {
-      if (status === 'approvato') return <Badge className="bg-green-100 text-green-700 hover:bg-green-100"><CheckCircle className="w-3 h-3 mr-1"/> Approvato</Badge>;
-      if (status === 'rifiutato') return <Badge className="bg-red-100 text-red-700 hover:bg-red-100"><XCircle className="w-3 h-3 mr-1"/> Rifiutato</Badge>;
-      return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100"><Clock className="w-3 h-3 mr-1"/> In Attesa</Badge>;
+      if (status === 'approvato') return <Badge className="bg-green-100 text-green-700">Approvato</Badge>;
+      if (status === 'rifiutato') return <Badge className="bg-red-100 text-red-700">Rifiutato</Badge>;
+      return <Badge className="bg-yellow-100 text-yellow-700">In Attesa</Badge>;
   };
 
   const getIcon = (tipo: string) => {
@@ -145,15 +147,16 @@ export default function TenantPortal() {
       </div>
 
       <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="grid w-full grid-cols-3 mb-4">
+        <TabsList className="grid w-full grid-cols-4 mb-4">
           <TabsTrigger value="payments">Pagamenti</TabsTrigger>
+          <TabsTrigger value="services">Esperienze</TabsTrigger>
           <TabsTrigger value="support">Assistenza</TabsTrigger>
           <TabsTrigger value="docs">Documenti</TabsTrigger>
         </TabsList>
 
         <TabsContent value="payments" className="space-y-4">
           {payments?.map((pay) => (
-            <Card key={pay.id} className="border-l-4 overflow-hidden" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : pay.stato === 'in_verifica' ? '#eab308' : '#f97316' }}>
+            <Card key={pay.id} className="border-l-4 overflow-hidden" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : '#f97316' }}>
               <CardContent className="p-0">
                 <div className="flex items-center p-4">
                   <div className="p-3 bg-gray-100 rounded-full mr-4">{getIcon(pay.tipo || '')}</div>
@@ -162,102 +165,90 @@ export default function TenantPortal() {
                     <p className="text-sm text-gray-500">{pay.description}</p>
                     <p className="text-xs text-gray-400">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
                   </div>
-                  <div className="text-right flex flex-col items-end gap-2">
+                  <div className="text-right">
                     <p className="font-bold text-lg">€{pay.importo}</p>
-                    
-                    {/* BOTTONI AZIONE PAGAMENTO */}
-                    {pay.stato === 'pagato' ? (
-                        <Badge className="bg-green-100 text-green-800 hover:bg-green-100">Pagato</Badge>
-                    ) : pay.stato === 'in_verifica' ? (
-                        <Badge className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">In Verifica</Badge>
-                    ) : (
-                        <Button 
-                            size="sm" 
-                            variant="outline"
-                            className="text-xs border-blue-200 text-blue-700 h-8"
-                            onClick={async () => {
-                                if(!confirm("Confermi di aver effettuato questo pagamento?")) return;
-                                const { error } = await supabase.from('tenant_payments').update({ 
-                                    stato: 'in_verifica',
-                                    payment_date_declared: new Date().toISOString()
-                                }).eq('id', pay.id);
-                                
-                                if (!error) {
-                                    queryClient.invalidateQueries({ queryKey: ['tenant-payments'] });
-                                    toast({ title: "Segnalazione Inviata", description: "Il proprietario verificherà l'incasso." });
-                                } else {
-                                    toast({ title: "Errore", variant: "destructive" });
-                                }
-                            }}
-                        >
-                            Segnala Pagamento
-                        </Button>
-                    )}
+                    <Badge variant={pay.stato === 'pagato' ? 'default' : 'outline'}>{pay.stato}</Badge>
                   </div>
                 </div>
               </CardContent>
             </Card>
           ))}
-          {payments?.length === 0 && <div className="text-center py-10 text-gray-400">Nessun pagamento registrato.</div>}
+        </TabsContent>
+
+        {/* NUOVO TAB SERVIZI PER INQUILINI */}
+        <TabsContent value="services" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+                {services?.map(service => {
+                    const isPremium = !!service.payment_link;
+                    return (
+                        <Card key={service.id} className={`overflow-hidden border-l-4 transition-shadow hover:shadow-md flex flex-col ${isPremium ? 'border-l-yellow-400' : 'border-l-green-500'}`}>
+                            <div className="h-32 bg-gray-100 relative">
+                                {service.immagine_url ? (
+                                    <img src={service.immagine_url} alt={service.titolo} className="w-full h-full object-cover" />
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-gray-300"><ImageIcon className="w-10 h-10" /></div>
+                                )}
+                                <div className="absolute top-2 right-2">
+                                    {isPremium ? <Badge className="bg-yellow-400 text-yellow-900">Premium</Badge> : <Badge className="bg-green-500">Partner</Badge>}
+                                </div>
+                            </div>
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-lg flex justify-between">{service.titolo} <span className="text-base font-bold">€ {service.prezzo}</span></CardTitle>
+                                <CardDescription className="line-clamp-2">{service.descrizione}</CardDescription>
+                            </CardHeader>
+                            <CardFooter className="mt-auto pt-0">
+                                {isPremium ? (
+                                    <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold" onClick={() => window.open(service.payment_link, '_blank')}>
+                                        <CreditCard className="w-4 h-4 mr-2" /> Prenota
+                                    </Button>
+                                ) : (
+                                    <Button variant="outline" className="w-full border-green-500 text-green-600" onClick={() => handleVoucherDownload(service.titolo)}>
+                                        <Ticket className="w-4 h-4 mr-2" /> Voucher
+                                    </Button>
+                                )}
+                            </CardFooter>
+                        </Card>
+                    );
+                })}
+            </div>
         </TabsContent>
 
         <TabsContent value="support" className="space-y-6">
             <Card>
-                <CardHeader><CardTitle>Hai un problema?</CardTitle><CardDescription>Apri un ticket al proprietario.</CardDescription></CardHeader>
+                <CardHeader><CardTitle>Segnala Problema</CardTitle></CardHeader>
                 <CardContent className="space-y-4">
-                    <Input placeholder="Oggetto (es. Caldaia guasta)" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
-                    <Textarea placeholder="Descrivi il problema..." value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} />
-                    <Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}>
-                        <Send className="w-4 h-4 mr-2" /> Invia Segnalazione
-                    </Button>
+                    <Input placeholder="Oggetto" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
+                    <Textarea placeholder="Descrizione..." value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} />
+                    <Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4 mr-2" /> Invia</Button>
                 </CardContent>
             </Card>
-
             <div className="space-y-3">
-                <h3 className="font-bold text-gray-700">I tuoi Ticket recenti</h3>
                 {myTickets?.map(t => (
                     <div key={t.id} className="bg-white p-4 rounded-lg border flex justify-between items-center">
-                        <div>
-                            <p className="font-medium">{t.titolo}</p>
-                            <p className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM yyyy')}</p>
-                        </div>
-                        <Badge variant={t.stato === 'risolto' ? 'default' : 'destructive'}>{t.stato}</Badge>
+                        <p className="font-medium">{t.titolo}</p>
+                        <Badge>{t.stato}</Badge>
                     </div>
                 ))}
             </div>
         </TabsContent>
 
         <TabsContent value="docs">
-           <Card className="border-dashed border-2 mb-6">
-            <CardContent className="py-8 flex flex-col items-center text-center">
-                <Upload className="w-10 h-10 text-gray-300 mb-2" />
-                <h3 className="font-bold text-gray-900">Carica Documenti</h3>
-                <p className="text-sm text-gray-500 mb-4">Contratti, ricevute, documenti.</p>
-                
-                <div className="flex justify-center">
-                    <label className={`cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-4 py-2 ${uploading ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        {uploading ? "Attendi..." : "Seleziona File"}
-                        <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
-                    </label>
-                </div>
+           <Card className="mb-6">
+            <CardContent className="py-8 text-center">
+                <h3 className="font-bold text-gray-900 mb-4">Carica Documenti</h3>
+                <label className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white h-10 px-6 py-2">
+                    {uploading ? "Caricamento..." : "Seleziona File"}
+                    <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                </label>
             </CardContent>
            </Card>
-
            <div className="space-y-3">
-                <h3 className="font-bold text-gray-700 mb-2">I tuoi documenti caricati</h3>
                 {documents?.map(doc => (
-                    <div key={doc.id} className="bg-white p-4 rounded-lg border flex justify-between items-center shadow-sm">
-                        <div className="flex items-center gap-3">
-                            <FileText className="w-5 h-5 text-blue-600" />
-                            <div>
-                                <p className="font-medium text-sm">{doc.filename}</p>
-                                <p className="text-xs text-gray-400">{format(new Date(doc.uploaded_at), 'dd MMM yyyy HH:mm')}</p>
-                            </div>
-                        </div>
+                    <div key={doc.id} className="bg-white p-4 rounded-lg border flex justify-between items-center">
+                        <div className="flex items-center gap-3"><FileText className="w-5 h-5" /><span className="font-medium text-sm">{doc.filename}</span></div>
                         {getStatusBadge(doc.status)}
                     </div>
                 ))}
-                {documents?.length === 0 && <p className="text-center text-gray-400 text-sm">Nessun documento nello storico.</p>}
            </div>
         </TabsContent>
       </Tabs>
