@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Home, Wifi, MapPin, FileText, Upload, Send, CheckCircle, XCircle, Clock, Key, Star, Ticket, CreditCard } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import { jsPDF } from "jspdf"; // <--- LIBRERIA PDF
+import { jsPDF } from "jspdf";
 
 export default function GuestPortal() {
   const { id } = useParams();
@@ -41,7 +41,7 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
-  // 3. SERVIZI & VOUCHER
+  // 3. SERVIZI & VOUCHER (FILTRATI PER PROPRIETÀ + LOGICA PREMIUM)
   const { data: services } = useQuery({
     queryKey: ['guest-services', booking?.property_id],
     queryFn: async () => {
@@ -54,6 +54,7 @@ export default function GuestPortal() {
       
       if (error) throw error;
 
+      // FILTRO LATO CLIENT (Context-Aware): Mostra solo se property_ids è vuoto (globale) o include l'ID della casa
       return data.filter(s => 
         !s.property_ids || 
         s.property_ids.length === 0 || 
@@ -225,11 +226,11 @@ export default function GuestPortal() {
           <TabsTrigger value="docs">Documenti</TabsTrigger>
         </TabsList>
 
-        {/* TAB SERVIZI */}
+        {/* TAB SERVIZI (IL CUORE DELLA MODIFICA) */}
         <TabsContent value="services" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
                 {services?.map(service => {
-                    const isPremium = !!service.payment_link;
+                    const isPremium = !!service.payment_link; // Se ha link pagamento è Premium
                     return (
                         <Card key={service.id} className={`overflow-hidden border-l-4 transition-shadow hover:shadow-md flex flex-col ${isPremium ? 'border-l-yellow-400' : 'border-l-green-500'}`}>
                             <div className="h-32 bg-gray-100 relative">
@@ -275,6 +276,7 @@ export default function GuestPortal() {
             </div>
         </TabsContent>
 
+        {/* ALTRI TAB (INVARIATI MA COMPATTI) */}
         <TabsContent value="info">
           <Card>
             <CardHeader><CardTitle>Riepilogo Costi</CardTitle><CardDescription>Eventuali extra o tassa di soggiorno.</CardDescription></CardHeader>
