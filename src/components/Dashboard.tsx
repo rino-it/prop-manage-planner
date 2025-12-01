@@ -1,304 +1,318 @@
-
-import React from 'react';
+import React, { useState, useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { House, TrendingUp, Calendar, AlertTriangle, Euro, Target, Activity } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts';
-import { usePropertiesReal, usePropertiesMobile } from '@/hooks/useProperties';
-import { usePaymentStats, useUpcomingPayments } from '@/hooks/usePayments';
-import { useActivityStats, useUpcomingActivities } from '@/hooks/useActivities';
-import { useIncomeStats, usePropertyPerformance } from '@/hooks/useIncome';
-import { useUpcomingNotifications } from '@/hooks/useNotifications';
+import { Calendar } from '@/components/ui/calendar';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { 
+  TrendingUp, 
+  TrendingDown, 
+  AlertTriangle, 
+  CheckCircle, 
+  Clock, 
+  Calendar as CalendarIcon, 
+  ArrowRight, 
+  MapPin, 
+  User, 
+  Wrench 
+} from 'lucide-react';
+import { format, isSameDay, startOfMonth, endOfMonth, isBefore, parseISO } from 'date-fns';
+import { it } from 'date-fns/locale';
+import { useNavigate } from 'react-router-dom';
 
-const Dashboard = () => {
-  const { data: propertiesReal = [] } = usePropertiesReal();
-  const { data: propertiesMobile = [] } = usePropertiesMobile();
-  const { data: paymentStats } = usePaymentStats();
-  const { data: activityStats } = useActivityStats();
-  const { data: upcomingPayments = [] } = useUpcomingPayments();
-  const { data: upcomingActivities = [] } = useUpcomingActivities();
-  const { data: incomeStats } = useIncomeStats();
-  const { data: propertyPerformance = [] } = usePropertyPerformance();
-  const { data: upcomingNotifications = [] } = useUpcomingNotifications();
-  
-  const totalProperties = propertiesReal.length + propertiesMobile.length;
-  const yearlyExpenses = paymentStats?.totalAmount || 0;
-  const yearlyIncome = incomeStats?.totalIncome || 0;
-  const netIncome = yearlyIncome - yearlyExpenses;
-  const scheduledActivities = activityStats?.pendingActivities || 0;
-  const urgentNotifications = upcomingNotifications.filter(n => n.priorita === 'alta' || n.priorita === 'critica').length;
-  
-  // Calculate average ROI across all properties
-  const avgROI = propertyPerformance.length > 0 
-    ? propertyPerformance.reduce((sum, prop) => sum + (Number(prop.roi_percentuale) || 0), 0) / propertyPerformance.length 
-    : 0;
-  
-  const stats = [
-    { title: 'Proprietà Totali', value: totalProperties.toString(), icon: House, color: 'hsl(var(--primary))' },
-    { title: 'Entrate Annuali', value: `€${yearlyIncome.toLocaleString()}`, icon: Euro, color: 'hsl(142, 71%, 45%)' },
-    { title: 'Spese Annuali', value: `€${yearlyExpenses.toLocaleString()}`, icon: TrendingUp, color: 'hsl(var(--destructive))' },
-    { title: 'Reddito Netto', value: `€${netIncome.toLocaleString()}`, icon: Target, color: netIncome >= 0 ? 'hsl(142, 71%, 45%)' : 'hsl(var(--destructive))' },
-    { title: 'ROI Medio', value: `${avgROI.toFixed(1)}%`, icon: Activity, color: 'hsl(262, 83%, 58%)' },
-    { title: 'Alert Urgenti', value: urgentNotifications.toString(), icon: AlertTriangle, color: urgentNotifications > 0 ? 'hsl(var(--destructive))' : 'hsl(142, 71%, 45%)' },
-  ];
+// Tipi per gli eventi del calendario
+type DashboardEvent = {
+  id: string;
+  date: Date;
+  type: 'checkin' | 'checkout' | 'payment' | 'maintenance';
+  title: string;
+  subtitle: string;
+  priority: 'alta' | 'media' | 'bassa';
+  status: string;
+  actionLink?: string;
+};
 
-  // Generate monthly financial data for the last 6 months
-  const monthlyData = Array.from({ length: 6 }, (_, i) => {
-    const date = new Date();
-    date.setMonth(date.getMonth() - (5 - i));
-    const monthName = date.toLocaleDateString('it-IT', { month: 'short' });
-    
-    // TODO: Calculate real income/expenses per month from database
-    const income = Math.floor(Math.random() * 2000) + 3000;
-    const expenses = Math.floor(Math.random() * 1000) + 1500;
-    const net = income - expenses;
-    
-    return { 
-      month: monthName, 
-      entrate: income,
-      spese: expenses,
-      netto: net
-    };
+export default function Dashboard() {
+  const navigate = useNavigate();
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  
+  // Date per filtri mese corrente
+  const startMonth = startOfMonth(new Date()).toISOString();
+  const endMonth = endOfMonth(new Date()).toISOString();
+
+  // 1. QUERY AGGREGATA: PRENOTAZIONI (Logistica)
+  const { data: bookings } = useQuery({
+    queryKey: ['dashboard-bookings'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('bookings')
+        .select('id, data_inizio, data_fine, nome_ospite, properties_real(nome)')
+        .or(`data_inizio.gte.${startMonth},data_fine.lte.${endMonth}`);
+      return data || [];
+    }
   });
 
-  const realPropertyTypes = propertiesReal.reduce((acc, prop) => {
-    const type = prop.tipo === 'appartamento' ? 'Appartamenti' :
-                 prop.tipo === 'casa' ? 'Case' :
-                 prop.tipo === 'ufficio' ? 'Uffici' : 'Altro';
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // 2. QUERY AGGREGATA: PAGAMENTI & SPESE (Finanza)
+  const { data: finances } = useQuery({
+    queryKey: ['dashboard-finances'],
+    queryFn: async () => {
+      // Entrate (Affitti + Extra)
+      const { data: income } = await supabase
+        .from('tenant_payments')
+        .select('*')
+        .gte('data_scadenza', startMonth)
+        .lte('data_scadenza', endMonth);
 
-  const mobilePropertyTypes = propertiesMobile.reduce((acc, prop) => {
-    const type = prop.categoria === 'veicolo' ? 'Veicoli' :
-                 prop.categoria === 'imbarcazione' ? 'Imbarcazioni' : 'Attrezzature';
-    acc[type] = (acc[type] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+      // Uscite (Spese Proprietario)
+      const { data: expenses } = await supabase
+        .from('property_expenses')
+        .select('*')
+        .gte('date', startMonth)
+        .lte('date', endMonth);
 
-  const propertyTypes = [
-    ...Object.entries(realPropertyTypes).map(([name, value], index) => ({
-      name: name.length > 10 ? name.substring(0, 8) + '...' : name,
-      fullName: name,
-      value,
-      color: ['hsl(221, 83%, 53%)', 'hsl(142, 71%, 45%)', 'hsl(262, 83%, 58%)', 'hsl(36, 84%, 55%)'][index % 4]
-    })),
-    ...Object.entries(mobilePropertyTypes).map(([name, value], index) => ({
-      name: name.length > 10 ? name.substring(0, 8) + '...' : name,
-      fullName: name,
-      value,
-      color: ['hsl(0, 72%, 51%)', 'hsl(25, 95%, 53%)', 'hsl(84, 81%, 44%)'][index % 3]
-    }))
-  ];
+      // Scaduti (Urgenze - anche mesi precedenti se non pagati)
+      const { data: overdue } = await supabase
+        .from('tenant_payments')
+        .select('*')
+        .eq('stato', 'da_pagare')
+        .lt('data_scadenza', new Date().toISOString());
+
+      return { income: income || [], expenses: expenses || [], overdue: overdue || [] };
+    }
+  });
+
+  // 3. QUERY AGGREGATA: TICKET (Urgenze)
+  const { data: tickets } = useQuery({
+    queryKey: ['dashboard-tickets'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('tickets')
+        .select('*, properties_real(nome)')
+        .neq('stato', 'risolto');
+      return data || [];
+    }
+  });
+
+  // ELABORAZIONE DATI (Il "Cervello" della Dashboard)
+  const dashboardData = useMemo(() => {
+    const events: DashboardEvent[] = [];
+    
+    // A. Logistica (Booking)
+    bookings?.forEach(b => {
+      // Evento Check-in
+      events.push({
+        id: `in-${b.id}`,
+        date: new Date(b.data_inizio),
+        type: 'checkin',
+        title: `Check-in: ${b.nome_ospite}`,
+        subtitle: b.properties_real?.nome || 'Proprietà sconosciuta',
+        priority: 'alta',
+        status: 'pending',
+        actionLink: `/bookings`
+      });
+      // Evento Check-out
+      events.push({
+        id: `out-${b.id}`,
+        date: new Date(b.data_fine),
+        type: 'checkout',
+        title: `Check-out: ${b.nome_ospite}`,
+        subtitle: b.properties_real?.nome || 'Proprietà sconosciuta',
+        priority: 'alta',
+        status: 'pending',
+        actionLink: `/bookings`
+      });
+    });
+
+    // B. Finanza (Scadenze)
+    finances?.income.forEach(inc => {
+      events.push({
+        id: `pay-${inc.id}`,
+        date: new Date(inc.data_scadenza),
+        type: 'payment',
+        title: `Incasso: €${inc.importo}`,
+        subtitle: inc.description || 'Rata',
+        priority: 'media',
+        status: inc.stato || 'da_pagare',
+        actionLink: `/revenue`
+      });
+    });
+
+    // C. KPI Calc
+    const kpi = {
+      incassato: finances?.income.filter(i => i.stato === 'pagato').reduce((acc, c) => acc + Number(c.importo), 0) || 0,
+      atteso: finances?.income.filter(i => i.stato === 'da_pagare' || i.stato === 'in_verifica').reduce((acc, c) => acc + Number(c.importo), 0) || 0,
+      uscite: finances?.expenses.reduce((acc, c) => acc + Number(c.amount), 0) || 0
+    };
+
+    // D. Urgenze (Il Box Rosso)
+    const urgencies = [
+      ...(tickets?.filter(t => t.priorita === 'alta' || t.priorita === 'critica').map(t => ({
+        type: 'ticket', text: `GUASTO: ${t.titolo} (${t.properties_real?.nome})`, id: t.id, link: '/activities'
+      })) || []),
+      ...(finances?.overdue.map(o => ({
+        type: 'payment', text: `SCADUTO: €${o.importo} - ${o.description}`, id: o.id, link: '/revenue'
+      })) || [])
+    ];
+
+    return { events, kpi, urgencies };
+  }, [bookings, finances, tickets]);
+
+  // Filtra eventi per il giorno selezionato
+  const dailyEvents = dashboardData.events.filter(e => 
+    selectedDate && isSameDay(e.date, selectedDate)
+  );
+
+  // Modifiers per il Calendario (i Pallini)
+  const modifiers = {
+    hasEvent: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date)),
+    hasUrgency: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'maintenance'),
+  };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <div className="text-sm text-gray-500">
-          Ultimo aggiornamento: {new Date().toLocaleDateString('it-IT')}
+    <div className="space-y-6 animate-in fade-in duration-500">
+      
+      {/* HEADER */}
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Torre di Controllo</h1>
+          <p className="text-gray-500">Panoramica operativa del {format(new Date(), 'MMMM yyyy', { locale: it })}</p>
+        </div>
+        <div className="text-right hidden md:block">
+            <p className="text-sm font-medium text-gray-900">{format(new Date(), 'EEEE d MMMM', { locale: it })}</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {stats.map((stat, index) => {
-          const Icon = stat.icon;
-          return (
-            <Card key={index} className="hover:shadow-md transition-all duration-200 border-l-4" style={{ borderLeftColor: stat.color }}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
-                    <p className="text-2xl font-bold text-foreground mt-1" style={{ color: stat.color }}>{stat.value}</p>
-                  </div>
-                  <div className="p-3 rounded-full bg-secondary/20">
-                    <Icon className="w-6 h-6" style={{ color: stat.color }} />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Andamento Finanziario Mensile</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip 
-                  formatter={(value, name) => [
-                    `€${Number(value).toLocaleString()}`, 
-                    name === 'entrate' ? 'Entrate' : name === 'spese' ? 'Spese' : 'Netto'
-                  ]} 
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="entrate" 
-                  stroke="hsl(142, 71%, 45%)" 
-                  strokeWidth={3}
-                  dot={{ fill: 'hsl(142, 71%, 45%)', strokeWidth: 2, r: 4 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="spese" 
-                  stroke="hsl(var(--destructive))" 
-                  strokeWidth={3}
-                  dot={{ fill: 'hsl(var(--destructive))', strokeWidth: 2, r: 4 }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="netto" 
-                  stroke="hsl(262, 83%, 58%)" 
-                  strokeWidth={3}
-                  strokeDasharray="5 5"
-                  dot={{ fill: 'hsl(262, 83%, 58%)', strokeWidth: 2, r: 4 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+      {/* AREA B: KPI FINANZIARI (I SOLDI) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <Card className="bg-green-50 border-green-200 shadow-sm">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-green-700 uppercase tracking-wider">Incassato (Mese)</p>
+              <h2 className="text-3xl font-bold text-green-900 mt-1">€ {dashboardData.kpi.incassato.toLocaleString()}</h2>
+            </div>
+            <div className="p-3 bg-green-100 rounded-full text-green-700"><CheckCircle className="w-6 h-6" /></div>
           </CardContent>
         </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Distribuzione Proprietà</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <PieChart>
-                <Pie
-                  data={propertyTypes}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={90}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {propertyTypes.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <Tooltip 
-                  formatter={(value, name, props) => [
-                    `${value} proprietà`, 
-                    props.payload?.fullName || name
-                  ]} 
-                />
-              </PieChart>
-            </ResponsiveContainer>
+        <Card className="bg-blue-50 border-blue-200 shadow-sm cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => navigate('/revenue')}>
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-blue-700 uppercase tracking-wider">In Attesa</p>
+              <h2 className="text-3xl font-bold text-blue-900 mt-1">€ {dashboardData.kpi.atteso.toLocaleString()}</h2>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-full text-blue-700"><Clock className="w-6 h-6" /></div>
+          </CardContent>
+        </Card>
+        <Card className="bg-red-50 border-red-200 shadow-sm">
+          <CardContent className="p-6 flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-red-700 uppercase tracking-wider">Uscite</p>
+              <h2 className="text-3xl font-bold text-red-900 mt-1">€ {dashboardData.kpi.uscite.toLocaleString()}</h2>
+            </div>
+            <div className="p-3 bg-red-100 rounded-full text-red-700"><TrendingDown className="w-6 h-6" /></div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Activity className="w-5 h-5" />
-              Performance Proprietà
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {propertyPerformance.length > 0 ? propertyPerformance.slice(0, 3).map((property) => (
-                <div key={property.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                  <div>
-                    <p className="font-medium">{property.codice_identificativo || property.nome}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {property.stato === 'affitto' ? '🏠 In Affitto' : 
-                       property.stato === 'uso_personale' ? '🏡 Uso Personale' : '🔧 Ristrutturazione'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-sm font-medium ${
-                      Number(property.roi_percentuale) >= 5 ? 'text-green-600' :
-                      Number(property.roi_percentuale) >= 0 ? 'text-yellow-600' : 'text-red-600'
-                    }`}>
-                      ROI {Number(property.roi_percentuale).toFixed(1)}%
-                    </span>
-                    <p className="text-xs text-muted-foreground">
-                      €{Number(property.reddito_netto_annuale).toLocaleString()}/anno
-                    </p>
-                  </div>
-                </div>
-              )) : (
-                <p className="text-muted-foreground text-center py-4">Nessun dato performance disponibile</p>
-              )}
-            </div>
-          </CardContent>
+      {/* AREA C: URGENZE (BOX ROSSO) */}
+      {dashboardData.urgencies.length > 0 && (
+        <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900 shadow-sm">
+          <AlertTriangle className="h-5 w-5" />
+          <AlertTitle className="font-bold text-lg ml-2">Attenzione Richiesta ({dashboardData.urgencies.length})</AlertTitle>
+          <AlertDescription className="mt-2">
+            <ul className="list-disc list-inside space-y-1 ml-1">
+              {dashboardData.urgencies.map((u, idx) => (
+                <li key={idx} className="flex items-center justify-between hover:bg-red-100 p-1 rounded cursor-pointer" onClick={() => navigate(u.link)}>
+                  <span className="text-sm font-medium">{u.text}</span>
+                  <ArrowRight className="w-4 h-4 opacity-50" />
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* AREA A: LOGISTICA & AGENDA (IL CALENDARIO) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
+        
+        {/* SINISTRA: CALENDARIO */}
+        <Card className="lg:col-span-1 shadow-md border-slate-200">
+            <CardHeader><CardTitle>Calendario</CardTitle></CardHeader>
+            <CardContent className="flex justify-center">
+                <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={setSelectedDate}
+                    locale={it}
+                    className="rounded-md border"
+                    modifiers={modifiers}
+                    modifiersStyles={{
+                        hasEvent: { fontWeight: 'bold', textDecoration: 'underline', color: '#2563eb' },
+                        hasUrgency: { color: 'red' }
+                    }}
+                />
+            </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Calendar className="w-5 h-5" />
-              Prossime Attività
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {upcomingActivities.length > 0 ? upcomingActivities.slice(0, 3).map((activity) => (
-                <div key={activity.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                  <div>
-                    <p className="font-medium">{activity.nome}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {activity.properties_real?.nome || activity.properties_mobile?.nome || 'Proprietà generale'}
-                    </p>
-                  </div>
-                  <span className="text-sm text-muted-foreground">
-                    {new Date(activity.prossima_scadenza).toLocaleDateString('it-IT')}
-                  </span>
+        {/* DESTRA: AGENDA GIORNALIERA */}
+        <Card className="lg:col-span-2 shadow-md border-slate-200 flex flex-col">
+            <CardHeader className="border-b bg-slate-50/50 pb-4">
+                <div className="flex justify-between items-center">
+                    <CardTitle className="flex items-center gap-2">
+                        <CalendarIcon className="w-5 h-5 text-blue-600"/>
+                        Agenda del {selectedDate ? format(selectedDate, 'd MMMM', { locale: it }) : 'Giorno'}
+                    </CardTitle>
+                    <Badge variant="secondary" className="text-sm">{dailyEvents.length} Attività</Badge>
                 </div>
-              )) : (
-                <p className="text-muted-foreground text-center py-4">Nessuna attività programmata</p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
+            </CardHeader>
+            
+            <ScrollArea className="flex-1 p-0 h-[400px]">
+                {dailyEvents.length > 0 ? (
+                    <div className="divide-y divide-slate-100">
+                        {dailyEvents.map((evt) => (
+                            <div key={evt.id} className="p-4 hover:bg-slate-50 transition-colors flex items-start gap-4 group">
+                                {/* Icona Stato */}
+                                <div className={`mt-1 p-2 rounded-full ${
+                                    evt.type === 'checkin' ? 'bg-green-100 text-green-700' :
+                                    evt.type === 'checkout' ? 'bg-orange-100 text-orange-700' :
+                                    evt.type === 'payment' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-red-100 text-red-700'
+                                }`}>
+                                    {evt.type === 'checkin' && <User className="w-5 h-5" />}
+                                    {evt.type === 'checkout' && <TrendingUp className="w-5 h-5 rotate-180" />}
+                                    {evt.type === 'payment' && <TrendingUp className="w-5 h-5" />}
+                                    {evt.type === 'maintenance' && <Wrench className="w-5 h-5" />}
+                                </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5" />
-              Alert & Notifiche
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {upcomingNotifications.length > 0 ? upcomingNotifications.slice(0, 3).map((notification) => (
-                <div key={notification.id} className="flex items-center justify-between py-2 border-b last:border-b-0">
-                  <div className="flex-1">
-                    <p className="font-medium text-sm">{notification.titolo}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {notification.properties_real?.codice_identificativo || notification.properties_mobile?.codice_identificativo || 'Generale'}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <span className={`text-xs font-medium px-2 py-1 rounded-full ${
-                      notification.priorita === 'critica' ? 'bg-red-100 text-red-700' :
-                      notification.priorita === 'alta' ? 'bg-orange-100 text-orange-700' :
-                      'bg-yellow-100 text-yellow-700'
-                    }`}>
-                      {Math.ceil((new Date(notification.data_scadenza).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} giorni
-                    </span>
-                  </div>
-                </div>
-              )) : (
-                <p className="text-muted-foreground text-center py-4">Nessun alert urgente</p>
-              )}
-            </div>
-          </CardContent>
+                                {/* Dettagli */}
+                                <div className="flex-1">
+                                    <h4 className="text-sm font-bold text-gray-900">{evt.title}</h4>
+                                    <p className="text-xs text-gray-500 flex items-center mt-1">
+                                        <MapPin className="w-3 h-3 mr-1" /> {evt.subtitle}
+                                    </p>
+                                </div>
+
+                                {/* Azione */}
+                                <div className="self-center">
+                                    <Button size="sm" variant="outline" className="opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => navigate(evt.actionLink || '/')}>
+                                        Vedi
+                                    </Button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12">
+                        <CalendarIcon className="w-12 h-12 mb-3 opacity-20" />
+                        <p>Nessuna attività in programma per oggi.</p>
+                        <Button variant="link" onClick={() => setSelectedDate(new Date())}>Torna a Oggi</Button>
+                    </div>
+                )}
+            </ScrollArea>
         </Card>
       </div>
     </div>
   );
-};
-
-export default Dashboard;
+}
