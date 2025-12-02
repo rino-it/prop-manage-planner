@@ -5,8 +5,8 @@ import { House, Settings, Calendar, TrendingUp, MapPin, LogOut, Users, Sparkles,
 import { Button } from '@/components/ui/button';
 
 interface SidebarProps {
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
+  activeTab?: string;
+  setActiveTab?: (tab: string) => void;
   onCloseMobile?: () => void;
 }
 
@@ -16,7 +16,7 @@ const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: House },
     { id: 'bookings', label: 'Prenotazioni', icon: Calendar },
-    { id: 'tenants', label: 'Inquilini', icon: Users }, // <--- NUOVO (sostituisce Condizioni)
+    { id: 'tenants', label: 'Inquilini', icon: Users },
     { id: 'revenue', label: 'Incassi', icon: DollarSign },
     { id: 'expenses', label: 'Spese', icon: TrendingUp },
     { id: 'services', label: 'Servizi Extra', icon: Sparkles },
@@ -26,22 +26,21 @@ const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
   ];
 
   const handleNavigation = (id: string) => {
-    setActiveTab(id);
-    if (onCloseMobile) {
-      onCloseMobile();
-    }
+    if (setActiveTab) setActiveTab(id);
+    if (onCloseMobile) onCloseMobile();
   };
 
   return (
     <div className="w-full md:w-64 bg-white md:bg-card border-r border-border shadow-lg flex flex-col h-full">
-      <div className="p-6 border-b border-border">
-        <h1 className="text-2xl font-bold text-foreground text-blue-600">PropManager</h1>
-        <p className="text-sm text-muted-foreground mt-1">Gestione Proprietà</p>
-        {user && (
-          <p className="text-xs text-muted-foreground mt-2 truncate bg-gray-100 p-1 rounded">
-            {user.email}
-          </p>
-        )}
+      
+      {/* HEADER LOGO (MODIFICATO) */}
+      <div className="p-6 border-b border-border flex justify-center items-center">
+        {/* Se il logo non carica, mostrerà il testo alternativo */}
+        <img 
+          src="/logo.png" 
+          alt="PropManager" 
+          className="h-12 w-auto object-contain" 
+        />
       </div>
       
       <nav className="mt-6 flex-1 overflow-y-auto">
@@ -67,6 +66,13 @@ const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
       </nav>
 
       <div className="p-4 border-t border-border">
+        <div className="mb-4 px-2">
+            {user && (
+              <p className="text-xs text-muted-foreground truncate bg-gray-100 p-2 rounded text-center">
+                {user.email}
+              </p>
+            )}
+        </div>
         <Button
           variant="ghost"
           onClick={signOut}
