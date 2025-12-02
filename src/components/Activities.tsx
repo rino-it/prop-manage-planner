@@ -9,10 +9,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, MessageSquare, UserCog, Plus, CheckCircle } from 'lucide-react';
+import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import TicketManager from '@/components/TicketManager'; // <--- IL NOSTRO SUPER COMPONENTE
+import TicketManager from '@/components/TicketManager';
 
 export default function Activities() {
   const { toast } = useToast();
@@ -20,16 +20,16 @@ export default function Activities() {
   
   // STATI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); // Per aprire il pannello gestione
+  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
 
   const [formData, setFormData] = useState({
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    booking_id: 'none' // Opzionale: collegare a una prenotazione specifica se serve
+    booking_id: 'none'
   });
 
-  // 1. CARICA TUTTI I TICKET (Globali)
+  // 1. CARICA TICKET
   const { data: tickets, isLoading } = useQuery({
     queryKey: ['tickets'],
     queryFn: async () => {
@@ -50,11 +50,10 @@ export default function Activities() {
     }
   });
 
-  // 2. CREA TICKET INTERNO
+  // 2. CREA TICKET
   const createTicket = useMutation({
     mutationFn: async (newTicket: any) => {
       const { data: { user } } = await supabase.auth.getUser();
-      // Se non è collegato a un booking, lasciamo booking_id null
       const payload = {
         ...newTicket,
         user_id: user?.id,
@@ -75,6 +74,21 @@ export default function Activities() {
     onError: () => toast({ title: "Errore", variant: "destructive" })
   });
 
+  // 3. RIAPRI TICKET (NUOVA FUNZIONE)
+  const reopenTicket = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('tickets')
+        .update({ stato: 'aperto', cost: null, resolution_photo_url: null }) // Reset opzionale dei dati di chiusura
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      toast({ title: "Ticket Riaperto", description: "Stato riportato ad 'Aperto'." });
+    }
+  });
+
   const getPriorityColor = (p: string) => {
     if (p === 'alta' || p === 'critica') return 'bg-red-100 text-red-800 border-red-200';
     if (p === 'media') return 'bg-orange-100 text-orange-800 border-orange-200';
@@ -89,7 +103,6 @@ export default function Activities() {
           <p className="text-gray-500">Gestione centralizzata di tutte le segnalazioni.</p>
         </div>
         
-        {/* DIALOG NUOVO TICKET */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-blue-600 hover:bg-blue-700">
@@ -125,14 +138,12 @@ export default function Activities() {
         </Dialog>
       </div>
 
-      {/* LISTA TICKET */}
       <div className="grid gap-4">
         {isLoading ? <p>Caricamento...</p> : tickets?.map((ticket) => (
-          <Card key={ticket.id} className={`border-l-4 shadow-sm transition-all hover:shadow-md ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-60 bg-gray-50' : 'border-l-red-500'}`}>
+          <Card key={ticket.id} className={`border-l-4 shadow-sm transition-all hover:shadow-md ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-80 bg-slate-50' : 'border-l-red-500'}`}>
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row justify-between items-start gap-4">
                 
-                {/* INFO TICKET */}
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
@@ -144,11 +155,15 @@ export default function Activities() {
                         <MessageSquare className="w-3 h-3 mr-1" /> Ospite
                       </Badge>
                     )}
+                     {ticket.stato === 'risolto' && (
+                      <Badge className="bg-green-100 text-green-800 border-green-200">
+                        <CheckCircle className="w-3 h-3 mr-1" /> Risolto
+                      </Badge>
+                    )}
                   </div>
                   
                   <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
                   
-                  {/* METADATI */}
                   <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                     <span className="flex items-center bg-gray-100 px-2 py-1 rounded border">
                         <Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}
@@ -171,29 +186,35 @@ export default function Activities() {
                   </div>
                 </div>
                 
-                {/* AZIONI */}
+                {/* AZIONI CONDIZIONALI */}
                 <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
                    {ticket.stato !== 'risolto' ? (
                       <Button 
                         size="sm" 
                         className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm"
-                        onClick={() => setTicketManagerOpen(ticket)} // APRE IL SUPER PANNELLO
+                        onClick={() => setTicketManagerOpen(ticket)} 
                       >
                          <UserCog className="w-4 h-4 mr-2" /> Gestisci
                       </Button>
                    ) : (
                       <div className="flex flex-col gap-2">
-                          <Badge variant="outline" className="w-full justify-center py-1 bg-green-50 text-green-700 border-green-200">
-                              <CheckCircle className="w-3 h-3 mr-1" /> Risolto
-                          </Badge>
-                          {/* Permetti comunque di riaprire/rivedere lo storico */}
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="w-full text-gray-600 bg-white hover:bg-gray-50"
+                            onClick={() => setTicketManagerOpen(ticket)}
+                          >
+                             <Eye className="w-3 h-3 mr-2" /> Vedi Storico
+                          </Button>
                           <Button 
                             size="sm" 
                             variant="ghost" 
-                            className="w-full text-xs text-gray-400 hover:text-gray-600"
-                            onClick={() => setTicketManagerOpen(ticket)}
+                            className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => {
+                                if(confirm("Vuoi riaprire questo ticket?")) reopenTicket.mutate(ticket.id);
+                            }}
                           >
-                             Vedi dettagli
+                             <RotateCcw className="w-3 h-3 mr-1" /> Riapri
                           </Button>
                       </div>
                    )}
@@ -211,8 +232,9 @@ export default function Activities() {
             isOpen={!!ticketManagerOpen} 
             onClose={() => setTicketManagerOpen(null)}
             onUpdate={() => {
-                queryClient.invalidateQueries({ queryKey: ['tickets'] }); // Ricarica la lista globale
+                queryClient.invalidateQueries({ queryKey: ['tickets'] }); 
             }}
+            isReadOnly={ticketManagerOpen.stato === 'risolto'} // Passiamo flag sola lettura
         />
       )}
     </div>

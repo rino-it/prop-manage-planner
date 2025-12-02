@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Switch } from '@/components/ui/switch'; // Assicurati di avere questo componente o usa una checkbox
+import { Switch } from '@/components/ui/switch';
+import { Separator } from '@/components/ui/separator'; // Aggiunto
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, MessageCircle, CheckCircle, Save, UserCog, Send, Clock, Share2, Upload, Euro, Hammer, Image as ImageIcon } from 'lucide-react';
+import { Calendar as CalendarIcon, MessageCircle, CheckCircle, Save, UserCog, Send, Clock, Share2, Euro, Hammer, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 
@@ -19,9 +20,10 @@ interface TicketManagerProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdate: () => void;
+  isReadOnly?: boolean; // Nuova prop
 }
 
-export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: TicketManagerProps) {
+export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
   // STATI
@@ -32,13 +34,14 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
   
   // STATI PER CHIUSURA
   const [recordCost, setRecordCost] = useState(false);
-  const [costAmount, setCostAmount] = useState('');
+  const [costAmount, setCostAmount] = useState(ticket?.cost || '');
   const [resolutionPhoto, setResolutionPhoto] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     setNotes(ticket?.admin_notes || '');
     setSupplier(ticket?.supplier || '');
+    setCostAmount(ticket?.cost || '');
   }, [ticket]);
 
   const { data: colleagues } = useQuery({
@@ -60,17 +63,18 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
 
     if (error) toast({ title: "Errore", variant: "destructive" });
     else {
-      toast({ title: "Aggiornamento salvato", description: "Note e fornitore registrati." });
+      toast({ title: "Note Salvate", description: "Aggiornamento registrato (Ticket ancora aperto)." });
       onUpdate();
     }
   };
 
   const handleResolve = async () => {
+    if(!confirm("Confermi di voler chiudere il ticket?")) return;
+
     try {
         setUploading(true);
-        let photoUrl = null;
+        let photoUrl = ticket.resolution_photo_url;
 
-        // 1. UPLOAD FOTO (Se presente)
         if (resolutionPhoto) {
             const fileExt = resolutionPhoto.name.split('.').pop();
             const fileName = `resolution_${ticket.id}_${Date.now()}.${fileExt}`;
@@ -79,33 +83,23 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
             photoUrl = fileName;
         }
 
-        // 2. REGISTRA SPESA (Se attivo)
-        if (recordCost && costAmount) {
-            const { error: expError } = await supabase.from('maintenance_expenses').insert({
-                ticket_id: ticket.id,
-                property_id: ticket.property_real_id, // Assumiamo che il ticket abbia questo campo o lo prendiamo dalla booking
-                amount: parseFloat(costAmount),
-                description: `Risoluzione Ticket: ${ticket.titolo}`,
-                supplier: supplier,
-                date: new Date().toISOString()
-            });
-            if (expError) throw expError;
-        }
+        // Se attivo, registra la spesa nella tabella expenses (opzionale, logica da implementare se serve tabella separata)
+        // Per ora salviamo il costo nel ticket stesso per semplicità
 
-        // 3. CHIUDI TICKET
         const { error: ticketError } = await supabase
             .from('tickets')
             .update({ 
                 stato: 'risolto',
                 resolution_photo_url: photoUrl,
                 cost: recordCost ? parseFloat(costAmount) : null,
-                supplier: supplier // Risalva per sicurezza
+                supplier: supplier,
+                admin_notes: notes 
             })
             .eq('id', ticket.id);
 
         if (ticketError) throw ticketError;
 
-        toast({ title: "Ticket Risolto!", description: "Tutte le operazioni sono state registrate." });
+        toast({ title: "Ticket Risolto!", description: "Archiviato con successo." });
         onUpdate();
         onClose();
 
@@ -116,18 +110,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
     }
   };
 
-  // HELPERS COMUNICAZIONE (Invariati o arricchiti con fornitore)
+  // COMUNICAZIONE
   const sendToColleague = () => {
     if (!selectedColleague) return;
     const msg = `Ciao, ti delego questo ticket.\n\n🎫 *TICKET:* ${ticket.titolo}\n🛠️ *FORNITORE:* ${supplier || 'Non assegnato'}\n📌 *NOTE:* ${notes}\n🗓️ *SCADENZA:* ${date ? format(date, 'dd/MM/yyyy') : 'Da definire'}`;
     window.open(`https://wa.me/${selectedColleague}?text=${encodeURIComponent(msg)}`, '_blank');
-  };
-
-  const sendToGuest = () => {
-    const phone = ticket.bookings?.telefono_ospite;
-    if (!phone) return toast({ title: "Manca telefono", variant: "destructive" });
-    const msg = `Gentile ${ticket.bookings?.nome_ospite}, ticket "${ticket.titolo}" aggiornato.\n\nℹ️ *STATO:* ${notes}\n🗓️ *INTERVENTO:* ${date ? format(date, 'dd/MM/yyyy') : 'In definizione'}`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const addToCalendar = () => {
@@ -146,35 +133,26 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <UserCog className="w-6 h-6 text-blue-600" />
-            Gestione Ticket: {ticket.titolo}
+            {isReadOnly ? <CheckCircle className="w-6 h-6 text-green-600" /> : <UserCog className="w-6 h-6 text-blue-600" />}
+            {isReadOnly ? `Storico Ticket: ${ticket.titolo}` : `Gestione Ticket: ${ticket.titolo}`}
           </DialogTitle>
           <DialogDescription>
-            Originale: "{ticket.descrizione}"
+            Richiesta originale: "{ticket.descrizione}"
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-6 mt-4">
           
-          {/* 1. AGGIORNAMENTO & FORNITORI */}
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <Label className="text-blue-800 font-bold mb-3 flex items-center gap-2">
-              <Clock className="w-4 h-4" /> 1. Aggiornamento & Fornitore
+          {/* SEZIONE 1: LAVORAZIONE (Abilitata solo se non risolto) */}
+          <div className={`p-4 rounded-lg border ${isReadOnly ? 'bg-gray-50 border-gray-200 opacity-80' : 'bg-blue-50 border-blue-200'}`}>
+            <Label className="text-blue-900 font-bold mb-3 flex items-center gap-2 uppercase text-xs tracking-wider">
+              <Clock className="w-4 h-4" /> Lavorazione & Note Interne
             </Label>
             
-            <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <div className="md:col-span-2">
-                        <Label className="text-xs text-gray-500">Note Avanzamento</Label>
-                        <Textarea 
-                            placeholder="Es: Sopralluogo effettuato..." 
-                            value={notes} 
-                            onChange={(e) => setNotes(e.target.value)}
-                            className="bg-white min-h-[40px] h-10"
-                        />
-                    </div>
+            <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <Label className="text-xs text-gray-500">Fornitore Coinvolto</Label>
+                        <Label className="text-xs text-gray-500 mb-1.5 block">Fornitore / Tecnico</Label>
                         <div className="relative">
                             <Hammer className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                             <Input 
@@ -182,58 +160,71 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
                                 value={supplier}
                                 onChange={(e) => setSupplier(e.target.value)}
                                 className="pl-8 bg-white"
+                                disabled={isReadOnly}
                             />
                         </div>
                     </div>
+                    
+                    {/* DELEGA & CALENDARIO */}
+                    {!isReadOnly && (
+                    <div className="flex items-end gap-2">
+                        <div className="flex-1">
+                            <Label className="text-xs text-gray-500 mb-1.5 block">Pianifica / Delega</Label>
+                             <div className="flex gap-1">
+                                <Popover>
+                                    <PopoverTrigger asChild><Button variant={"outline"} className="flex-1 bg-white px-2"><CalendarIcon className="h-4 w-4" /></Button></PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
+                                </Popover>
+                                <Button variant="outline" onClick={addToCalendar} title="Salva su Google Cal"><Save className="w-4 h-4" /></Button>
+                                <Select onValueChange={setSelectedColleague}>
+                                    <SelectTrigger className="bg-white flex-1"><SelectValue placeholder="Socio..." /></SelectTrigger>
+                                    <SelectContent>{colleagues?.map((col) => (<SelectItem key={col.id} value={col.phone}>{col.first_name}</SelectItem>))}</SelectContent>
+                                </Select>
+                                <Button className="bg-green-600 hover:bg-green-700" onClick={sendToColleague} disabled={!selectedColleague}><Send className="w-4 h-4" /></Button>
+                             </div>
+                        </div>
+                    </div>
+                    )}
                 </div>
-                <div className="flex justify-end">
-                    <Button size="sm" variant="outline" onClick={saveUpdates} className="h-8">
-                        <Save className="w-3 h-3 mr-2" /> Salva Intermedio
-                    </Button>
+
+                <div>
+                    <Label className="text-xs text-gray-500 mb-1.5 block">Diario di Bordo (Note)</Label>
+                    <Textarea 
+                        placeholder="Es: Sopralluogo effettuato, in attesa del pezzo di ricambio..." 
+                        value={notes} 
+                        onChange={(e) => setNotes(e.target.value)}
+                        className="bg-white min-h-[80px]"
+                        disabled={isReadOnly}
+                    />
                 </div>
+
+                {!isReadOnly && (
+                    <div className="flex justify-end">
+                        <Button size="sm" variant="secondary" onClick={saveUpdates} className="text-blue-700 bg-blue-100 hover:bg-blue-200">
+                            <Save className="w-3 h-3 mr-2" /> Salva solo note
+                        </Button>
+                    </div>
+                )}
             </div>
           </div>
 
-          {/* 2. PIANIFICAZIONE (Invariato ma compatto) */}
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <Label className="text-orange-800 font-bold mb-3 flex items-center gap-2">
-              <Share2 className="w-4 h-4" /> 2. Pianificazione
-            </Label>
-            <div className="flex gap-2 items-end">
-                <div className="flex-1">
-                    <Label className="text-xs text-gray-500">Data Intervento</Label>
-                    <Popover>
-                        <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal bg-white"><CalendarIcon className="mr-2 h-4 w-4" />{date ? format(date, "dd/MM/yyyy") : <span>Scegli data</span>}</Button></PopoverTrigger>
-                        <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
-                    </Popover>
-                </div>
-                <Button variant="outline" onClick={addToCalendar} title="Google Calendar"><CalendarIcon className="w-4 h-4" /></Button>
-                <div className="flex-1">
-                    <Label className="text-xs text-gray-500">Delega a</Label>
-                    <Select onValueChange={setSelectedColleague}>
-                        <SelectTrigger className="bg-white"><SelectValue placeholder="Collega..." /></SelectTrigger>
-                        <SelectContent>{colleagues?.map((col) => (<SelectItem key={col.id} value={col.phone}>{col.first_name}</SelectItem>))}</SelectContent>
-                    </Select>
-                </div>
-                <Button className="bg-green-600 hover:bg-green-700" onClick={sendToColleague} disabled={!selectedColleague}><Send className="w-4 h-4" /></Button>
-            </div>
-          </div>
+          {/* SEPARATORE VISIVO */}
+          {!isReadOnly && <Separator className="my-4" />}
 
-          {/* 3. CHIUSURA & CONTABILITÀ (NUOVO!) */}
-          <div className="bg-slate-50 p-4 rounded-lg border border-slate-200">
-            <Label className="text-green-800 font-bold mb-3 flex items-center gap-2">
-              <CheckCircle className="w-4 h-4" /> 3. Chiusura & Contabilità
+          {/* SEZIONE 2: CHIUSURA (Visibile solo se aperto) */}
+          {!isReadOnly ? (
+          <div className="p-5 rounded-lg border border-green-200 bg-green-50/50 relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+            <Label className="text-green-800 font-bold mb-4 flex items-center gap-2 uppercase text-xs tracking-wider">
+              <CheckCircle className="w-4 h-4" /> Risoluzione & Chiusura
             </Label>
             
             <div className="grid md:grid-cols-2 gap-6">
-                {/* Colonna Sinistra: Costi e Foto */}
-                <div className="space-y-4 border-r border-slate-200 pr-4">
-                    
-                    {/* Toggle Costo */}
+                <div className="space-y-4 border-r border-green-200 pr-4">
                     <div className="flex items-center justify-between">
-                        <Label className="flex items-center gap-2 cursor-pointer">
+                        <Label className="flex items-center gap-2 cursor-pointer font-medium text-gray-700">
                             <Euro className="w-4 h-4 text-gray-500" />
-                            Registra Costo
+                            Ci sono stati costi?
                         </Label>
                         <Switch checked={recordCost} onCheckedChange={setRecordCost} />
                     </div>
@@ -241,54 +232,51 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate }: Tic
                     {recordCost && (
                         <Input 
                             type="number" 
-                            placeholder="Importo (€)" 
+                            placeholder="Importo Totale (€)" 
                             value={costAmount} 
                             onChange={(e) => setCostAmount(e.target.value)} 
-                            className="bg-white"
+                            className="bg-white border-green-200"
                         />
                     )}
 
-                    {/* Upload Foto */}
                     <div>
-                        <Label className="text-xs text-gray-500 mb-1 block">Prova Risoluzione (Foto)</Label>
-                        <div className="flex items-center gap-2">
-                            <Input 
-                                type="file" 
-                                className="text-xs" 
-                                onChange={(e) => setResolutionPhoto(e.target.files?.[0] || null)}
-                            />
-                            {resolutionPhoto && <CheckCircle className="w-4 h-4 text-green-500" />}
-                        </div>
+                        <Label className="text-xs text-gray-500 mb-1 block">Foto Risoluzione (Opzionale)</Label>
+                        <Input 
+                            type="file" 
+                            className="text-xs bg-white" 
+                            onChange={(e) => setResolutionPhoto(e.target.files?.[0] || null)}
+                        />
                     </div>
                 </div>
 
-                {/* Colonna Destra: Azioni Finali */}
-                <div className="flex flex-col gap-3 justify-center">
+                <div className="flex flex-col justify-end gap-3">
+                    <p className="text-xs text-gray-500 mb-1">L'azione è definitiva. Il ticket passerà in "Risolto".</p>
                     <Button 
-                        variant="outline" 
-                        className="w-full justify-start text-green-700 border-green-200 hover:bg-green-50"
-                        onClick={sendToGuest}
-                    >
-                        <MessageCircle className="w-4 h-4 mr-2" /> Aggiorna Ospite
-                    </Button>
-
-                    <Button 
-                        className="w-full bg-green-600 hover:bg-green-700 py-6 text-md font-bold shadow-md"
+                        className="w-full bg-green-600 hover:bg-green-700 py-6 text-md font-bold shadow-sm transition-all hover:scale-[1.02]"
                         onClick={handleResolve}
                         disabled={uploading}
                     >
-                        {uploading ? (
-                            "Salvataggio..."
-                        ) : (
-                            <>
-                                <CheckCircle className="w-5 h-5 mr-2" /> 
-                                {recordCost ? `Chiudi e Spendi €${costAmount || '0'}` : 'Chiudi Ticket'}
-                            </>
-                        )}
+                        {uploading ? "Chiusura in corso..." : "✅ CHIUDI TICKET"}
                     </Button>
                 </div>
             </div>
           </div>
+          ) : (
+            // VIEW SOLA LETTURA CHIUSURA
+            <div className="p-4 rounded-lg border bg-gray-50 border-gray-200">
+                <h4 className="font-bold text-sm text-gray-700 mb-2">Dettagli Chiusura</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span className="text-gray-500 block text-xs">Costo Finale:</span>
+                        <span className="font-mono font-bold">€ {ticket.cost || '0.00'}</span>
+                    </div>
+                    <div>
+                        <span className="text-gray-500 block text-xs">Foto:</span>
+                        {ticket.resolution_photo_url ? <a href="#" className="text-blue-600 underline text-xs">Vedi Foto</a> : <span className="text-gray-400 text-xs">Nessuna</span>}
+                    </div>
+                </div>
+            </div>
+          )}
 
         </div>
       </DialogContent>
