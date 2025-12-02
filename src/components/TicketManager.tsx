@@ -9,7 +9,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
-import { Separator } from '@/components/ui/separator'; // Aggiunto
+import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
 import { Calendar as CalendarIcon, MessageCircle, CheckCircle, Save, UserCog, Send, Clock, Share2, Euro, Hammer, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
@@ -20,7 +20,7 @@ interface TicketManagerProps {
   isOpen: boolean;
   onClose: () => void;
   onUpdate: () => void;
-  isReadOnly?: boolean; // Nuova prop
+  isReadOnly?: boolean;
 }
 
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
@@ -82,9 +82,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             if (upError) throw upError;
             photoUrl = fileName;
         }
-
-        // Se attivo, registra la spesa nella tabella expenses (opzionale, logica da implementare se serve tabella separata)
-        // Per ora salviamo il costo nel ticket stesso per semplicità
 
         const { error: ticketError } = await supabase
             .from('tickets')
@@ -188,14 +185,31 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 </div>
 
                 <div>
-                    <Label className="text-xs text-gray-500 mb-1.5 block">Diario di Bordo (Note)</Label>
+                    <div className="flex justify-between items-center mb-1.5">
+                        <Label className="text-xs text-gray-500">Diario di Bordo (Note)</Label>
+                        {!isReadOnly && (
+                            <div className="flex items-center gap-2">
+                                <Label htmlFor="share-switch" className="text-[10px] text-blue-600 cursor-pointer">Visibile all'Ospite?</Label>
+                                <Switch 
+                                    id="share-switch" 
+                                    checked={ticket.share_notes} 
+                                    onCheckedChange={async (checked) => {
+                                        await supabase.from('tickets').update({ share_notes: checked }).eq('id', ticket.id);
+                                        onUpdate(); 
+                                        toast({ title: checked ? "Note Pubbliche" : "Note Private", description: checked ? "L'ospite ora vede queste note." : "L'ospite non vede più queste note." });
+                                    }} 
+                                />
+                            </div>
+                        )}
+                    </div>
                     <Textarea 
                         placeholder="Es: Sopralluogo effettuato, in attesa del pezzo di ricambio..." 
                         value={notes} 
                         onChange={(e) => setNotes(e.target.value)}
-                        className="bg-white min-h-[80px]"
+                        className={`min-h-[80px] ${ticket.share_notes ? 'border-blue-300 bg-blue-50' : 'bg-white'}`}
                         disabled={isReadOnly}
                     />
+                    {ticket.share_notes && <p className="text-[10px] text-blue-600 mt-1 text-right">* Queste note sono visibili all'ospite nel suo portale.</p>}
                 </div>
 
                 {!isReadOnly && (
@@ -208,7 +222,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </div>
           </div>
 
-          {/* SEPARATORE VISIVO */}
           {!isReadOnly && <Separator className="my-4" />}
 
           {/* SEZIONE 2: CHIUSURA (Visibile solo se aperto) */}

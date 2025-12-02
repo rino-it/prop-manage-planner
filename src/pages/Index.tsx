@@ -10,7 +10,7 @@ import Properties from '@/components/Properties';
 import Revenue from '@/components/Revenue';
 import Expenses from '@/components/Expenses';
 import Activities from '@/components/Activities';
-import TenantManager from '@/components/TenantManager'; // <--- IMPORTATO
+import TenantManager from '@/components/TenantManager';
 import SuggestedPlan from '@/components/SuggestedPlan';
 
 const Index = () => {
@@ -31,7 +31,7 @@ const Index = () => {
       case 'properties': return <Properties />;
       case 'expenses': return <Expenses />;
       case 'activities': return <Activities />;
-      case 'tenants': return <TenantManager />; // <--- NUOVO CASO
+      case 'tenants': return <TenantManager />;
       case 'plan': return <SuggestedPlan />;
       default: return <Dashboard />;
     }
@@ -49,7 +49,9 @@ const Index = () => {
         
         {/* HEADER MOBILE */}
         <div className="md:hidden bg-white border-b p-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-          <span className="font-bold text-lg text-gray-900">PropManager</span>
+          {/* LOGO MOBILE */}
+          <img src="/logo.png" alt="PropManager" className="h-8 w-auto object-contain" />
+          
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon">

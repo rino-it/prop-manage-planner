@@ -8,7 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Wifi, MapPin, FileText, Upload, Send, CheckCircle, XCircle, Clock, Key, Star, Ticket, CreditCard } from 'lucide-react';
+import { Home, Wifi, MapPin, FileText, Upload, Send, CheckCircle, XCircle, Clock, Key, Star, Ticket, CreditCard, UserCog } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { jsPDF } from "jspdf";
@@ -226,7 +226,7 @@ export default function GuestPortal() {
           <TabsTrigger value="docs">Documenti</TabsTrigger>
         </TabsList>
 
-        {/* TAB SERVIZI (IL CUORE DELLA MODIFICA) */}
+        {/* TAB SERVIZI */}
         <TabsContent value="services" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
                 {services?.map(service => {
@@ -276,7 +276,7 @@ export default function GuestPortal() {
             </div>
         </TabsContent>
 
-        {/* ALTRI TAB (INVARIATI MA COMPATTI) */}
+        {/* TAB PAGAMENTI */}
         <TabsContent value="info">
           <Card>
             <CardHeader><CardTitle>Riepilogo Costi</CardTitle><CardDescription>Eventuali extra o tassa di soggiorno.</CardDescription></CardHeader>
@@ -292,6 +292,7 @@ export default function GuestPortal() {
           </Card>
         </TabsContent>
 
+        {/* TAB ASSISTENZA CON NOTE CONDIVISE */}
         <TabsContent value="support" className="space-y-6">
            <Card>
                 <CardHeader><CardTitle>Hai bisogno di aiuto?</CardTitle><CardDescription>Segnala un guasto o fai una richiesta.</CardDescription></CardHeader>
@@ -304,14 +305,29 @@ export default function GuestPortal() {
             <div className="space-y-3">
                 <h3 className="font-bold text-gray-700">Le tue richieste</h3>
                 {myTickets?.map(t => (
-                    <div key={t.id} className="bg-white p-4 rounded-lg border flex justify-between items-center">
-                        <div><p className="font-medium">{t.titolo}</p><p className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM')}</p></div>
-                        <Badge variant={t.stato === 'risolto' ? 'default' : 'secondary'}>{t.stato}</Badge>
+                    <div key={t.id} className="bg-white p-4 rounded-lg border shadow-sm">
+                        <div className="flex justify-between items-center mb-2">
+                            <div><p className="font-medium text-gray-900">{t.titolo}</p><p className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM')}</p></div>
+                            <Badge variant={t.stato === 'risolto' ? 'default' : 'secondary'}>{t.stato}</Badge>
+                        </div>
+                        
+                        <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded mb-2">"{t.descrizione}"</p>
+
+                        {/* NOTE DAL MANAGER (VISIBILI SOLO SE CONDIVISE) */}
+                        {t.share_notes && t.admin_notes && (
+                            <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md">
+                                <p className="text-xs font-bold text-blue-700 mb-1 flex items-center">
+                                    <UserCog className="w-3 h-3 mr-1" /> Aggiornamento Staff:
+                                </p>
+                                <p className="text-sm text-blue-900">{t.admin_notes}</p>
+                            </div>
+                        )}
                     </div>
                 ))}
             </div>
         </TabsContent>
 
+        {/* TAB DOCUMENTI */}
         <TabsContent value="docs">
            <Card className="border-dashed border-2 mb-6 border-blue-200 bg-blue-50/50">
             <CardContent className="py-8 flex flex-col items-center text-center">
