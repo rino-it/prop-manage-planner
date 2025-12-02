@@ -32,6 +32,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [date, setDate] = useState<Date | undefined>(new Date());
   const [selectedColleague, setSelectedColleague] = useState<string>('');
   
+  // NUOVO STATO PER GESTIRE LO SWITCH VISIVAMENTE
+  const [isShared, setIsShared] = useState(ticket?.share_notes || false);
+  
   // STATI PER CHIUSURA
   const [recordCost, setRecordCost] = useState(false);
   const [costAmount, setCostAmount] = useState(ticket?.cost || '');
@@ -42,6 +45,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     setNotes(ticket?.admin_notes || '');
     setSupplier(ticket?.supplier || '');
     setCostAmount(ticket?.cost || '');
+    // Sincronizziamo lo stato visuale con i dati reali quando il ticket cambia
+    setIsShared(ticket?.share_notes || false);
   }, [ticket]);
 
   const { data: colleagues } = useQuery({
@@ -140,7 +145,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
         <div className="space-y-6 mt-4">
           
-          {/* SEZIONE 1: LAVORAZIONE (Abilitata solo se non risolto) */}
+          {/* SEZIONE 1: LAVORAZIONE */}
           <div className={`p-4 rounded-lg border ${isReadOnly ? 'bg-gray-50 border-gray-200 opacity-80' : 'bg-blue-50 border-blue-200'}`}>
             <Label className="text-blue-900 font-bold mb-3 flex items-center gap-2 uppercase text-xs tracking-wider">
               <Clock className="w-4 h-4" /> Lavorazione & Note Interne
@@ -162,7 +167,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         </div>
                     </div>
                     
-                    {/* DELEGA & CALENDARIO */}
                     {!isReadOnly && (
                     <div className="flex items-end gap-2">
                         <div className="flex-1">
@@ -192,24 +196,31 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                                 <Label htmlFor="share-switch" className="text-[10px] text-blue-600 cursor-pointer">Visibile all'Ospite?</Label>
                                 <Switch 
                                     id="share-switch" 
-                                    checked={ticket.share_notes} 
+                                    checked={isShared} // Usiamo lo stato locale istantaneo
                                     onCheckedChange={async (checked) => {
-                                        await supabase.from('tickets').update({ share_notes: checked }).eq('id', ticket.id);
-                                        onUpdate(); 
-                                        toast({ title: checked ? "Note Pubbliche" : "Note Private", description: checked ? "L'ospite ora vede queste note." : "L'ospite non vede più queste note." });
+                                        setIsShared(checked); // Feedback immediato
+                                        // Aggiornamento DB silenzioso o con toast leggero
+                                        const { error } = await supabase.from('tickets').update({ share_notes: checked }).eq('id', ticket.id);
+                                        if(error) {
+                                            setIsShared(!checked); // Revert se fallisce
+                                            toast({title: "Errore aggiornamento", variant: "destructive"});
+                                        } else {
+                                            onUpdate(); 
+                                            toast({ title: checked ? "Note Pubbliche" : "Note Private", duration: 2000 });
+                                        }
                                     }} 
                                 />
                             </div>
                         )}
                     </div>
                     <Textarea 
-                        placeholder="Es: Sopralluogo effettuato, in attesa del pezzo di ricambio..." 
+                        placeholder="Es: Sopralluogo effettuato..." 
                         value={notes} 
                         onChange={(e) => setNotes(e.target.value)}
-                        className={`min-h-[80px] ${ticket.share_notes ? 'border-blue-300 bg-blue-50' : 'bg-white'}`}
+                        className={`min-h-[80px] ${isShared ? 'border-blue-300 bg-blue-50' : 'bg-white'}`}
                         disabled={isReadOnly}
                     />
-                    {ticket.share_notes && <p className="text-[10px] text-blue-600 mt-1 text-right">* Queste note sono visibili all'ospite nel suo portale.</p>}
+                    {isShared && <p className="text-[10px] text-blue-600 mt-1 text-right">* Queste note sono visibili all'ospite nel suo portale.</p>}
                 </div>
 
                 {!isReadOnly && (
@@ -224,7 +235,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
           {!isReadOnly && <Separator className="my-4" />}
 
-          {/* SEZIONE 2: CHIUSURA (Visibile solo se aperto) */}
+          {/* SEZIONE 2: CHIUSURA */}
           {!isReadOnly ? (
           <div className="p-5 rounded-lg border border-green-200 bg-green-50/50 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
@@ -275,7 +286,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </div>
           </div>
           ) : (
-            // VIEW SOLA LETTURA CHIUSURA
             <div className="p-4 rounded-lg border bg-gray-50 border-gray-200">
                 <h4 className="font-bold text-sm text-gray-700 mb-2">Dettagli Chiusura</h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
@@ -290,7 +300,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 </div>
             </div>
           )}
-
         </div>
       </DialogContent>
     </Dialog>
