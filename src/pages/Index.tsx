@@ -24,7 +24,8 @@ const Index = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': return <Dashboard />;
+      // Passiamo la funzione setActiveTab alla Dashboard
+      case 'dashboard': return <Dashboard setActiveTab={handleTabChange} />;
       case 'bookings': return <Bookings />;
       case 'revenue': return <Revenue />;
       case 'services': return <Services />;
@@ -33,14 +34,14 @@ const Index = () => {
       case 'activities': return <Activities />;
       case 'tenants': return <TenantManager />;
       case 'plan': return <SuggestedPlan />;
-      default: return <Dashboard />;
+      default: return <Dashboard setActiveTab={handleTabChange} />;
     }
   };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* SIDEBAR DESKTOP */}
-      <div className="hidden md:block h-screen sticky top-0 border-r bg-white z-10">
+      <div className="hidden md:block h-screen sticky top-0 border-r bg-white z-10 shadow-sm">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
 
@@ -50,15 +51,19 @@ const Index = () => {
         {/* HEADER MOBILE */}
         <div className="md:hidden bg-white border-b p-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
           {/* LOGO MOBILE */}
-          <img src="/logo.png" alt="PropManager" className="h-8 w-auto object-contain" />
+          <div className="flex items-center gap-2">
+             <img src="/logo.png" alt="PropManager" className="h-8 w-auto object-contain" />
+          </div>
           
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <Menu className="h-6 w-6" />
+              {/* BOTTONE MENU MIGLIORATO */}
+              <Button variant="outline" size="sm" className="flex items-center gap-2 text-gray-700 border-gray-300 hover:bg-gray-50">
+                <Menu className="h-5 w-5" />
+                <span className="font-medium">MENU</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-64">
+            <SheetContent side="left" className="p-0 w-72">
               <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} onCloseMobile={() => setIsMobileOpen(false)} />
             </SheetContent>
           </Sheet>
