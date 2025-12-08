@@ -6,26 +6,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, Save, MessageSquare, Wrench, CreditCard, AlertCircle } from 'lucide-react';
-import { format, isBefore, startOfDay, addDays } from 'date-fns';
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, Save, AlertCircle, Wrench, CreditCard } from 'lucide-react';
+import { format, isBefore, addDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
 
-export default function Bookings() {
+// Props per gestire l'apertura automatica dalla Dashboard
+interface BookingsProps {
+  initialBookingId?: string | null;
+  onConsumeId?: () => void;
+}
+
+export default function Bookings({ initialBookingId, onConsumeId }: BookingsProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: properties } = usePropertiesReal();
   
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   
-  // STATO PER LA SCHEDA CLIENTE (ex reviewOpen)
+  // STATO PER LA SCHEDA CLIENTE (Sostituisce il vecchio dialog documenti)
   const [customerSheetOpen, setCustomerSheetOpen] = useState<any | null>(null);
   
   const [editingBooking, setEditingBooking] = useState<any>(null);
@@ -81,7 +87,19 @@ export default function Bookings() {
       enabled: !!customerSheetOpen
   });
 
-  // --- LOGICA ---
+  // --- LOGICA AUTOMATICA (SMART NAV) ---
+  React.useEffect(() => {
+    if (initialBookingId && bookings && bookings.length > 0) {
+      const targetBooking = bookings.find(b => b.id === initialBookingId);
+      if (targetBooking) {
+        setCustomerSheetOpen(targetBooking); // APRE LA SCHEDA!
+        if (onConsumeId) onConsumeId(); // Resetta l'ID per evitare riaperture infinite
+      }
+    }
+  }, [initialBookingId, bookings, onConsumeId]);
+
+
+  // --- MUTATIONS ---
 
   const createBooking = useMutation({
     mutationFn: async (newBooking: any) => {
@@ -121,7 +139,8 @@ export default function Bookings() {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
       setDeleteId(null);
       toast({ title: 'Prenotazione eliminata', variant: "destructive" });
-    }
+    },
+    onError: (err: any) => toast({ title: "Errore eliminazione", description: err.message, variant: "destructive" })
   });
 
   const updateBooking = useMutation({
@@ -151,6 +170,13 @@ export default function Bookings() {
   };
 
   const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
+
+  const getOccupiedDates = (propertyId: string, excludeBookingId?: string) => {
+    if (!bookings || !propertyId) return [];
+    return bookings
+      .filter(b => b.property_id === propertyId && b.id !== excludeBookingId)
+      .map(b => ({ from: new Date(b.data_inizio), to: new Date(b.data_fine) }));
+  };
 
   return (
     <div className="space-y-6">
@@ -192,14 +218,18 @@ export default function Bookings() {
                         <Label>Check-in / Inizio</Label>
                         <Popover>
                             <PopoverTrigger asChild><Button variant={"outline"}>{formData.data_inizio ? format(formData.data_inizio, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger>
-                            <PopoverContent className="p-0"><Calendar mode="single" selected={formData.data_inizio} onSelect={(d) => setFormData({...formData, data_inizio: d})} /></PopoverContent>
+                            <PopoverContent className="p-0">
+                                <Calendar mode="single" selected={formData.data_inizio} onSelect={(d) => setFormData({...formData, data_inizio: d})} disabled={[...getOccupiedDates(formData.property_id), { before: new Date() }]} />
+                            </PopoverContent>
                         </Popover>
                     </div>
                     <div className="grid gap-2">
                         <Label>Check-out / Fine</Label>
                         <Popover>
                             <PopoverTrigger asChild><Button variant={"outline"}>{formData.data_fine ? format(formData.data_fine, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger>
-                            <PopoverContent className="p-0"><Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} /></PopoverContent>
+                            <PopoverContent className="p-0">
+                                <Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} disabled={[...getOccupiedDates(formData.property_id), { before: formData.data_inizio || new Date() }]} />
+                            </PopoverContent>
                         </Popover>
                     </div>
                 </div>
@@ -208,26 +238,26 @@ export default function Bookings() {
         </DialogContent>
       </Dialog>
 
-      {/* --- SCHEDA CLIENTE COMPLETA (Nuova Versione "Doc") --- */}
+      {/* --- SCHEDA CLIENTE COMPLETA (Il Cuore della gestione) --- */}
       <Dialog open={!!customerSheetOpen} onOpenChange={(open) => !open && setCustomerSheetOpen(null)}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0 overflow-hidden">
+        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden">
             
             {/* HEADER SCHEDA */}
             <div className="p-6 border-b bg-slate-50 flex justify-between items-start">
                 <div className="flex gap-4 items-center">
-                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 border border-blue-200">
                         <User className="w-6 h-6" />
                     </div>
                     <div>
                         <DialogTitle className="text-xl font-bold text-gray-900">{customerSheetOpen?.nome_ospite}</DialogTitle>
-                        <p className="text-sm text-gray-500 flex items-center gap-2">
-                            <span className="font-semibold text-blue-600">{customerSheetOpen?.properties_real?.nome}</span> 
-                            • 
+                        <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
+                            <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{customerSheetOpen?.properties_real?.nome}</span> 
+                            <span className="text-xs text-gray-400">|</span>
                             <span className="capitalize">{customerSheetOpen?.tipo_affitto} Termine</span>
                         </p>
                     </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)}>
+                <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200">
                     <Copy className="w-4 h-4 mr-2" /> Link Portale
                 </Button>
             </div>
@@ -235,8 +265,8 @@ export default function Bookings() {
             {/* TAB CONTENT */}
             <div className="flex-1 overflow-hidden flex flex-col">
                 <Tabs defaultValue="overview" className="flex-1 flex flex-col">
-                    <div className="px-6 pt-4 border-b">
-                        <TabsList className="grid w-full grid-cols-4 lg:w-[400px]">
+                    <div className="px-6 pt-4 border-b bg-white">
+                        <TabsList className="grid w-full grid-cols-4 lg:w-[480px]">
                             <TabsTrigger value="overview">Panoramica</TabsTrigger>
                             <TabsTrigger value="docs">Documenti</TabsTrigger>
                             <TabsTrigger value="tickets">Ticket</TabsTrigger>
@@ -244,113 +274,126 @@ export default function Bookings() {
                         </TabsList>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 bg-white">
+                    <div className="flex-1 overflow-y-auto p-6 bg-white/50">
                         
                         {/* 1. PANORAMICA */}
-                        <TabsContent value="overview" className="mt-0 space-y-6">
-                            <div className="grid grid-cols-2 gap-4">
-                                <Card className="bg-slate-50 border-slate-200">
-                                    <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium">Periodo Soggiorno</CardTitle></CardHeader>
+                        <TabsContent value="overview" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <Card className="bg-white border-slate-200 shadow-sm">
+                                    <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Soggiorno</CardTitle></CardHeader>
                                     <CardContent>
-                                        <div className="flex items-center gap-2">
-                                            <CalendarIcon className="w-4 h-4 text-blue-600"/>
+                                        <div className="flex items-center gap-3 text-lg">
+                                            <CalendarIcon className="w-5 h-5 text-blue-600"/>
                                             <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
-                                            <span>→</span>
+                                            <span className="text-gray-300">→</span>
                                             <span className="font-bold">{format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}</span>
                                         </div>
                                     </CardContent>
                                 </Card>
-                                <Card className="bg-slate-50 border-slate-200">
-                                    <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium">Contatti</CardTitle></CardHeader>
-                                    <CardContent>
-                                        <p className="text-sm">📧 {customerSheetOpen?.email_ospite || 'Nessuna email'}</p>
-                                        <p className="text-sm">📱 {customerSheetOpen?.telefono_ospite || 'Nessun telefono'}</p>
+                                <Card className="bg-white border-slate-200 shadow-sm">
+                                    <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Contatti</CardTitle></CardHeader>
+                                    <CardContent className="space-y-1">
+                                        <p className="text-sm flex items-center gap-2"><span className="text-gray-400">✉️</span> {customerSheetOpen?.email_ospite || 'Nessuna email'}</p>
+                                        <p className="text-sm flex items-center gap-2"><span className="text-gray-400">📞</span> {customerSheetOpen?.telefono_ospite || 'Nessun telefono'}</p>
                                     </CardContent>
                                 </Card>
                             </div>
                             
-                            {/* Alert Scadenze (Esempio) */}
                             {isBefore(new Date(customerSheetOpen?.data_fine), addDays(new Date(), 7)) && (
-                                <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg flex items-start gap-3">
+                                <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg flex items-start gap-3 shadow-sm">
                                     <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
                                     <div>
                                         <h4 className="font-bold text-orange-800">In Scadenza</h4>
-                                        <p className="text-sm text-orange-700">Il contratto scade tra meno di 7 giorni. Verificare checkout.</p>
+                                        <p className="text-sm text-orange-700">Il contratto scade tra meno di 7 giorni. Assicurati di aver programmato il check-out.</p>
                                     </div>
                                 </div>
                             )}
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 text-center">
+                                    <h3 className="text-2xl font-bold text-blue-700">{activeTickets?.filter(t => t.stato !== 'risolto').length || 0}</h3>
+                                    <p className="text-xs text-blue-600 uppercase font-semibold">Ticket Aperti</p>
+                                </div>
+                                <div className="p-4 bg-red-50 rounded-lg border border-red-100 text-center">
+                                    <h3 className="text-2xl font-bold text-red-700">€{activePayments?.filter(p => p.stato === 'da_pagare').reduce((acc, c) => acc + Number(c.importo), 0) || 0}</h3>
+                                    <p className="text-xs text-red-600 uppercase font-semibold">Da Saldare</p>
+                                </div>
+                            </div>
                         </TabsContent>
 
                         {/* 2. DOCUMENTI */}
-                        <TabsContent value="docs" className="mt-0">
+                        <TabsContent value="docs" className="mt-0 animate-in fade-in slide-in-from-bottom-2">
                             <div className="space-y-3">
                                 {activeDocs?.map(doc => (
-                                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50">
+                                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
                                         <div className="flex items-center gap-3">
-                                            <FileText className="w-5 h-5 text-blue-500" />
+                                            <div className="p-2 bg-slate-100 rounded text-slate-500"><FileText className="w-5 h-5" /></div>
                                             <div>
-                                                <p className="font-medium text-sm">{doc.filename}</p>
+                                                <p className="font-medium text-sm text-gray-900">{doc.filename}</p>
                                                 <p className="text-xs text-gray-500">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
                                             </div>
                                         </div>
                                         <div className="flex items-center gap-2">
-                                            <Button variant="ghost" size="sm" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4" /></Button>
+                                            <Button variant="ghost" size="sm" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
                                             {doc.status === 'in_revisione' ? (
-                                                <>
-                                                    <Button size="icon" className="h-7 w-7 bg-green-600" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })}><Check className="w-4 h-4" /></Button>
-                                                    <Button size="icon" className="h-7 w-7 bg-red-600" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'rifiutato' })}><X className="w-4 h-4" /></Button>
-                                                </>
+                                                <div className="flex gap-1">
+                                                    <Button size="icon" className="h-7 w-7 bg-green-600 hover:bg-green-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })} title="Approva"><Check className="w-4 h-4" /></Button>
+                                                    <Button size="icon" className="h-7 w-7 bg-red-600 hover:bg-red-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'rifiutato' })} title="Rifiuta"><X className="w-4 h-4" /></Button>
+                                                </div>
                                             ) : (
-                                                <Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'}>{doc.status}</Badge>
+                                                <Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'} className="capitalize">{doc.status}</Badge>
                                             )}
                                         </div>
                                     </div>
                                 ))}
-                                {activeDocs?.length === 0 && <p className="text-center text-gray-400 py-10">Nessun documento caricato.</p>}
+                                {activeDocs?.length === 0 && <div className="text-center text-gray-400 py-12 bg-slate-50 rounded-lg border border-dashed"><FileText className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun documento caricato dal cliente.</p></div>}
                             </div>
                         </TabsContent>
 
                         {/* 3. TICKET */}
-                        <TabsContent value="tickets" className="mt-0">
+                        <TabsContent value="tickets" className="mt-0 animate-in fade-in slide-in-from-bottom-2">
                             <div className="space-y-3">
                                 {activeTickets?.map(ticket => (
-                                    <div key={ticket.id} className="p-3 border rounded-lg bg-slate-50">
-                                        <div className="flex justify-between items-start mb-1">
-                                            <h4 className="font-bold text-sm">{ticket.titolo}</h4>
-                                            <Badge variant={ticket.stato === 'risolto' ? 'default' : 'destructive'}>{ticket.stato}</Badge>
+                                    <div key={ticket.id} className="p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h4 className="font-bold text-gray-900 flex items-center gap-2">
+                                                {ticket.priorita === 'alta' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                                                {ticket.titolo}
+                                            </h4>
+                                            <Badge variant={ticket.stato === 'risolto' ? 'secondary' : 'destructive'} className="uppercase text-[10px] tracking-wider">{ticket.stato}</Badge>
                                         </div>
-                                        <p className="text-xs text-gray-600 mb-2">{ticket.descrizione}</p>
-                                        <div className="flex items-center justify-between text-xs text-gray-400">
-                                            <span>{format(new Date(ticket.created_at), 'dd MMM yyyy')}</span>
-                                            {ticket.priorita === 'alta' && <span className="text-red-500 font-bold flex items-center gap-1"><AlertCircle className="w-3 h-3"/> Urgente</span>}
+                                        <p className="text-sm text-gray-600 mb-3 bg-slate-50 p-2 rounded border border-slate-100">"{ticket.descrizione}"</p>
+                                        <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
+                                            <span className="flex items-center gap-1"><CalendarIcon className="w-3 h-3"/> {format(new Date(ticket.created_at), 'dd MMM yyyy')}</span>
+                                            {ticket.creato_da === 'ospite' && <span className="flex items-center gap-1 text-blue-500 font-medium"><MessageSquare className="w-3 h-3"/> Creato da Ospite</span>}
                                         </div>
                                     </div>
                                 ))}
-                                {activeTickets?.length === 0 && <div className="text-center py-10 text-gray-400 flex flex-col items-center"><Wrench className="w-8 h-8 mb-2 opacity-20"/><p>Nessun ticket aperto.</p></div>}
+                                {activeTickets?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><Wrench className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessuna segnalazione guasti.</p></div>}
                             </div>
                         </TabsContent>
 
                         {/* 4. PAGAMENTI */}
-                        <TabsContent value="payments" className="mt-0">
+                        <TabsContent value="payments" className="mt-0 animate-in fade-in slide-in-from-bottom-2">
                             <div className="space-y-3">
                                 {activePayments?.map(pay => (
-                                    <div key={pay.id} className="flex justify-between items-center p-3 border rounded-lg hover:bg-slate-50">
-                                        <div className="flex items-center gap-3">
+                                    <div key={pay.id} className="flex justify-between items-center p-4 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
+                                        <div className="flex items-center gap-4">
                                             <div className={`p-2 rounded-full ${pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                <CreditCard className="w-4 h-4" />
+                                                <CreditCard className="w-5 h-5" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-sm capitalize">{pay.tipo?.replace('_', ' ') || 'Rata'}</p>
-                                                <p className="text-xs text-gray-500">Scadenza: {format(new Date(pay.data_scadenza), 'dd/MM/yyyy')}</p>
+                                                <p className="font-bold text-gray-900 capitalize">{pay.tipo?.replace('_', ' ') || 'Rata'}</p>
+                                                <p className="text-xs text-gray-500 font-medium">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-bold">€{pay.importo}</p>
-                                            <Badge variant="outline" className="text-xs">{pay.stato}</Badge>
+                                            <p className="font-bold text-lg text-slate-800">€ {pay.importo}</p>
+                                            <Badge variant="outline" className={pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'}>{pay.stato.toUpperCase()}</Badge>
                                         </div>
                                     </div>
                                 ))}
-                                {activePayments?.length === 0 && <p className="text-center text-gray-400 py-10">Nessun pagamento registrato.</p>}
+                                {activePayments?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun movimento contabile registrato.</p></div>}
                             </div>
                         </TabsContent>
 
@@ -359,9 +402,8 @@ export default function Bookings() {
             </div>
             
             {/* FOOTER ACTIONS */}
-            <div className="p-4 border-t bg-gray-50 flex justify-end gap-2">
-                <Button variant="ghost" onClick={() => setCustomerSheetOpen(null)}>Chiudi</Button>
-                {/* Qui potresti aggiungere azioni rapide globali */}
+            <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setCustomerSheetOpen(null)}>Chiudi Scheda</Button>
             </div>
         </DialogContent>
       </Dialog>
@@ -370,11 +412,11 @@ export default function Bookings() {
       {editingBooking && (
         <Dialog open={!!editingBooking} onOpenChange={(open) => !open && setEditingBooking(null)}>
             <DialogContent className="sm:max-w-[400px]">
-                <DialogHeader><DialogTitle>Modifica Rapida</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Modifica Contatto</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-4">
                      <div className="grid gap-2"><Label>Email</Label><Input value={editingBooking.email_ospite || ''} onChange={e => setEditingBooking({...editingBooking, email_ospite: e.target.value})} /></div>
                      <div className="grid gap-2"><Label>Telefono</Label><Input value={editingBooking.telefono_ospite || ''} onChange={e => setEditingBooking({...editingBooking, telefono_ospite: e.target.value})} /></div>
-                     <Button onClick={() => updateBooking.mutate(editingBooking)} className="w-full">Salva</Button>
+                     <Button onClick={() => updateBooking.mutate(editingBooking)} className="w-full">Salva Modifiche</Button>
                 </div>
             </DialogContent>
         </Dialog>
@@ -407,7 +449,7 @@ export default function Bookings() {
                                 <Copy className="w-3 h-3 mr-2" /> Link
                             </Button>
                             {/* NUOVO BOTTONE SCHEDA CLIENTE */}
-                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs shadow-sm" onClick={() => setCustomerSheetOpen(booking)}>
+                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs shadow-sm text-white" onClick={() => setCustomerSheetOpen(booking)}>
                                 <User className="w-3 h-3 mr-2" /> Scheda Cliente
                             </Button>
                         </div>
