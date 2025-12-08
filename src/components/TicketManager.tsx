@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { format } from 'date-fns';
-import { Calendar as CalendarIcon, MessageCircle, CheckCircle, Save, UserCog, Send, Clock, Share2, Euro, Hammer, AlertTriangle } from 'lucide-react';
+import { Calendar as CalendarIcon, MessageCircle, CheckCircle, Save, UserCog, Send, Clock, Hammer, Euro } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 
@@ -30,12 +30,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
   const [date, setDate] = useState<Date | undefined>(new Date());
-  const [selectedColleague, setSelectedColleague] = useState<string>('');
   
-  // NUOVO STATO PER GESTIRE LO SWITCH VISIVAMENTE
+  // Qui salviamo l'ID del socio, non il telefono (più sicuro)
+  const [selectedColleagueId, setSelectedColleagueId] = useState<string>('');
+  
   const [isShared, setIsShared] = useState(ticket?.share_notes || false);
   
-  // STATI PER CHIUSURA
   const [recordCost, setRecordCost] = useState(false);
   const [costAmount, setCostAmount] = useState(ticket?.cost || '');
   const [resolutionPhoto, setResolutionPhoto] = useState<File | null>(null);
@@ -45,7 +45,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     setNotes(ticket?.admin_notes || '');
     setSupplier(ticket?.supplier || '');
     setCostAmount(ticket?.cost || '');
-    // Sincronizziamo lo stato visuale con i dati reali quando il ticket cambia
     setIsShared(ticket?.share_notes || false);
   }, [ticket]);
 
@@ -68,7 +67,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
     if (error) toast({ title: "Errore", variant: "destructive" });
     else {
-      toast({ title: "Note Salvate", description: "Aggiornamento registrato (Ticket ancora aperto)." });
+      toast({ title: "Note Salvate", description: "Aggiornamento registrato." });
       onUpdate();
     }
   };
@@ -114,9 +113,18 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   // COMUNICAZIONE
   const sendToColleague = () => {
-    if (!selectedColleague) return;
+    if (!selectedColleagueId) return;
+
+    // Troviamo il socio selezionato dalla lista
+    const colleague = colleagues?.find(c => c.id === selectedColleagueId);
+    
+    if (!colleague?.phone) {
+        alert(`Attenzione: ${colleague?.first_name || colleague?.email} non ha un numero di telefono salvato nel profilo.`);
+        return;
+    }
+
     const msg = `Ciao, ti delego questo ticket.\n\n🎫 *TICKET:* ${ticket.titolo}\n🛠️ *FORNITORE:* ${supplier || 'Non assegnato'}\n📌 *NOTE:* ${notes}\n🗓️ *SCADENZA:* ${date ? format(date, 'dd/MM/yyyy') : 'Da definire'}`;
-    window.open(`https://wa.me/${selectedColleague}?text=${encodeURIComponent(msg)}`, '_blank');
+    window.open(`https://wa.me/${colleague.phone}?text=${encodeURIComponent(msg)}`, '_blank');
   };
 
   const addToCalendar = () => {
@@ -145,7 +153,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
         <div className="space-y-6 mt-4">
           
-          {/* SEZIONE 1: LAVORAZIONE */}
           <div className={`p-4 rounded-lg border ${isReadOnly ? 'bg-gray-50 border-gray-200 opacity-80' : 'bg-blue-50 border-blue-200'}`}>
             <Label className="text-blue-900 font-bold mb-3 flex items-center gap-2 uppercase text-xs tracking-wider">
               <Clock className="w-4 h-4" /> Lavorazione & Note Interne
@@ -177,11 +184,21 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                                     <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={date} onSelect={setDate} initialFocus /></PopoverContent>
                                 </Popover>
                                 <Button variant="outline" onClick={addToCalendar} title="Salva su Google Cal"><Save className="w-4 h-4" /></Button>
-                                <Select onValueChange={setSelectedColleague}>
+                                
+                                {/* SELECT CORRETTA */}
+                                <Select onValueChange={setSelectedColleagueId}>
                                     <SelectTrigger className="bg-white flex-1"><SelectValue placeholder="Socio..." /></SelectTrigger>
-                                    <SelectContent>{colleagues?.map((col) => (<SelectItem key={col.id} value={col.phone}>{col.first_name}</SelectItem>))}</SelectContent>
+                                    <SelectContent>
+                                        {colleagues?.map((col) => (
+                                            <SelectItem key={col.id} value={col.id}>
+                                                {/* Mostra nome se c'è, altrimenti email */}
+                                                {col.first_name ? `${col.first_name} ${col.last_name || ''}` : col.email}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
                                 </Select>
-                                <Button className="bg-green-600 hover:bg-green-700" onClick={sendToColleague} disabled={!selectedColleague}><Send className="w-4 h-4" /></Button>
+                                
+                                <Button className="bg-green-600 hover:bg-green-700" onClick={sendToColleague} disabled={!selectedColleagueId}><Send className="w-4 h-4" /></Button>
                              </div>
                         </div>
                     </div>
@@ -196,13 +213,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                                 <Label htmlFor="share-switch" className="text-[10px] text-blue-600 cursor-pointer">Visibile all'Ospite?</Label>
                                 <Switch 
                                     id="share-switch" 
-                                    checked={isShared} // Usiamo lo stato locale istantaneo
+                                    checked={isShared}
                                     onCheckedChange={async (checked) => {
-                                        setIsShared(checked); // Feedback immediato
-                                        // Aggiornamento DB silenzioso o con toast leggero
+                                        setIsShared(checked);
                                         const { error } = await supabase.from('tickets').update({ share_notes: checked }).eq('id', ticket.id);
                                         if(error) {
-                                            setIsShared(!checked); // Revert se fallisce
+                                            setIsShared(!checked);
                                             toast({title: "Errore aggiornamento", variant: "destructive"});
                                         } else {
                                             onUpdate(); 
@@ -235,7 +251,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
           {!isReadOnly && <Separator className="my-4" />}
 
-          {/* SEZIONE 2: CHIUSURA */}
           {!isReadOnly ? (
           <div className="p-5 rounded-lg border border-green-200 bg-green-50/50 relative overflow-hidden">
             <div className="absolute top-0 left-0 w-1 h-full bg-green-500"></div>

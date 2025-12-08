@@ -11,6 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock, Star, CreditCard, Ticket, ExternalLink, Image as ImageIcon, UserCog } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
+import { jsPDF } from "jspdf"; // <--- Importante: Importa la libreria PDF
 
 export default function TenantPortal() {
   const { id } = useParams();
@@ -105,8 +106,64 @@ export default function TenantPortal() {
       }
   });
 
-  const handleVoucherDownload = (serviceTitle: string) => {
-    alert(`[SIMULAZIONE PDF]\n\nSconto Inquilino: ${serviceTitle}\nPer: ${booking.nome_ospite}`);
+  // --- GENERAZIONE VOUCHER PDF REALE (CORRETTO) ---
+  const handleVoucherDownload = (serviceTitle: string, serviceId: string) => {
+    if (!booking?.data_fine) return;
+    
+    // Inizializza PDF (Landscape, mm, formato biglietto)
+    const doc = new jsPDF({
+      orientation: "landscape",
+      unit: "mm",
+      format: [210, 100]
+    });
+
+    // Colori
+    const primaryColor = "#16a34a"; // Green-600
+
+    // Bordo
+    doc.setLineWidth(2);
+    doc.setDrawColor(primaryColor);
+    doc.rect(5, 5, 200, 90); // Cornice esterna
+
+    // Intestazione
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(primaryColor);
+    doc.text("VOUCHER ESCLUSIVO", 105, 25, { align: "center" });
+
+    // Nome Servizio
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(28);
+    doc.setTextColor("#000000");
+    doc.text(serviceTitle.toUpperCase(), 105, 45, { align: "center" });
+
+    // Info Ospite (Sinistra)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(12);
+    doc.setTextColor("#555555");
+    doc.text(`Riservato a: ${booking.nome_ospite}`, 15, 65);
+    doc.text(`Struttura: ${booking.properties_real?.nome}`, 15, 72);
+
+    // Scadenza & ID (Destra - Anti Frode)
+    const expiryDate = format(new Date(booking.data_fine), 'dd/MM/yyyy');
+    const uniqueId = `${booking.id.slice(0,4).toUpperCase()}-${serviceId.slice(0,4).toUpperCase()}`;
+
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor("#dc2626"); // Rosso per scadenza
+    doc.text(`VALIDO FINO AL: ${expiryDate}`, 195, 65, { align: "right" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor("#9ca3af"); // Grigio per ID
+    doc.text(`ID UNIVOCO: ${uniqueId}`, 195, 72, { align: "right" });
+
+    // Disclaimer Footer
+    doc.setFontSize(8);
+    doc.setTextColor("#9ca3af");
+    doc.text("Mostra questo voucher al partner per ottenere l'agevolazione. Non cedibile.", 105, 88, { align: "center" });
+
+    // Scarica il file
+    doc.save(`Voucher_${serviceTitle.replace(/\s/g, '_')}.pdf`);
+    toast({ title: "Voucher Scaricato", description: "Mostralo al partner direttamente dal telefono." });
   };
 
   if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale...</div>;
@@ -165,7 +222,11 @@ export default function TenantPortal() {
                             </div>
                             <CardHeader className="pb-2"><CardTitle className="text-lg flex justify-between">{service.titolo} <span className="text-base font-bold">€ {service.prezzo}</span></CardTitle><CardDescription className="line-clamp-2">{service.descrizione}</CardDescription></CardHeader>
                             <CardFooter className="mt-auto pt-0">
-                                {isPremium ? <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold" onClick={() => window.open(service.payment_link, '_blank')}><CreditCard className="w-4 h-4 mr-2" /> Prenota</Button> : <Button variant="outline" className="w-full border-green-500 text-green-600" onClick={() => handleVoucherDownload(service.titolo)}><Ticket className="w-4 h-4 mr-2" /> Voucher</Button>}
+                                {isPremium ? (
+                                    <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold" onClick={() => window.open(service.payment_link, '_blank')}><CreditCard className="w-4 h-4 mr-2" /> Prenota</Button>
+                                ) : (
+                                    <Button variant="outline" className="w-full border-green-500 text-green-600" onClick={() => handleVoucherDownload(service.titolo, service.id)}><Ticket className="w-4 h-4 mr-2" /> Voucher</Button>
+                                )}
                             </CardFooter>
                         </Card>
                     );
