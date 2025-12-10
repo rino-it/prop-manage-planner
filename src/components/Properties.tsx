@@ -1,13 +1,15 @@
 import { AddPropertyDialog } from './AddPropertyDialog';
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label'; // Assicurati che questo import ci sia
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
@@ -26,6 +28,13 @@ const Properties = () => {
   const [docsOpen, setDocsOpen] = useState<any>(null); // ARCHIVIO DOCUMENTI IMMOBILE
   const [editOpen, setEditOpen] = useState<any>(null); // MODIFICA PROPRIETÀ
   
+  // --- STATI ELIMINAZIONE SICURA ---
+  const [deleteOpen, setDeleteOpen] = useState<any>(null); // PROPRIETÀ DA ELIMINARE
+  const [deleteConfirmText, setDeleteConfirmText] = useState(''); // TESTO DI CONFERMA UTENTE
+
+  // --- STATI FORM MODIFICA ---
+  const [editFormData, setEditFormData] = useState({ nome: '', indirizzo: '', citta: '' });
+  
   // --- STATI SCHEDA CLIENTE (DENTRO ANALYTICS) ---
   const [selectedTenant, setSelectedTenant] = useState<any>(null); // APRE IL DIALOG CLIENTE
   const [managingTicket, setManagingTicket] = useState<any>(null); // APRE TICKET MANAGER
@@ -35,6 +44,61 @@ const Properties = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+
+  // POPOLA IL FORM QUANDO SI APRE "MODIFICA"
+  useEffect(() => {
+    if (editOpen) {
+      setEditFormData({
+        nome: editOpen.nome || '',
+        indirizzo: editOpen.indirizzo || '',
+        citta: editOpen.citta || ''
+      });
+    }
+  }, [editOpen]);
+
+  // --- MUTATIONS PER PROPRIETÀ (Modifica & Elimina) ---
+
+  const updateProperty = useMutation({
+    mutationFn: async () => {
+      if (!editOpen) return;
+      const { error } = await supabase
+        .from('properties_real')
+        .update({
+          nome: editFormData.nome,
+          indirizzo: editFormData.indirizzo,
+          citta: editFormData.citta
+        })
+        .eq('id', editOpen.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
+      setEditOpen(null);
+      toast({ title: "Proprietà aggiornata", description: "Le modifiche sono state salvate." });
+    },
+    onError: () => toast({ title: "Errore aggiornamento", variant: "destructive" })
+  });
+
+  const deleteProperty = useMutation({
+    mutationFn: async () => {
+      if (!deleteOpen) return;
+      const { error } = await supabase
+        .from('properties_real')
+        .delete()
+        .eq('id', deleteOpen.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
+      setDeleteOpen(null);
+      setDeleteConfirmText('');
+      toast({ title: "Proprietà eliminata", description: "Tutti i dati associati sono stati rimossi." });
+    },
+    onError: (err:any) => toast({ title: "Errore eliminazione", description: err.message, variant: "destructive" })
+  });
+
 
   // 1. QUERY STORICO INQUILINI (Per Analytics)
   const { data: propertyHistory } = useQuery({
@@ -155,7 +219,15 @@ const Properties = () => {
                         <div className="p-2 bg-blue-100 text-blue-700 rounded-lg"><Home className="w-5 h-5" /></div>
                         <div><CardTitle className="text-lg">{prop.nome}</CardTitle><p className="text-xs text-gray-500 mt-1 flex items-center"><MapPin className="w-3 h-3 mr-1"/> {prop.citta}</p></div>
                     </div>
-                    <Button size="icon" variant="ghost" className="h-8 w-8" onClick={() => setEditOpen(prop)}><Pencil className="w-4 h-4 text-gray-500" /></Button>
+                    {/* BOTTONI AZIONE: MODIFICA & ELIMINA */}
+                    <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" className="h-8 w-8 hover:text-blue-600" onClick={() => setEditOpen(prop)}>
+                            <Pencil className="w-4 h-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" className="h-8 w-8 hover:text-red-600 hover:bg-red-50" onClick={() => { setDeleteOpen(prop); setDeleteConfirmText(''); }}>
+                            <Trash2 className="w-4 h-4" />
+                        </Button>
+                    </div>
                 </div>
             </CardHeader>
             <CardContent>
@@ -169,6 +241,72 @@ const Properties = () => {
             </Card>
         ))}
       </div>
+
+      {/* --- MODALE MODIFICA PROPRIETÀ (Nuovo) --- */}
+      <Dialog open={!!editOpen} onOpenChange={() => setEditOpen(null)}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>Modifica Profilo</DialogTitle>
+                <DialogDescription>Aggiorna i dati principali dell'immobile.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                    <Label>Nome Proprietà</Label>
+                    <Input value={editFormData.nome} onChange={e => setEditFormData({...editFormData, nome: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Indirizzo</Label>
+                    <Input value={editFormData.indirizzo} onChange={e => setEditFormData({...editFormData, indirizzo: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Città</Label>
+                    <Input value={editFormData.citta} onChange={e => setEditFormData({...editFormData, citta: e.target.value})} />
+                </div>
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setEditOpen(null)}>Annulla</Button>
+                <Button onClick={() => updateProperty.mutate()} className="bg-blue-600">Salva Modifiche</Button>
+            </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- ALERT ELIMINAZIONE SICURA (Nuovo) --- */}
+      <AlertDialog open={!!deleteOpen} onOpenChange={() => setDeleteOpen(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle className="text-red-600 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5"/> Eliminazione Definitiva
+                </AlertDialogTitle>
+                <AlertDialogDescription className="space-y-3">
+                    <p>Stai per eliminare <strong>{deleteOpen?.nome}</strong>. Questa azione è irreversibile e cancellerà:</p>
+                    <ul className="list-disc list-inside text-xs text-gray-500">
+                        <li>Tutte le prenotazioni passate e future</li>
+                        <li>Tutti i documenti nell'archivio</li>
+                        <li>Tutto lo storico spese e incassi</li>
+                    </ul>
+                    <div className="pt-2">
+                        <Label className="text-xs font-bold text-gray-700">Per confermare, scrivi il nome esatto della proprietà:</Label>
+                        <Input 
+                            className="mt-1 border-red-200 focus-visible:ring-red-500" 
+                            placeholder={deleteOpen?.nome}
+                            value={deleteConfirmText}
+                            onChange={(e) => setDeleteConfirmText(e.target.value)}
+                        />
+                    </div>
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                <Button 
+                    variant="destructive" 
+                    disabled={deleteConfirmText !== deleteOpen?.nome} 
+                    onClick={() => deleteProperty.mutate()}
+                >
+                    Elimina Definitivamente
+                </Button>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* --- 1. SIDEBAR ANALYTICS & STORICO --- */}
       <Sheet open={!!detailsOpen} onOpenChange={() => setDetailsOpen(null)}>
@@ -351,13 +489,6 @@ const Properties = () => {
             onUpdate={() => queryClient.invalidateQueries({ queryKey: ['tenant-details-full'] })}
             isReadOnly={managingTicket.stato === 'risolto'} 
         />
-      )}
-
-      {/* MODALE DI MODIFICA (Placeholder) */}
-      {editOpen && (
-        <Dialog open={!!editOpen} onOpenChange={() => setEditOpen(null)}>
-            <DialogContent><DialogHeader><DialogTitle>Modifica Proprietà</DialogTitle></DialogHeader><p>Funzionalità modifica in arrivo...</p></DialogContent>
-        </Dialog>
       )}
     </div>
   );
