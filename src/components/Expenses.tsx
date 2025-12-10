@@ -8,8 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-// AGGIUNTO: Pencil per l'icona modifica
-import { Plus, Trash2, FileText, Upload, Paperclip, Pencil } from 'lucide-react';
+import { Switch } from '@/components/ui/switch'; // IMPORTATO SWITCH
+import { Plus, Trash2, FileText, Upload, Paperclip, Pencil, User, Forward } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +23,7 @@ export default function Expenses() {
   // STATO PER LA MODIFICA
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // STATI FORM
   const [formData, setFormData] = useState({
     property_id: '',
     category: 'manutenzione',
@@ -30,6 +31,9 @@ export default function Expenses() {
     description: '',
     date: format(new Date(), 'yyyy-MM-dd')
   });
+
+  // NUOVO STATO: ADDEBITA ALL'INQUILINO
+  const [chargeTenant, setChargeTenant] = useState(false);
 
   const [attachment, setAttachment] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -45,7 +49,6 @@ export default function Expenses() {
     }
   });
 
-  // FUNZIONE PER APRIRE IL DIALOG IN MODALITÀ "NUOVA"
   const openNewExpense = () => {
     setEditingId(null);
     setFormData({ 
@@ -55,11 +58,11 @@ export default function Expenses() {
         description: '', 
         date: format(new Date(), 'yyyy-MM-dd') 
     });
+    setChargeTenant(false); // Reset flag
     setAttachment(null);
     setIsDialogOpen(true);
   };
 
-  // FUNZIONE PER APRIRE IL DIALOG IN MODALITÀ "MODIFICA"
   const openEditExpense = (expense: any) => {
     setEditingId(expense.id);
     setFormData({
@@ -69,14 +72,17 @@ export default function Expenses() {
         description: expense.description || '',
         date: format(new Date(expense.date), 'yyyy-MM-dd')
     });
-    setAttachment(null); // Reset allegato (se vuole cambiarlo lo ricarica)
+    setChargeTenant(expense.charged_to_tenant || false); // Carica stato flag
+    setAttachment(null);
     setIsDialogOpen(true);
   };
 
+  // --- LOGICA DI CREAZIONE (CON AUTOMATISMO INQUILINO) ---
   const createExpense = useMutation({
     mutationFn: async () => {
       setUploading(true);
       try {
+        // 1. Crea la Spesa (Uscita Proprietario)
         const { data: expenseData, error: expenseError } = await supabase
           .from('property_expenses')
           .insert({
@@ -84,13 +90,45 @@ export default function Expenses() {
             category: formData.category,
             amount: parseFloat(formData.amount),
             description: formData.description,
-            date: formData.date
+            date: formData.date,
+            charged_to_tenant: chargeTenant // Salviamo il flag
           })
           .select()
           .single();
 
         if (expenseError) throw expenseError;
 
+        // 2. SE FLAGGATO: Cerca inquilino attivo e crea addebito
+        if (chargeTenant && expenseData) {
+            // Trova la prenotazione attiva in quella data per quella casa
+            const { data: bookings } = await supabase
+                .from('bookings')
+                .select('id, nome_ospite')
+                .eq('property_id', formData.property_id)
+                .lte('data_inizio', formData.date) // Iniziata prima o oggi
+                .gte('data_fine', formData.date)   // Finisce oggi o dopo
+                .limit(1);
+
+            const activeBooking = bookings && bookings.length > 0 ? bookings[0] : null;
+
+            if (activeBooking) {
+                // Crea il pagamento per l'inquilino
+                const { error: payError } = await supabase.from('tenant_payments').insert({
+                    booking_id: activeBooking.id,
+                    importo: parseFloat(formData.amount),
+                    data_scadenza: formData.date, // Scade subito
+                    stato: 'da_pagare',
+                    tipo: mapCategoryToPaymentType(formData.category), // Mappa categoria
+                    description: `Addebito: ${formData.description}`
+                });
+                if (payError) throw payError;
+                toast({ title: "Addebito creato", description: `Spesa assegnata a ${activeBooking.nome_ospite}` });
+            } else {
+                toast({ title: "Attenzione", description: "Spesa salvata, ma nessun inquilino trovato in questa data per l'addebito.", variant: "warning" });
+            }
+        }
+
+        // 3. Gestione Allegato
         if (attachment && expenseData) {
             const fileExt = attachment.name.split('.').pop();
             const fileName = `expense_${expenseData.id}_${Date.now()}.${fileExt}`;
@@ -106,24 +144,23 @@ export default function Expenses() {
                 user_id: (await supabase.auth.getUser()).data.user?.id
             });
         }
-      } catch (error) { throw error; } finally { setUploading(false); }
+
+      } catch (error: any) { throw error; } finally { setUploading(false); }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       queryClient.invalidateQueries({ queryKey: ['property-docs'] });
       setIsDialogOpen(false);
-      toast({ title: "Spesa registrata" });
+      toast({ title: "Operazione completata" });
     },
-    onError: () => toast({ title: "Errore", variant: "destructive" })
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // MUTATION PER L'AGGIORNAMENTO
   const updateExpense = useMutation({
     mutationFn: async () => {
       if (!editingId) return;
       setUploading(true);
       try {
-        // 1. Aggiorna i dati della spesa
         const { error: updateError } = await supabase
           .from('property_expenses')
           .update({
@@ -131,13 +168,16 @@ export default function Expenses() {
             category: formData.category,
             amount: parseFloat(formData.amount),
             description: formData.description,
-            date: formData.date
+            date: formData.date,
+            charged_to_tenant: chargeTenant
           })
           .eq('id', editingId);
 
         if (updateError) throw updateError;
 
-        // 2. Se c'è un NUOVO allegato, caricalo e crea il documento
+        // Nota: Per semplicità, in modifica non ricreiamo il pagamento inquilino automaticamente per evitare duplicati.
+        // Se serve, andrebbe gestita la logica di aggiornamento anche del pagamento collegato.
+
         if (attachment) {
             const fileExt = attachment.name.split('.').pop();
             const fileName = `expense_${editingId}_${Date.now()}.${fileExt}`;
@@ -174,11 +214,15 @@ export default function Expenses() {
   });
 
   const handleSubmit = () => {
-      if (editingId) {
-          updateExpense.mutate();
-      } else {
-          createExpense.mutate();
-      }
+      if (editingId) updateExpense.mutate();
+      else createExpense.mutate();
+  };
+
+  // Helper per mappare categorie spese -> tipo pagamento inquilino
+  const mapCategoryToPaymentType = (cat: string) => {
+      if (cat === 'bollette') return 'bolletta_luce'; // o generico utenze
+      if (cat === 'condominio') return 'altro';
+      return 'altro';
   };
 
   return (
@@ -189,7 +233,6 @@ export default function Expenses() {
             <Plus className="w-4 h-4 mr-2" /> Registra Spesa
         </Button>
 
-        {/* DIALOG UNICO (CREATE / EDIT) */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -216,10 +259,21 @@ export default function Expenses() {
                   </SelectContent>
                 </Select>
               </div>
+              
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2"><Label>Importo (€)</Label><Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} /></div>
                 <div className="grid gap-2"><Label>Data</Label><Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} /></div>
               </div>
+
+              {/* NUOVO SWITCH ADDEBITO INQUILINO */}
+              <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
+                  <div className="space-y-0.5">
+                      <Label className="text-blue-900 font-bold flex items-center gap-2"><User className="w-4 h-4"/> A carico dell'inquilino?</Label>
+                      <p className="text-[10px] text-blue-700">Se attivo, creerà una richiesta di pagamento nel portale inquilino.</p>
+                  </div>
+                  <Switch checked={chargeTenant} onCheckedChange={setChargeTenant} />
+              </div>
+
               <div className="grid gap-2"><Label>Descrizione</Label><Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
               
               <div className="grid gap-2 border p-3 rounded-md bg-slate-50 border-dashed border-slate-300">
@@ -248,19 +302,16 @@ export default function Expenses() {
                 <TableRow key={ex.id}>
                   <TableCell>{format(new Date(ex.date), 'dd/MM/yyyy')}</TableCell>
                   <TableCell className="font-medium">{ex.properties_real?.nome}</TableCell>
-                  <TableCell className="capitalize"><span className="px-2 py-1 bg-slate-100 rounded text-xs">{ex.category}</span></TableCell>
+                  <TableCell className="capitalize">
+                      <span className="px-2 py-1 bg-slate-100 rounded text-xs block w-fit mb-1">{ex.category}</span>
+                      {ex.charged_to_tenant && <span className="text-[10px] text-blue-600 flex items-center gap-1 font-bold"><Forward className="w-3 h-3"/> Addebitato</span>}
+                  </TableCell>
                   <TableCell>{ex.description}</TableCell>
                   <TableCell className="font-bold text-red-600">- €{ex.amount}</TableCell>
                   <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        {/* TASTO MODIFICA */}
-                        <Button variant="ghost" size="icon" onClick={() => openEditExpense(ex)} className="hover:text-blue-600">
-                            <Pencil className="w-4 h-4" />
-                        </Button>
-                        {/* TASTO ELIMINA */}
-                        <Button variant="ghost" size="icon" onClick={() => { if(confirm("Eliminare questa spesa?")) deleteExpense.mutate(ex.id) }} className="hover:text-red-600">
-                            <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => openEditExpense(ex)} className="hover:text-blue-600"><Pencil className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => { if(confirm("Eliminare questa spesa?")) deleteExpense.mutate(ex.id) }} className="hover:text-red-600"><Trash2 className="w-4 h-4" /></Button>
                       </div>
                   </TableCell>
                 </TableRow>
