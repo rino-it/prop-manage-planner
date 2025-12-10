@@ -11,15 +11,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
-// FIX: Aggiunto MessageSquare per evitare il crash nella scheda cliente
-import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, Save, AlertCircle, Wrench, CreditCard, MessageSquare } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, Save, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog } from 'lucide-react';
 import { format, isBefore, addDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
+// IMPORTIAMO IL GESTORE TICKET
+import TicketManager from '@/components/TicketManager';
 
-// Props per gestire l'apertura automatica dalla Dashboard
 interface BookingsProps {
   initialBookingId?: string | null;
   onConsumeId?: () => void;
@@ -31,12 +31,12 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const { data: properties } = usePropertiesReal();
   
   const [newBookingOpen, setNewBookingOpen] = useState(false);
-  
-  // STATO PER LA SCHEDA CLIENTE (Sostituisce il vecchio dialog documenti)
   const [customerSheetOpen, setCustomerSheetOpen] = useState<any | null>(null);
-  
   const [editingBooking, setEditingBooking] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  // NUOVO STATO: TICKET MANAGER DALLA SCHEDA CLIENTE
+  const [managingTicket, setManagingTicket] = useState<any>(null);
 
   const [formData, setFormData] = useState({
     property_id: '', nome_ospite: '', email_ospite: '', telefono_ospite: '',
@@ -55,7 +55,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     }
   });
 
-  // 2. Documenti (Caricati su richiesta per la scheda cliente)
+  // 2. Documenti
   const { data: activeDocs } = useQuery({
     queryKey: ['booking-docs', customerSheetOpen?.id],
     queryFn: async () => {
@@ -66,7 +66,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     enabled: !!customerSheetOpen
   });
 
-  // 3. Ticket Cliente (Caricati su richiesta)
+  // 3. Ticket Cliente
   const { data: activeTickets } = useQuery({
       queryKey: ['booking-tickets', customerSheetOpen?.id],
       queryFn: async () => {
@@ -77,7 +77,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       enabled: !!customerSheetOpen
   });
 
-  // 4. Pagamenti Cliente (Caricati su richiesta)
+  // 4. Pagamenti Cliente
   const { data: activePayments } = useQuery({
       queryKey: ['booking-payments', customerSheetOpen?.id],
       queryFn: async () => {
@@ -88,13 +88,13 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       enabled: !!customerSheetOpen
   });
 
-  // --- LOGICA AUTOMATICA (SMART NAV) ---
+  // --- LOGICA AUTOMATICA ---
   React.useEffect(() => {
     if (initialBookingId && bookings && bookings.length > 0) {
       const targetBooking = bookings.find(b => b.id === initialBookingId);
       if (targetBooking) {
-        setCustomerSheetOpen(targetBooking); // APRE LA SCHEDA!
-        if (onConsumeId) onConsumeId(); // Resetta l'ID per evitare riaperture infinite
+        setCustomerSheetOpen(targetBooking); 
+        if (onConsumeId) onConsumeId();
       }
     }
   }, [initialBookingId, bookings, onConsumeId]);
@@ -239,11 +239,10 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         </DialogContent>
       </Dialog>
 
-      {/* --- SCHEDA CLIENTE COMPLETA (Il Cuore della gestione) --- */}
+      {/* --- SCHEDA CLIENTE COMPLETA --- */}
       <Dialog open={!!customerSheetOpen} onOpenChange={(open) => !open && setCustomerSheetOpen(null)}>
         <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden">
             
-            {/* HEADER SCHEDA */}
             <div className="p-6 border-b bg-slate-50 flex justify-between items-start">
                 <div className="flex gap-4 items-center">
                     <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 border border-blue-200">
@@ -263,7 +262,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 </Button>
             </div>
 
-            {/* TAB CONTENT */}
             <div className="flex-1 overflow-hidden flex flex-col">
                 <Tabs defaultValue="overview" className="flex-1 flex flex-col">
                     <div className="px-6 pt-4 border-b bg-white">
@@ -277,8 +275,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
                     <div className="flex-1 overflow-y-auto p-6 bg-white/50">
                         
-                        {/* 1. PANORAMICA */}
-                        <TabsContent value="overview" className="mt-0 space-y-6 animate-in fade-in slide-in-from-bottom-2">
+                        <TabsContent value="overview" className="mt-0 space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Card className="bg-white border-slate-200 shadow-sm">
                                     <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Soggiorno</CardTitle></CardHeader>
@@ -322,8 +319,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             </div>
                         </TabsContent>
 
-                        {/* 2. DOCUMENTI */}
-                        <TabsContent value="docs" className="mt-0 animate-in fade-in slide-in-from-bottom-2">
+                        <TabsContent value="docs" className="mt-0">
                             <div className="space-y-3">
                                 {activeDocs?.map(doc => (
                                     <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
@@ -351,8 +347,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             </div>
                         </TabsContent>
 
-                        {/* 3. TICKET */}
-                        <TabsContent value="tickets" className="mt-0 animate-in fade-in slide-in-from-bottom-2">
+                        {/* TICKET CON TASTO GESTISCI */}
+                        <TabsContent value="tickets" className="mt-0">
                             <div className="space-y-3">
                                 {activeTickets?.map(ticket => (
                                     <div key={ticket.id} className="p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
@@ -361,7 +357,13 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                                 {ticket.priorita === 'alta' && <AlertCircle className="w-4 h-4 text-red-500" />}
                                                 {ticket.titolo}
                                             </h4>
-                                            <Badge variant={ticket.stato === 'risolto' ? 'secondary' : 'destructive'} className="uppercase text-[10px] tracking-wider">{ticket.stato}</Badge>
+                                            {/* AGGIUNTO BOTTONE GESTISCI */}
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant={ticket.stato === 'risolto' ? 'secondary' : 'destructive'} className="uppercase text-[10px] tracking-wider">{ticket.stato}</Badge>
+                                                <Button size="sm" variant="ghost" className="h-6 text-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={() => setManagingTicket(ticket)}>
+                                                    <UserCog className="w-3 h-3 mr-1" /> Gestisci
+                                                </Button>
+                                            </div>
                                         </div>
                                         <p className="text-sm text-gray-600 mb-3 bg-slate-50 p-2 rounded border border-slate-100">"{ticket.descrizione}"</p>
                                         <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
@@ -374,8 +376,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             </div>
                         </TabsContent>
 
-                        {/* 4. PAGAMENTI */}
-                        <TabsContent value="payments" className="mt-0 animate-in fade-in slide-in-from-bottom-2">
+                        <TabsContent value="payments" className="mt-0">
                             <div className="space-y-3">
                                 {activePayments?.map(pay => (
                                     <div key={pay.id} className="flex justify-between items-center p-4 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
@@ -402,12 +403,25 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 </Tabs>
             </div>
             
-            {/* FOOTER ACTIONS */}
             <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setCustomerSheetOpen(null)}>Chiudi Scheda</Button>
             </div>
         </DialogContent>
       </Dialog>
+
+      {/* GESTORE TICKET MODALE */}
+      {managingTicket && (
+        <TicketManager 
+            ticket={managingTicket} 
+            isOpen={!!managingTicket} 
+            onClose={() => setManagingTicket(null)}
+            onUpdate={() => {
+                queryClient.invalidateQueries({ queryKey: ['booking-tickets'] }); // Ricarica la lista nella scheda cliente
+                queryClient.invalidateQueries({ queryKey: ['tickets'] }); // Ricarica anche la lista generale Attività
+            }}
+            isReadOnly={managingTicket.stato === 'risolto'} 
+        />
+      )}
 
       {/* DIALOG MODIFICA RAPIDA */}
       {editingBooking && (
@@ -423,7 +437,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         </Dialog>
       )}
 
-      {/* LISTA BOOKINGS CARDS */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {bookings?.map((booking) => {
             const isShort = booking.tipo_affitto === 'breve';
@@ -449,7 +462,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             <Button variant="outline" size="sm" onClick={() => copyLink(booking)} className="text-xs">
                                 <Copy className="w-3 h-3 mr-2" /> Link
                             </Button>
-                            {/* NUOVO BOTTONE SCHEDA CLIENTE */}
                             <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs shadow-sm text-white" onClick={() => setCustomerSheetOpen(booking)}>
                                 <User className="w-3 h-3 mr-2" /> Scheda Cliente
                             </Button>
