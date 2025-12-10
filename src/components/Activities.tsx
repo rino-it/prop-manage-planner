@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+// FIX: Aggiunto MessageSquare agli import
 import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -74,12 +75,12 @@ export default function Activities() {
     onError: () => toast({ title: "Errore", variant: "destructive" })
   });
 
-  // 3. RIAPRI TICKET (NUOVA FUNZIONE)
+  // 3. RIAPRI TICKET
   const reopenTicket = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('tickets')
-        .update({ stato: 'aperto', cost: null, resolution_photo_url: null }) // Reset opzionale dei dati di chiusura
+        .update({ stato: 'aperto', cost: null, resolution_photo_url: null }) 
         .eq('id', id);
       if (error) throw error;
     },
@@ -152,6 +153,7 @@ export default function Activities() {
                     </Badge>
                     {ticket.creato_da === 'ospite' && (
                       <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+                        {/* QUI SI USAVA L'ICONA CHE CAUSAVA IL CRASH */}
                         <MessageSquare className="w-3 h-3 mr-1" /> Ospite
                       </Badge>
                     )}
@@ -186,7 +188,6 @@ export default function Activities() {
                   </div>
                 </div>
                 
-                {/* AZIONI CONDIZIONALI */}
                 <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
                    {ticket.stato !== 'risolto' ? (
                       <Button 
@@ -225,7 +226,6 @@ export default function Activities() {
         ))}
       </div>
 
-      {/* INTEGRAZIONE TICKET MANAGER */}
       {ticketManagerOpen && (
         <TicketManager 
             ticket={ticketManagerOpen} 
@@ -234,7 +234,7 @@ export default function Activities() {
             onUpdate={() => {
                 queryClient.invalidateQueries({ queryKey: ['tickets'] }); 
             }}
-            isReadOnly={ticketManagerOpen.stato === 'risolto'} // Passiamo flag sola lettura
+            isReadOnly={ticketManagerOpen.stato === 'risolto'} 
         />
       )}
     </div>
