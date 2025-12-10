@@ -1,3 +1,4 @@
+// Force Update: Fixed MessageSquare Import
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// FIX: Aggiunto MessageSquare agli import
+// IMPORT CORRETTO QUI SOTTO
 import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -153,7 +154,6 @@ export default function Activities() {
                     </Badge>
                     {ticket.creato_da === 'ospite' && (
                       <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-                        {/* QUI SI USAVA L'ICONA CHE CAUSAVA IL CRASH */}
                         <MessageSquare className="w-3 h-3 mr-1" /> Ospite
                       </Badge>
                     )}
