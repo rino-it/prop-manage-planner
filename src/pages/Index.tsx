@@ -16,33 +16,17 @@ import SuggestedPlan from '@/components/SuggestedPlan';
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  
-  // NUOVO STATO: Memorizza l'ID della prenotazione da aprire automaticamente
-  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     setIsMobileOpen(false); 
   };
 
-  // NUOVA FUNZIONE: Navigazione Intelligente
-  const goToBookingDetail = (bookingId: string) => {
-    setSelectedBookingId(bookingId); // Salva l'ID
-    setActiveTab('bookings');        // Cambia pagina
-  };
-
   const renderContent = () => {
     switch (activeTab) {
-      case 'dashboard': 
-        return <Dashboard 
-                  setActiveTab={handleTabChange} 
-                  onNavigateToBooking={goToBookingDetail} // Passiamo la funzione
-                />;
-      case 'bookings': 
-        return <Bookings 
-                  initialBookingId={selectedBookingId} // Passiamo l'ID salvato
-                  onConsumeId={() => setSelectedBookingId(null)} // Puliamo l'ID dopo l'apertura
-                />;
+      // QUI LA MODIFICA: Passiamo la funzione setActiveTab alla Dashboard
+      case 'dashboard': return <Dashboard onNavigate={setActiveTab} />;
+      case 'bookings': return <Bookings />;
       case 'revenue': return <Revenue />;
       case 'services': return <Services />;
       case 'properties': return <Properties />;
@@ -50,34 +34,38 @@ const Index = () => {
       case 'activities': return <Activities />;
       case 'tenants': return <TenantManager />;
       case 'plan': return <SuggestedPlan />;
-      default: return <Dashboard setActiveTab={handleTabChange} />;
+      default: return <Dashboard onNavigate={setActiveTab} />;
     }
   };
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      <div className="hidden md:block h-screen sticky top-0 border-r bg-white z-10 shadow-sm">
+      {/* SIDEBAR DESKTOP */}
+      <div className="hidden md:block h-screen sticky top-0 border-r bg-white z-10">
         <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       </div>
 
+      {/* CONTENUTO PRINCIPALE */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+        
+        {/* HEADER MOBILE */}
         <div className="md:hidden bg-white border-b p-4 flex items-center justify-between sticky top-0 z-30 shadow-sm">
-          <div className="flex items-center gap-2">
-             <img src="/logo.png" alt="PropManager" className="h-8 w-auto object-contain" />
-          </div>
+          {/* LOGO MOBILE */}
+          <img src="/logo.png" alt="PropManager" className="h-8 w-auto object-contain" />
+          
           <Sheet open={isMobileOpen} onOpenChange={setIsMobileOpen}>
             <SheetTrigger asChild>
-              <Button variant="outline" size="sm" className="flex items-center gap-2 text-gray-700 border-gray-300 hover:bg-gray-50">
-                <Menu className="h-5 w-5" />
-                <span className="font-medium">MENU</span>
+              <Button variant="ghost" size="icon">
+                <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="p-0 w-72">
+            <SheetContent side="left" className="p-0 w-64">
               <Sidebar activeTab={activeTab} setActiveTab={handleTabChange} onCloseMobile={() => setIsMobileOpen(false)} />
             </SheetContent>
           </Sheet>
         </div>
 
+        {/* AREA DI LAVORO */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-6xl mx-auto">
             {renderContent()}
