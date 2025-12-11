@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock, Star, CreditCard, Ticket, UserCog, Mail, Phone, LogIn, ShieldCheck, IdCard, HeartPulse } from 'lucide-react';
+import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock, Star, CreditCard, Ticket, UserCog, Mail, Phone, LogIn, ShieldCheck, IdCard, HeartPulse, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -148,14 +148,21 @@ export default function TenantPortal() {
 
   if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale...</div>;
 
-  // --- LOGICA DEL "TENANT GATE" (CONTROLLI RIGOROSI) ---
+  // --- LOGICA DEL "TENANT GATE" ---
   const hasContacts = booking.email_ospite && booking.telefono_ospite;
   
-  // Controllo specifico dei nomi file per assicurarsi che ci siano entrambi
-  const hasIdCard = documents?.some(doc => doc.filename.includes("Carta d'Identità"));
-  const hasHealthCard = documents?.some(doc => doc.filename.includes("Tessera Sanitaria"));
-  const step2Completed = hasIdCard && hasHealthCard;
+  // Trova l'ULTIMO documento caricato per tipo (grazie all'ordinamento della query)
+  const idDoc = documents?.find(doc => doc.filename.includes("Carta d'Identità"));
+  const healthDoc = documents?.find(doc => doc.filename.includes("Tessera Sanitaria"));
 
+  // È valido se esiste E NON è rifiutato
+  const isIdValid = idDoc && idDoc.status !== 'rifiutato';
+  const isHealthValid = healthDoc && healthDoc.status !== 'rifiutato';
+  
+  // Lo step è completo solo se entrambi sono validi
+  const step2Completed = isIdValid && isHealthValid;
+
+  // L'accesso finale richiede che almeno uno sia approvato (o logica più stretta se vuoi)
   const isApproved = documents?.some(d => d.status === 'approvato');
 
   // ==========================================
@@ -189,48 +196,56 @@ export default function TenantPortal() {
             <Card className="w-full max-w-md shadow-lg border-t-4 border-t-purple-600 animate-in zoom-in-95 duration-300">
                 <CardHeader className="text-center">
                     <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><ShieldCheck className="w-8 h-8 text-purple-600" /></div>
-                    <CardTitle>Documenti Obbligatori</CardTitle>
-                    <CardDescription>Per completare la registrazione, carica i seguenti documenti.</CardDescription>
+                    <CardTitle>Identificazione</CardTitle>
+                    <CardDescription>Carica i documenti richiesti per completare la registrazione.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
                     
                     {/* BOX 1: CARTA D'IDENTITÀ */}
-                    <div className={`p-4 border rounded-lg transition-all ${hasIdCard ? 'bg-green-50 border-green-200' : 'bg-white border-dashed border-gray-300 hover:bg-gray-50'}`}>
+                    <div className={`p-4 border rounded-lg transition-all ${isIdValid ? 'bg-green-50 border-green-200' : idDoc?.status === 'rifiutato' ? 'bg-red-50 border-red-200' : 'bg-white border-dashed border-gray-300'}`}>
                         <div className="flex justify-between items-center mb-2">
                             <Label className="flex items-center gap-2 font-bold text-gray-700">
                                 <IdCard className="w-4 h-4 text-purple-600" /> Carta d'Identità
                             </Label>
-                            {hasIdCard ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : <Badge variant="outline" className="text-gray-500">Mancante</Badge>}
+                            {isIdValid ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : idDoc?.status === 'rifiutato' ? <Badge className="bg-red-100 text-red-700">Rifiutato</Badge> : <Badge variant="outline">Mancante</Badge>}
                         </div>
-                        {!hasIdCard && (
-                            <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-purple-50 text-purple-700 rounded-md text-xs font-medium hover:bg-purple-100 transition-colors">
-                                {uploading ? 'Caricamento...' : 'Seleziona File'}
-                                <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'id')} disabled={uploading} />
-                            </label>
+                        
+                        {/* Mostra bottone se MANCANTE o RIFIUTATO */}
+                        {(!isIdValid) && (
+                            <>
+                                {idDoc?.status === 'rifiutato' && <p className="text-xs text-red-600 mb-2 font-medium flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Documento non valido. Ricarica:</p>}
+                                <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-purple-50 text-purple-700 rounded-md text-xs font-medium hover:bg-purple-100 transition-colors">
+                                    {uploading ? 'Caricamento...' : 'Seleziona File'}
+                                    <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'id')} disabled={uploading} />
+                                </label>
+                            </>
                         )}
-                        {hasIdCard && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
+                        {isIdValid && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
                     </div>
 
                     {/* BOX 2: TESSERA SANITARIA */}
-                    <div className={`p-4 border rounded-lg transition-all ${hasHealthCard ? 'bg-green-50 border-green-200' : 'bg-white border-dashed border-gray-300 hover:bg-gray-50'}`}>
+                    <div className={`p-4 border rounded-lg transition-all ${isHealthValid ? 'bg-green-50 border-green-200' : healthDoc?.status === 'rifiutato' ? 'bg-red-50 border-red-200' : 'bg-white border-dashed border-gray-300'}`}>
                         <div className="flex justify-between items-center mb-2">
                             <Label className="flex items-center gap-2 font-bold text-gray-700">
                                 <HeartPulse className="w-4 h-4 text-red-500" /> Tessera Sanitaria
                             </Label>
-                            {hasHealthCard ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : <Badge variant="outline" className="text-gray-500">Mancante</Badge>}
+                            {isHealthValid ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : healthDoc?.status === 'rifiutato' ? <Badge className="bg-red-100 text-red-700">Rifiutato</Badge> : <Badge variant="outline">Mancante</Badge>}
                         </div>
-                        {!hasHealthCard && (
-                            <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-red-50 text-red-700 rounded-md text-xs font-medium hover:bg-red-100 transition-colors">
-                                {uploading ? 'Caricamento...' : 'Seleziona File'}
-                                <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'health')} disabled={uploading} />
-                            </label>
+
+                        {(!isHealthValid) && (
+                            <>
+                                {healthDoc?.status === 'rifiutato' && <p className="text-xs text-red-600 mb-2 font-medium flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Documento non valido. Ricarica:</p>}
+                                <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-red-50 text-red-700 rounded-md text-xs font-medium hover:bg-red-100 transition-colors">
+                                    {uploading ? 'Caricamento...' : 'Seleziona File'}
+                                    <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'health')} disabled={uploading} />
+                                </label>
+                            </>
                         )}
-                        {hasHealthCard && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
+                        {isHealthValid && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
                     </div>
 
                 </CardContent>
                 <CardFooter>
-                    {/* IL TASTO SI SBLOCCA SOLO SE ENTRAMBI SONO CARICATI */}
                     <Button 
                         className="w-full bg-purple-600 hover:bg-purple-700" 
                         onClick={() => window.location.reload()} 
