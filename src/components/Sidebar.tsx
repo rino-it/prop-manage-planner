@@ -23,7 +23,7 @@ export default function Sidebar({ activeTab, setActiveTab, onCloseMobile }: Side
     { id: 'properties', label: 'Proprietà', icon: FolderOpen, color: 'text-orange-600' },
     { id: 'activities', label: 'Attività', icon: Wrench, color: 'text-amber-600' },
     { id: 'services', label: 'Servizi', icon: FileText, color: 'text-pink-600' },
-    { id: 'team', label: 'Gestione Team', icon: Users, color: 'text-indigo-600' }, // NUOVA VOCE AGGIUNTA
+    { id: 'team', label: 'Gestione Team', icon: Users, color: 'text-indigo-600' }, // VOCE AGGIUNTA
     { id: 'plan', label: 'Piano Suggerito', icon: Settings, color: 'text-gray-600' },
   ];
 
