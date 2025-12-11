@@ -1,89 +1,86 @@
 import React from 'react';
+import { LayoutDashboard, CalendarDays, Wallet, Banknote, Wrench, Settings, LogOut, FileText, UserPlus, FolderOpen, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/hooks/useAuth';
-import { House, Settings, Calendar, TrendingUp, MapPin, LogOut, Users, Sparkles, DollarSign, ClipboardList } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface SidebarProps {
-  activeTab?: string;
-  setActiveTab?: (tab: string) => void;
+  activeTab: string;
+  setActiveTab: (tab: string) => void;
   onCloseMobile?: () => void;
 }
 
-const Sidebar = ({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) => {
-  const { user, signOut } = useAuth();
-  
+export default function Sidebar({ activeTab, setActiveTab, onCloseMobile }: SidebarProps) {
+  const { signOut } = useAuth();
+
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: House },
-    { id: 'bookings', label: 'Prenotazioni', icon: Calendar },
-    { id: 'tenants', label: 'Inquilini', icon: Users },
-    { id: 'revenue', label: 'Incassi', icon: DollarSign },
-    { id: 'expenses', label: 'Spese', icon: TrendingUp },
-    { id: 'services', label: 'Servizi Extra', icon: Sparkles },
-    { id: 'properties', label: 'Proprietà', icon: MapPin },
-    { id: 'activities', label: 'Attività', icon: ClipboardList },
-    { id: 'plan', label: 'Piano Suggerito', icon: Settings },
+    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, color: 'text-blue-600' },
+    { id: 'bookings', label: 'Prenotazioni', icon: CalendarDays, color: 'text-purple-600' },
+    { id: 'tenants', label: 'Inquilini', icon: UserPlus, color: 'text-cyan-600' },
+    { id: 'revenue', label: 'Incassi', icon: Wallet, color: 'text-green-600' },
+    { id: 'expenses', label: 'Spese', icon: Banknote, color: 'text-red-600' },
+    { id: 'properties', label: 'Proprietà', icon: FolderOpen, color: 'text-orange-600' },
+    { id: 'activities', label: 'Attività', icon: Wrench, color: 'text-amber-600' },
+    { id: 'services', label: 'Servizi', icon: FileText, color: 'text-pink-600' },
+    { id: 'team', label: 'Gestione Team', icon: Users, color: 'text-indigo-600' }, // NUOVA VOCE AGGIUNTA
+    { id: 'plan', label: 'Piano Suggerito', icon: Settings, color: 'text-gray-600' },
   ];
 
   const handleNavigation = (id: string) => {
-    if (setActiveTab) setActiveTab(id);
+    setActiveTab(id);
     if (onCloseMobile) onCloseMobile();
   };
 
   return (
-    <div className="w-full md:w-64 bg-white md:bg-card border-r border-border shadow-lg flex flex-col h-full">
-      
-      {/* HEADER LOGO (MODIFICATO) */}
-      <div className="p-6 border-b border-border flex justify-center items-center">
-        {/* Se il logo non carica, mostrerà il testo alternativo */}
-        <img 
-          src="/logo.png" 
-          alt="PropManager" 
-          className="h-12 w-auto object-contain" 
-        />
+    <div className="flex h-full flex-col bg-white border-r w-64">
+      {/* HEADER LOGO */}
+      <div className="p-6 flex items-center justify-center border-b">
+        <img src="/logo.png" alt="PropManager" className="h-10 w-auto object-contain" />
       </div>
-      
-      <nav className="mt-6 flex-1 overflow-y-auto">
-        {menuItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = activeTab === item.id;
-          return (
-            <button
-              key={item.id}
-              onClick={() => handleNavigation(item.id)}
-              className={cn(
-                "w-full flex items-center px-6 py-3 text-left transition-all duration-200",
-                isActive
-                  ? "bg-blue-50 text-blue-600 border-r-4 border-blue-600 font-medium"
-                  : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-              )}
-            >
-              <Icon className={cn("w-5 h-5 mr-3", isActive ? "text-blue-600" : "text-gray-400")} />
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
 
-      <div className="p-4 border-t border-border">
-        <div className="mb-4 px-2">
-            {user && (
-              <p className="text-xs text-muted-foreground truncate bg-gray-100 p-2 rounded text-center">
-                {user.email}
-              </p>
-            )}
-        </div>
-        <Button
-          variant="ghost"
-          onClick={signOut}
-          className="w-full justify-start text-red-500 hover:text-red-700 hover:bg-red-50"
+      {/* MENU SCROLLABILE */}
+      <ScrollArea className="flex-1 px-3 py-4">
+        <nav className="space-y-1">
+          {menuItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = activeTab === item.id;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNavigation(item.id)}
+                className={cn(
+                  "w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium rounded-lg transition-all duration-200 group",
+                  isActive 
+                    ? "bg-slate-100 text-slate-900 shadow-sm" 
+                    : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                )}
+              >
+                <div className={cn(
+                  "p-1.5 rounded-md transition-colors",
+                  isActive ? "bg-white shadow-sm" : "bg-slate-100 group-hover:bg-white"
+                )}>
+                  <Icon className={cn("h-4 w-4", item.color)} />
+                </div>
+                {item.label}
+              </button>
+            );
+          })}
+        </nav>
+      </ScrollArea>
+
+      {/* FOOTER USER */}
+      <div className="p-4 border-t bg-slate-50/50">
+        <Button 
+          variant="outline" 
+          className="w-full justify-start text-red-600 hover:text-red-700 hover:bg-red-50 border-red-100"
+          onClick={() => signOut()}
         >
-          <LogOut className="w-4 h-4 mr-2" />
-          Esci
+          <LogOut className="mr-2 h-4 w-4" />
+          Disconnettiti
         </Button>
       </div>
     </div>
   );
-};
-
-export default Sidebar;
+}

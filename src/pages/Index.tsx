@@ -12,6 +12,7 @@ import Expenses from '@/components/Expenses';
 import Activities from '@/components/Activities';
 import TenantManager from '@/components/TenantManager';
 import SuggestedPlan from '@/components/SuggestedPlan';
+import Team from '@/components/Team'; // IMPORTATO IL NUOVO COMPONENTE
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -24,7 +25,7 @@ const Index = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      // QUI LA MODIFICA: Passiamo la funzione setActiveTab alla Dashboard
+      // Passiamo onNavigate alla dashboard per correggere i link interni
       case 'dashboard': return <Dashboard onNavigate={setActiveTab} />;
       case 'bookings': return <Bookings />;
       case 'revenue': return <Revenue />;
@@ -33,6 +34,7 @@ const Index = () => {
       case 'expenses': return <Expenses />;
       case 'activities': return <Activities />;
       case 'tenants': return <TenantManager />;
+      case 'team': return <Team />; // CASO AGGIUNTO
       case 'plan': return <SuggestedPlan />;
       default: return <Dashboard onNavigate={setActiveTab} />;
     }
