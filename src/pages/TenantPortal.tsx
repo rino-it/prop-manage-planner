@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock, Star, CreditCard, Ticket, UserCog, Mail, Phone, LogIn, ShieldCheck, IdCard } from 'lucide-react';
+import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock, Star, CreditCard, Ticket, UserCog, Mail, Phone, LogIn, ShieldCheck, IdCard, HeartPulse } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -60,7 +60,7 @@ export default function TenantPortal() {
     },
     onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
-        toast({ title: "Contatti salvati", description: "Procedi con il caricamento documenti." });
+        toast({ title: "Contatti salvati", description: "Procedi con i documenti." });
     },
     onError: () => toast({ title: "Errore", variant: "destructive" })
   });
@@ -76,7 +76,7 @@ export default function TenantPortal() {
       const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
       if (upError) throw upError;
       
-      // Salviamo il documento con un nome riconoscibile se siamo nel gate
+      // Nomi specifici per riconoscere i documenti obbligatori
       const displayName = type === 'id' ? "Carta d'Identità" : type === 'health' ? "Tessera Sanitaria" : file.name;
 
       const { error: dbError } = await supabase.from('booking_documents').insert({
@@ -148,12 +148,15 @@ export default function TenantPortal() {
 
   if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale...</div>;
 
-  // --- LOGICA DEL "TENANT GATE" (Filtri di Accesso) ---
+  // --- LOGICA DEL "TENANT GATE" (CONTROLLI RIGOROSI) ---
   const hasContacts = booking.email_ospite && booking.telefono_ospite;
-  const hasDocs = documents && documents.length > 0;
-  // Per semplicità, consideriamo il secondo step superato se c'è almeno un documento. 
-  // Se vuoi essere rigido, puoi controllare che ce ne siano almeno 2.
-  const step2Completed = documents && documents.length >= 1; 
+  
+  // Controllo specifico dei nomi file per assicurarsi che ci siano entrambi
+  const hasIdCard = documents?.some(doc => doc.filename.includes("Carta d'Identità"));
+  const hasHealthCard = documents?.some(doc => doc.filename.includes("Tessera Sanitaria"));
+  const step2Completed = hasIdCard && hasHealthCard;
+
+  const isApproved = documents?.some(d => d.status === 'approvato');
 
   // ==========================================
   // STEP 1: INSERIMENTO CONTATTI
@@ -178,63 +181,62 @@ export default function TenantPortal() {
   }
 
   // ==========================================
-  // STEP 2: CARICAMENTO DOCUMENTI
+  // STEP 2: CARICAMENTO DOCUMENTI OBBLIGATORI
   // ==========================================
   if (!step2Completed) {
     return (
         <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
             <Card className="w-full max-w-md shadow-lg border-t-4 border-t-purple-600 animate-in zoom-in-95 duration-300">
                 <CardHeader className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><IdCard className="w-8 h-8 text-purple-600" /></div>
-                    <CardTitle>Identificazione</CardTitle>
-                    <CardDescription>Carica i documenti richiesti per completare la registrazione.</CardDescription>
+                    <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><ShieldCheck className="w-8 h-8 text-purple-600" /></div>
+                    <CardTitle>Documenti Obbligatori</CardTitle>
+                    <CardDescription>Per completare la registrazione, carica i seguenti documenti.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                    {/* Upload Carta Identità */}
-                    <div className="space-y-2">
-                        <Label className="text-sm font-medium text-gray-700">1. Carta d'Identità (Fronte/Retro)</Label>
-                        <label className={`cursor-pointer flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors ${uploading ? 'opacity-50' : ''}`}>
-                            <div className="text-center">
-                                <Upload className="mx-auto h-6 w-6 text-gray-400" />
-                                <span className="text-xs text-gray-500 mt-1 block">Carica File</span>
-                            </div>
-                            <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'id')} disabled={uploading} />
-                        </label>
-                    </div>
-
-                    {/* Upload Tessera Sanitaria */}
-                    <div className="space-y-2">
-                        <Label className="text-sm font-medium text-gray-700">2. Tessera Sanitaria</Label>
-                        <label className={`cursor-pointer flex items-center justify-center w-full h-24 border-2 border-dashed rounded-lg hover:bg-gray-50 transition-colors ${uploading ? 'opacity-50' : ''}`}>
-                            <div className="text-center">
-                                <Upload className="mx-auto h-6 w-6 text-gray-400" />
-                                <span className="text-xs text-gray-500 mt-1 block">Carica File</span>
-                            </div>
-                            <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'health')} disabled={uploading} />
-                        </label>
-                    </div>
-
-                    {/* Lista caricati */}
-                    {documents && documents.length > 0 && (
-                        <div className="bg-green-50 p-3 rounded-md border border-green-200">
-                            <p className="text-xs font-bold text-green-800 mb-2">Documenti caricati:</p>
-                            <ul className="space-y-1">
-                                {documents.map(d => (
-                                    <li key={d.id} className="text-xs flex items-center text-green-700">
-                                        <CheckCircle className="w-3 h-3 mr-2" /> {d.filename}
-                                    </li>
-                                ))}
-                            </ul>
+                    
+                    {/* BOX 1: CARTA D'IDENTITÀ */}
+                    <div className={`p-4 border rounded-lg transition-all ${hasIdCard ? 'bg-green-50 border-green-200' : 'bg-white border-dashed border-gray-300 hover:bg-gray-50'}`}>
+                        <div className="flex justify-between items-center mb-2">
+                            <Label className="flex items-center gap-2 font-bold text-gray-700">
+                                <IdCard className="w-4 h-4 text-purple-600" /> Carta d'Identità
+                            </Label>
+                            {hasIdCard ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : <Badge variant="outline" className="text-gray-500">Mancante</Badge>}
                         </div>
-                    )}
+                        {!hasIdCard && (
+                            <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-purple-50 text-purple-700 rounded-md text-xs font-medium hover:bg-purple-100 transition-colors">
+                                {uploading ? 'Caricamento...' : 'Seleziona File'}
+                                <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'id')} disabled={uploading} />
+                            </label>
+                        )}
+                        {hasIdCard && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
+                    </div>
+
+                    {/* BOX 2: TESSERA SANITARIA */}
+                    <div className={`p-4 border rounded-lg transition-all ${hasHealthCard ? 'bg-green-50 border-green-200' : 'bg-white border-dashed border-gray-300 hover:bg-gray-50'}`}>
+                        <div className="flex justify-between items-center mb-2">
+                            <Label className="flex items-center gap-2 font-bold text-gray-700">
+                                <HeartPulse className="w-4 h-4 text-red-500" /> Tessera Sanitaria
+                            </Label>
+                            {hasHealthCard ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : <Badge variant="outline" className="text-gray-500">Mancante</Badge>}
+                        </div>
+                        {!hasHealthCard && (
+                            <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-red-50 text-red-700 rounded-md text-xs font-medium hover:bg-red-100 transition-colors">
+                                {uploading ? 'Caricamento...' : 'Seleziona File'}
+                                <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'health')} disabled={uploading} />
+                            </label>
+                        )}
+                        {hasHealthCard && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
+                    </div>
+
                 </CardContent>
                 <CardFooter>
+                    {/* IL TASTO SI SBLOCCA SOLO SE ENTRAMBI SONO CARICATI */}
                     <Button 
                         className="w-full bg-purple-600 hover:bg-purple-700" 
-                        onClick={() => window.location.reload()} // Ricarica per aggiornare lo stato (o usa invalidateQueries se preferisci non ricaricare, ma qui il componente cambierà render)
-                        disabled={documents?.length === 0}
+                        onClick={() => window.location.reload()} 
+                        disabled={!step2Completed}
                     >
-                        <ShieldCheck className="w-4 h-4 mr-2" /> Accedi all'Area Personale
+                        {step2Completed ? "Completa Registrazione" : "Carica tutto per procedere"}
                     </Button>
                 </CardFooter>
             </Card>
@@ -243,7 +245,34 @@ export default function TenantPortal() {
   }
 
   // ==========================================
-  // STEP 3: DASHBOARD COMPLETA (Accesso Garantito)
+  // STEP 3: ATTESA APPROVAZIONE (Gate Finale)
+  // ==========================================
+  if (!isApproved) {
+    return (
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+            <Card className="w-full max-w-md shadow-lg border-t-4 border-t-yellow-500 animate-in zoom-in-95 duration-300">
+                <CardHeader className="text-center">
+                    <div className="mx-auto w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4"><Clock className="w-8 h-8 text-yellow-600" /></div>
+                    <CardTitle>Verifica in Corso</CardTitle>
+                    <CardDescription>Grazie! I tuoi documenti sono stati ricevuti.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-2 mb-4">
+                        <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border"><IdCard className="w-4 h-4 text-purple-600"/><span className="text-sm">Carta d'Identità</span><Badge className="ml-auto bg-yellow-100 text-yellow-700">Ok</Badge></div>
+                        <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border"><HeartPulse className="w-4 h-4 text-red-600"/><span className="text-sm">Tessera Sanitaria</span><Badge className="ml-auto bg-yellow-100 text-yellow-700">Ok</Badge></div>
+                    </div>
+                    <p className="text-xs text-center text-gray-500">
+                        Lo staff verificherà la documentazione a breve.<br/>
+                        Una volta approvati, avrai accesso completo a questa pagina.
+                    </p>
+                </CardContent>
+            </Card>
+        </div>
+    );
+  }
+
+  // ==========================================
+  // DASHBOARD COMPLETA (Accesso Garantito)
   // ==========================================
   const daPagare = payments?.filter(p => p.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
 
@@ -312,18 +341,12 @@ export default function TenantPortal() {
             <Card><CardHeader><CardTitle>Segnala Problema</CardTitle></CardHeader><CardContent className="space-y-4"><Input placeholder="Oggetto" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} /><Textarea placeholder="Descrizione..." value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} /><Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4 mr-2" /> Invia</Button></CardContent></Card>
             <div className="space-y-3">
                 {myTickets?.map(t => (
-                    <div key={t.id} className="bg-white p-4 rounded-lg border shadow-sm">
-                        <div className="flex justify-between items-center mb-2">
-                            <div><p className="font-medium text-gray-900">{t.titolo}</p><p className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM')}</p></div>
-                            <Badge variant={t.stato === 'risolto' ? 'default' : 'secondary'}>{t.stato}</Badge>
+                    <div key={t.id} className="bg-white p-4 rounded-lg border flex justify-between items-center">
+                        <div className="flex-1">
+                            <p className="font-medium">{t.titolo}</p>
+                            <p className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM')}</p>
                         </div>
-                        <p className="text-sm text-gray-600 bg-gray-50 p-2 rounded mb-2">"{t.descrizione}"</p>
-                        {t.share_notes && t.admin_notes && (
-                            <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md">
-                                <p className="text-xs font-bold text-blue-700 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1" /> Aggiornamento Staff:</p>
-                                <p className="text-sm text-blue-900">{t.admin_notes}</p>
-                            </div>
-                        )}
+                        <Badge>{t.stato}</Badge>
                     </div>
                 ))}
             </div>
