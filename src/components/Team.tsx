@@ -4,15 +4,16 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { CheckCircle, XCircle, Shield, User, Lock } from 'lucide-react';
+import { CheckCircle, XCircle, Shield, User, Lock, Crown } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
 export default function Team() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useAuth(); // Recuperiamo l'utente loggato
+  const { user } = useAuth(); 
 
   // 1. CARICA LISTA SOCI
   const { data: team, isLoading } = useQuery({
@@ -24,7 +25,7 @@ export default function Team() {
     }
   });
 
-  // 2. CAPISCI CHI SONO IO (IL MIO RUOLO)
+  // 2. CAPISCI IL TUO RUOLO
   const myProfile = team?.find(p => p.id === user?.id);
   const amIAdmin = myProfile?.role === 'admin';
 
@@ -36,9 +37,22 @@ export default function Team() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['team-list'] });
-      toast({ title: "Stato aggiornato", description: "Permessi modificati con successo." });
+      toast({ title: "Stato aggiornato" });
     },
-    onError: () => toast({ title: "Azione Negata", description: "Solo gli Admin possono modificare il team.", variant: "destructive" })
+    onError: () => toast({ title: "Errore", variant: "destructive" })
+  });
+
+  // Mutation: Cambia Ruolo (Promuovi/Retrocedi)
+  const changeRole = useMutation({
+    mutationFn: async ({ id, newRole }: { id: string, newRole: string }) => {
+      const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['team-list'] });
+      toast({ title: "Ruolo aggiornato", description: "I permessi sono cambiati immediatamente." });
+    },
+    onError: () => toast({ title: "Errore", variant: "destructive" })
   });
 
   if (isLoading) return <div className="p-8 text-center">Caricamento team...</div>;
@@ -49,23 +63,20 @@ export default function Team() {
         <div>
             <h1 className="text-3xl font-bold text-gray-900">Gestione Team</h1>
             <p className="text-gray-500">
-                {amIAdmin 
-                    ? "Hai i permessi di Amministratore. Puoi gestire gli accessi." 
-                    : "Visualizza i membri del team attivi."}
+                {amIAdmin ? "Gestisci accessi e ruoli dei collaboratori." : "Visualizza i membri del team."}
             </p>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {team?.map((member) => {
-            // Regola di Sicurezza Visiva:
-            // 1. Devi essere Admin per vedere i tasti.
-            // 2. Non puoi toccare un altro Admin (Protezione Suprema).
             const isTargetAdmin = member.role === 'admin';
-            const showActions = amIAdmin && !isTargetAdmin;
+            const isMe = member.id === user?.id;
+            // Puoi modificare solo se sei Admin E non stai toccando te stesso
+            const canEdit = amIAdmin && !isMe;
 
             return (
-              <Card key={member.id} className={`border-l-4 ${member.approved ? 'border-l-green-500' : 'border-l-yellow-500'} ${isTargetAdmin ? 'bg-slate-50' : ''}`}>
+              <Card key={member.id} className={`border-l-4 ${member.approved ? 'border-l-green-500' : 'border-l-yellow-500'} ${isTargetAdmin ? 'bg-purple-50/30' : ''}`}>
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
                     <div className="flex items-center gap-3">
@@ -78,11 +89,30 @@ export default function Team() {
                       <div>
                         <CardTitle className="text-lg flex items-center gap-2">
                             {member.first_name} {member.last_name}
-                            {isTargetAdmin && <Shield className="w-4 h-4 text-purple-600" fill="currentColor" className="opacity-20" />}
+                            {isTargetAdmin && <Crown className="w-4 h-4 text-purple-600" fill="currentColor" />}
                         </CardTitle>
-                        <CardDescription className="uppercase text-[10px] font-bold tracking-wider">
-                            {member.role || 'Staff'}
-                        </CardDescription>
+                        
+                        {/* SELETTORE RUOLO (Visibile solo agli Admin) */}
+                        {canEdit ? (
+                            <div className="mt-1">
+                                <Select 
+                                    defaultValue={member.role} 
+                                    onValueChange={(val) => changeRole.mutate({ id: member.id, newRole: val })}
+                                >
+                                    <SelectTrigger className="h-6 text-xs w-[100px]">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="staff">Staff</SelectItem>
+                                        <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        ) : (
+                            <CardDescription className="uppercase text-[10px] font-bold tracking-wider mt-1">
+                                {member.role || 'Staff'}
+                            </CardDescription>
+                        )}
                       </div>
                     </div>
                     {member.approved 
@@ -97,9 +127,9 @@ export default function Team() {
                     <p className="flex items-center gap-2"><Shield className="w-4 h-4"/> {member.phone || 'Nessun telefono'}</p>
                   </div>
                   
-                  {/* ZONA AZIONI (Protetta) */}
+                  {/* ZONA AZIONI */}
                   <div className="h-10">
-                      {showActions ? (
+                      {canEdit ? (
                         <div className="flex gap-2">
                             {member.approved ? (
                                 <Button 
@@ -119,9 +149,8 @@ export default function Team() {
                             )}
                         </div>
                       ) : (
-                        // Placeholder per chi non può agire
                         <div className="flex items-center justify-center text-xs text-gray-400 h-full border border-dashed rounded bg-slate-50">
-                            {isTargetAdmin ? <span className="flex items-center gap-1"><Lock className="w-3 h-3"/> Profilo Protetto (Admin)</span> : <span>Solo lettura</span>}
+                            {isMe ? <span>Il tuo profilo</span> : <span className="flex items-center gap-1"><Lock className="w-3 h-3"/> Gestito da Admin</span>}
                         </div>
                       )}
                   </div>
