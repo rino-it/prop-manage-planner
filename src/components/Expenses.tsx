@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch'; // IMPORTATO SWITCH
+import { Switch } from '@/components/ui/switch'; // Componente interruttore
 import { Plus, Trash2, FileText, Upload, Paperclip, Pencil, User, Forward } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePropertiesReal } from '@/hooks/useProperties';
