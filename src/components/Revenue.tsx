@@ -40,7 +40,6 @@ export default function Revenue() {
             .from('bookings')
             .select('id, nome_ospite, tipo_affitto')
             .eq('property_id', selectedProp)
-            .eq('tipo_affitto', 'lungo');
         return data || [];
     },
     enabled: !!selectedProp
