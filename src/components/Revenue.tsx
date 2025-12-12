@@ -34,6 +34,7 @@ export default function Revenue() {
   const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants', selectedProp],
     queryFn: async () => {
+        console.log("selectedProp", selectedProp);
         if (!selectedProp) return [];
         const { data } = await supabase
             .from('bookings')
