@@ -209,20 +209,32 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   };
 
 const modifiersStyles = {
-    // Added white decoration color to ensure the line is visible on blue
-    hasEvent: { textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.7)' }, 
+    hasEvent: { 
+      textDecoration: 'underline', 
+      textDecorationColor: 'rgba(255, 255, 255, 0.5)', // Subtle white line
+      textUnderlineOffset: '2px' // Clean separation from text
+    },
+    
+    // Emerald-300: A bright mint green. 
+    // Distinct from blue, but positive.
+    hasCheckin: { 
+      color: '#6ee7b7', 
+      fontWeight: '700' 
+    }, 
 
-    // Switched to Light Mint Green (Green-400/300 range)
-    // Dark green (#16a34a) is invisible on dark blue.
-    hasCheckin: { color: '#4ade80', fontWeight: 'bold' }, 
+    // Rose-300: A soft pastel red/pink. 
+    // Retains the "expense/negative" meaning without vibrating against blue.
+    hasExpense: { 
+      color: '#fda4af', 
+      fontWeight: '700' 
+    }, 
 
-    // Switched to Amber/Gold (Amber-400)
-    // This replaces Red. It indicates "cost" or "warning" without the vibration effect.
-    hasExpense: { color: '#fbbf24', fontWeight: 'bold' }, 
-
-    // Switched to Yellow/White border
-    // Red borders on blue buttons/backgrounds look muddy. Yellow pops.
-    hasUrgency: { border: '2px solid #facc15', borderRadius: '50%' } 
+    // Amber-300: A bright gold/yellow ring.
+    // Yellow creates the highest contrast possible against blue for alerts.
+    hasUrgency: { 
+      border: '2px solid #fcd34d', 
+      borderRadius: '50%' 
+    } 
   };
 
   return (
