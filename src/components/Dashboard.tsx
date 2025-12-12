@@ -211,26 +211,24 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 const modifiersStyles = {
     hasEvent: { 
       textDecoration: 'underline', 
-      textDecorationColor: 'rgba(255, 255, 255, 0.5)', // Subtle white line
-      textUnderlineOffset: '2px' // Clean separation from text
+      textDecorationColor: 'rgba(255, 255, 255, 0.5)',
+      textUnderlineOffset: '2px'
     },
     
-    // Emerald-300: A bright mint green. 
-    // Distinct from blue, but positive.
+    // NEW COLOR: Lime-300 (#bef264)
+    // This is much punchier and easier to read on blue than mint.
     hasCheckin: { 
-      color: '#6ee7b7', 
+      color: '#bef264', 
       fontWeight: '700' 
     }, 
 
-    // Rose-300: A soft pastel red/pink. 
-    // Retains the "expense/negative" meaning without vibrating against blue.
+    // Kept the Rose-300
     hasExpense: { 
       color: '#fda4af', 
       fontWeight: '700' 
     }, 
 
-    // Amber-300: A bright gold/yellow ring.
-    // Yellow creates the highest contrast possible against blue for alerts.
+    // Kept the Amber border
     hasUrgency: { 
       border: '2px solid #fcd34d', 
       borderRadius: '50%' 
