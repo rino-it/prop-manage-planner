@@ -31,15 +31,25 @@ export default function Revenue() {
     months: '12'
   });
 
-  const { data: activeTenants } = useQuery({
+  const today = new Date().toISOString().split('T')[0];
+  
+const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants', selectedProp],
     queryFn: async () => {
         console.log("selectedProp", selectedProp);
         if (!selectedProp) return [];
+
+        // 1. Get today's date in ISO format
+        const today = new Date().toISOString(); 
+
         const { data } = await supabase
             .from('bookings')
             .select('id, nome_ospite, tipo_affitto')
             .eq('property_id', selectedProp)
+            // 2. Add the Date Filters
+            .lte('data_inizio', today)  // Started in the past (or today)
+            .gte('data_fine', today);   // Ends in the future (or today)
+
         return data || [];
     },
     enabled: !!selectedProp
