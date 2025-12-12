@@ -208,11 +208,21 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     hasUrgency: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.priority === 'alta' || e.type === 'maintenance')),
   };
 
-  const modifiersStyles = {
-    hasEvent: { textDecoration: 'underline' },
-    hasCheckin: { color: '#16a34a', fontWeight: 'bold' }, // Verde
-    hasExpense: { color: '#dc2626', fontWeight: 'bold' }, // Rosso
-    hasUrgency: { border: '1px solid red', borderRadius: '50%' } // Cerchio rosso
+const modifiersStyles = {
+    // Added white decoration color to ensure the line is visible on blue
+    hasEvent: { textDecoration: 'underline', textDecorationColor: 'rgba(255,255,255,0.7)' }, 
+
+    // Switched to Light Mint Green (Green-400/300 range)
+    // Dark green (#16a34a) is invisible on dark blue.
+    hasCheckin: { color: '#4ade80', fontWeight: 'bold' }, 
+
+    // Switched to Amber/Gold (Amber-400)
+    // This replaces Red. It indicates "cost" or "warning" without the vibration effect.
+    hasExpense: { color: '#fbbf24', fontWeight: 'bold' }, 
+
+    // Switched to Yellow/White border
+    // Red borders on blue buttons/backgrounds look muddy. Yellow pops.
+    hasUrgency: { border: '2px solid #facc15', borderRadius: '50%' } 
   };
 
   return (
