@@ -4,12 +4,15 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Printer, TrendingUp, TrendingDown, Calendar, Building2 } from 'lucide-react';
+import { Printer, TrendingUp, TrendingDown, Calendar, Building2, ArrowRight } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 export default function SuggestedPlan() {
-  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  // DATE RANGE: Impostiamo di default il primo e l'ultimo giorno del mese corrente
+  const [dateFrom, setDateFrom] = useState<string>(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
+  const [dateTo, setDateTo] = useState<string>(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
+  
   const [selectedProp, setSelectedProp] = useState<string>('all');
   const printRef = useRef<HTMLDivElement>(null);
 
@@ -22,25 +25,22 @@ export default function SuggestedPlan() {
     }
   });
 
-  // 2. CARICA MOVIMENTI
+  // 2. CARICA MOVIMENTI (FILTRATI PER ARCO TEMPORALE)
   const { data: reportData } = useQuery({
-    queryKey: ['report-data', selectedMonth, selectedProp],
+    queryKey: ['report-data', dateFrom, dateTo, selectedProp],
     queryFn: async () => {
-      const start = startOfMonth(parseISO(selectedMonth + "-01")).toISOString();
-      const end = endOfMonth(parseISO(selectedMonth + "-01")).toISOString();
-
       // Incassi
       const { data: income } = await supabase.from('tenant_payments')
         .select('*, bookings(property_id, nome_ospite)')
         .eq('stato', 'pagato')
-        .gte('data_pagamento', start)
-        .lte('data_pagamento', end);
+        .gte('data_pagamento', dateFrom)
+        .lte('data_pagamento', dateTo);
 
       // Spese
       const { data: expenses } = await supabase.from('property_expenses')
         .select('*, properties_real(nome)')
-        .gte('date', start)
-        .lte('date', end);
+        .gte('date', dateFrom)
+        .lte('date', dateTo);
 
       let filteredIncome = income || [];
       let filteredExpenses = expenses || [];
@@ -62,25 +62,43 @@ export default function SuggestedPlan() {
     <div className="space-y-6 animate-in fade-in duration-500">
       
       {/* BARRA CONTROLLI */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-4 print:hidden bg-white p-4 rounded-xl border shadow-sm">
+      <div className="flex flex-col xl:flex-row justify-between items-center gap-4 print:hidden bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reportistica</h1>
-          <p className="text-gray-500 text-sm">Seleziona mese e proprietà per il bilancio.</p>
+          <p className="text-gray-500 text-sm">Definisci il periodo e la proprietà per il bilancio.</p>
         </div>
         
-        <div className="flex gap-2 items-center">
-            <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-slate-50">
+        <div className="flex flex-col md:flex-row gap-2 items-center w-full md:w-auto">
+            
+            {/* SELEZIONE RANGE DATE */}
+            <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-slate-50 w-full md:w-auto">
                 <Calendar className="w-4 h-4 text-gray-500" />
-                <input type="month" className="bg-transparent text-sm outline-none cursor-pointer" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}/>
+                <div className="flex items-center gap-2 text-sm">
+                    <input 
+                        type="date" 
+                        className="bg-transparent outline-none cursor-pointer"
+                        value={dateFrom}
+                        onChange={(e) => setDateFrom(e.target.value)}
+                    />
+                    <ArrowRight className="w-3 h-3 text-gray-400" />
+                    <input 
+                        type="date" 
+                        className="bg-transparent outline-none cursor-pointer"
+                        value={dateTo}
+                        onChange={(e) => setDateTo(e.target.value)}
+                    />
+                </div>
             </div>
+
             <Select value={selectedProp} onValueChange={setSelectedProp}>
-                <SelectTrigger className="w-[200px] bg-slate-50"><SelectValue placeholder="Tutte le proprietà" /></SelectTrigger>
+                <SelectTrigger className="w-full md:w-[200px] bg-slate-50"><SelectValue placeholder="Tutte le proprietà" /></SelectTrigger>
                 <SelectContent>
                     <SelectItem value="all">Portafoglio Completo</SelectItem>
                     {properties?.map(p => (<SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>))}
                 </SelectContent>
             </Select>
-            <Button className="bg-slate-900 text-white hover:bg-slate-800" onClick={() => window.print()}>
+
+            <Button className="bg-slate-900 text-white hover:bg-slate-800 w-full md:w-auto" onClick={() => window.print()}>
                 <Printer className="w-4 h-4 mr-2" /> Stampa PDF
             </Button>
         </div>
@@ -92,7 +110,9 @@ export default function SuggestedPlan() {
             <div>
                 <h2 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">Prospetto Finanziario</h2>
                 <div className="mt-2 text-slate-500 space-y-1">
-                    <p>Periodo: <span className="font-semibold text-slate-900 capitalize">{format(parseISO(selectedMonth + "-01"), 'MMMM yyyy', { locale: it })}</span></p>
+                    <p>Periodo: <span className="font-semibold text-slate-900 capitalize">
+                        Dal {format(parseISO(dateFrom), 'd MMMM yyyy', { locale: it })} al {format(parseISO(dateTo), 'd MMMM yyyy', { locale: it })}
+                    </span></p>
                     <p>Proprietà: <span className="font-semibold text-slate-900">{selectedProp === 'all' ? 'Portafoglio Completo' : properties?.find(p => p.id === selectedProp)?.nome}</span></p>
                 </div>
             </div>
@@ -119,7 +139,7 @@ export default function SuggestedPlan() {
 
         <div className="mb-8">
             <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-600" /> Movimenti in Entrata</h3>
-            {reportData?.income.length === 0 ? <p className="text-sm text-gray-400 italic pl-6">Nessun incasso.</p> : (
+            {reportData?.income.length === 0 ? <p className="text-sm text-gray-400 italic pl-6">Nessun incasso in questo periodo.</p> : (
                 <Table>
                     <TableHeader><TableRow className="border-b-2 border-slate-100"><TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead className="text-right">Importo</TableHead></TableRow></TableHeader>
                     <TableBody>{reportData?.income.map((item) => (
@@ -131,7 +151,7 @@ export default function SuggestedPlan() {
 
         <div>
             <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-red-600" /> Movimenti in Uscita</h3>
-            {reportData?.expenses.length === 0 ? <p className="text-sm text-gray-400 italic pl-6">Nessuna spesa.</p> : (
+            {reportData?.expenses.length === 0 ? <p className="text-sm text-gray-400 italic pl-6">Nessuna spesa in questo periodo.</p> : (
                 <Table>
                     <TableHeader><TableRow className="border-b-2 border-slate-100"><TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Categoria</TableHead><TableHead className="text-right">Importo</TableHead></TableRow></TableHeader>
                     <TableBody>{reportData?.expenses.map((item) => (
