@@ -4,12 +4,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Printer, TrendingUp, TrendingDown, Calendar, Building2, ArrowRight } from 'lucide-react';
+import { Printer, TrendingUp, TrendingDown, Calendar, ArrowRight } from 'lucide-react';
 import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 export default function SuggestedPlan() {
-  // DATE RANGE: Impostiamo di default il primo e l'ultimo giorno del mese corrente
+  // DATE RANGE: Default mese corrente
   const [dateFrom, setDateFrom] = useState<string>(format(startOfMonth(new Date()), 'yyyy-MM-dd'));
   const [dateTo, setDateTo] = useState<string>(format(endOfMonth(new Date()), 'yyyy-MM-dd'));
   
@@ -25,7 +25,7 @@ export default function SuggestedPlan() {
     }
   });
 
-  // 2. CARICA MOVIMENTI (FILTRATI PER ARCO TEMPORALE)
+  // 2. CARICA MOVIMENTI
   const { data: reportData } = useQuery({
     queryKey: ['report-data', dateFrom, dateTo, selectedProp],
     queryFn: async () => {
@@ -61,7 +61,7 @@ export default function SuggestedPlan() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       
-      {/* BARRA CONTROLLI */}
+      {/* BARRA CONTROLLI (Non stampabile) */}
       <div className="flex flex-col xl:flex-row justify-between items-center gap-4 print:hidden bg-white p-4 rounded-xl border shadow-sm">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Reportistica</h1>
@@ -69,24 +69,12 @@ export default function SuggestedPlan() {
         </div>
         
         <div className="flex flex-col md:flex-row gap-2 items-center w-full md:w-auto">
-            
-            {/* SELEZIONE RANGE DATE */}
             <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-slate-50 w-full md:w-auto">
                 <Calendar className="w-4 h-4 text-gray-500" />
                 <div className="flex items-center gap-2 text-sm">
-                    <input 
-                        type="date" 
-                        className="bg-transparent outline-none cursor-pointer"
-                        value={dateFrom}
-                        onChange={(e) => setDateFrom(e.target.value)}
-                    />
+                    <input type="date" className="bg-transparent outline-none cursor-pointer" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)}/>
                     <ArrowRight className="w-3 h-3 text-gray-400" />
-                    <input 
-                        type="date" 
-                        className="bg-transparent outline-none cursor-pointer"
-                        value={dateTo}
-                        onChange={(e) => setDateTo(e.target.value)}
-                    />
+                    <input type="date" className="bg-transparent outline-none cursor-pointer" value={dateTo} onChange={(e) => setDateTo(e.target.value)}/>
                 </div>
             </div>
 
@@ -106,6 +94,8 @@ export default function SuggestedPlan() {
 
       {/* DOCUMENTO STAMPABILE */}
       <div ref={printRef} className="bg-white p-8 rounded-xl border shadow-sm print:shadow-none print:border-none print:p-0 min-h-[600px]">
+        
+        {/* INTESTAZIONE CON LOGO REALE */}
         <div className="flex justify-between items-start mb-8 border-b pb-6">
             <div>
                 <h2 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">Prospetto Finanziario</h2>
@@ -117,11 +107,13 @@ export default function SuggestedPlan() {
                 </div>
             </div>
             <div className="text-right">
-                <div className="text-2xl font-bold text-slate-400 flex items-center justify-end gap-2">Property<Building2 className="w-6 h-6"/></div>
+                {/* QUI C'ERA IL LOGO SBAGLIATO, ORA C'È QUELLO VERO */}
+                <img src="/prop-manager-logo.svg" alt="Logo" className="h-12 w-auto ml-auto mb-2 object-contain" />
                 <p className="text-xs text-gray-400 mt-1">Generato il {format(new Date(), 'dd/MM/yyyy')}</p>
             </div>
         </div>
 
+        {/* KPI BOX */}
         <div className="grid grid-cols-3 gap-6 mb-10">
             <div className="p-5 bg-green-50 rounded-xl border border-green-100 print:border-gray-200">
                 <p className="text-xs font-bold text-green-700 uppercase mb-2">Totale Incassi</p>
@@ -137,6 +129,7 @@ export default function SuggestedPlan() {
             </div>
         </div>
 
+        {/* TABELLE */}
         <div className="mb-8">
             <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-600" /> Movimenti in Entrata</h3>
             {reportData?.income.length === 0 ? <p className="text-sm text-gray-400 italic pl-6">Nessun incasso in questo periodo.</p> : (
