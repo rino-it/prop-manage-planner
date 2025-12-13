@@ -1,94 +1,147 @@
-import React from 'react';
-import { useSmartPlanner } from '@/hooks/useSmartPlanner';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import React, { useState, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Lightbulb, TrendingUp, AlertTriangle, Calendar, CheckCircle } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Printer, TrendingUp, TrendingDown, Calendar, Building2 } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 export default function SuggestedPlan() {
-  const { suggestions, count } = useSmartPlanner();
+  const [selectedMonth, setSelectedMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
+  const [selectedProp, setSelectedProp] = useState<string>('all');
+  const printRef = useRef<HTMLDivElement>(null);
 
-  const totalCost = suggestions.reduce((acc, s) => acc + s.estimated_cost, 0);
+  // 1. CARICA PROPRIETÀ
+  const { data: properties } = useQuery({
+    queryKey: ['report-props'],
+    queryFn: async () => {
+      const { data } = await supabase.from('properties_real').select('*');
+      return data || [];
+    }
+  });
+
+  // 2. CARICA MOVIMENTI
+  const { data: reportData } = useQuery({
+    queryKey: ['report-data', selectedMonth, selectedProp],
+    queryFn: async () => {
+      const start = startOfMonth(parseISO(selectedMonth + "-01")).toISOString();
+      const end = endOfMonth(parseISO(selectedMonth + "-01")).toISOString();
+
+      // Incassi
+      const { data: income } = await supabase.from('tenant_payments')
+        .select('*, bookings(property_id, nome_ospite)')
+        .eq('stato', 'pagato')
+        .gte('data_pagamento', start)
+        .lte('data_pagamento', end);
+
+      // Spese
+      const { data: expenses } = await supabase.from('property_expenses')
+        .select('*, properties_real(nome)')
+        .gte('date', start)
+        .lte('date', end);
+
+      let filteredIncome = income || [];
+      let filteredExpenses = expenses || [];
+
+      if (selectedProp !== 'all') {
+        filteredIncome = filteredIncome.filter(i => i.bookings?.property_id === selectedProp);
+        filteredExpenses = filteredExpenses.filter(e => e.property_id === selectedProp);
+      }
+
+      return { income: filteredIncome, expenses: filteredExpenses };
+    }
+  });
+
+  const totalIncome = reportData?.income.reduce((acc, cur) => acc + Number(cur.importo), 0) || 0;
+  const totalExpenses = reportData?.expenses.reduce((acc, cur) => acc + Number(cur.amount), 0) || 0;
+  const netIncome = totalIncome - totalExpenses;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 animate-in fade-in duration-500">
+      
+      {/* BARRA CONTROLLI */}
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 print:hidden bg-white p-4 rounded-xl border shadow-sm">
         <div>
-            <h1 className="text-3xl font-bold text-gray-900">Smart Planner</h1>
-            <p className="text-gray-500">Il sistema ha analizzato i tuoi dati e suggerisce queste azioni.</p>
+          <h1 className="text-2xl font-bold text-gray-900">Reportistica</h1>
+          <p className="text-gray-500 text-sm">Seleziona mese e proprietà per il bilancio.</p>
         </div>
-        <Button>Genera Report PDF</Button>
-      </div>
-
-      {/* KPI PREVISIONALI */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-blue-100 rounded-full text-blue-700"><Lightbulb /></div>
-            <div>
-                <p className="text-sm text-blue-700 font-medium">Azioni Suggerite</p>
-                <h2 className="text-3xl font-bold text-blue-900">{count}</h2>
-            </div>
-          </CardContent>
-        </Card>
         
-        <Card className="bg-orange-50 border-orange-200">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-orange-100 rounded-full text-orange-700"><TrendingUp /></div>
-            <div>
-                <p className="text-sm text-orange-700 font-medium">Stima Costi</p>
-                <h2 className="text-3xl font-bold text-orange-900">€ {totalCost.toLocaleString()}</h2>
+        <div className="flex gap-2 items-center">
+            <div className="flex items-center gap-2 border rounded-md px-3 py-2 bg-slate-50">
+                <Calendar className="w-4 h-4 text-gray-500" />
+                <input type="month" className="bg-transparent text-sm outline-none cursor-pointer" value={selectedMonth} onChange={(e) => setSelectedMonth(e.target.value)}/>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-purple-50 border-purple-200">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-3 bg-purple-100 rounded-full text-purple-700"><Calendar /></div>
-            <div>
-                <p className="text-sm text-purple-700 font-medium">Risparmio Potenziale</p>
-                <h2 className="text-3xl font-bold text-purple-900">€ {(totalCost * 0.2).toLocaleString()}</h2>
-            </div>
-          </CardContent>
-        </Card>
+            <Select value={selectedProp} onValueChange={setSelectedProp}>
+                <SelectTrigger className="w-[200px] bg-slate-50"><SelectValue placeholder="Tutte le proprietà" /></SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="all">Portafoglio Completo</SelectItem>
+                    {properties?.map(p => (<SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>))}
+                </SelectContent>
+            </Select>
+            <Button className="bg-slate-900 text-white hover:bg-slate-800" onClick={() => window.print()}>
+                <Printer className="w-4 h-4 mr-2" /> Stampa PDF
+            </Button>
+        </div>
       </div>
 
-      {/* LISTA SUGGERIMENTI */}
-      <div className="grid gap-4">
-        {suggestions.map((item) => (
-            <Card key={item.id} className="border-l-4 hover:shadow-md transition" style={{ borderLeftColor: item.priority === 'alta' ? '#ef4444' : '#eab308' }}>
-                <CardContent className="p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                            <h3 className="font-bold text-lg">{item.title}</h3>
-                            <Badge variant="outline" className={item.priority === 'alta' ? 'text-red-600 bg-red-50' : 'text-yellow-600 bg-yellow-50'}>
-                                {item.priority.toUpperCase()}
-                            </Badge>
-                            <Badge variant="secondary">{item.type}</Badge>
-                        </div>
-                        <p className="text-gray-600">{item.description}</p>
-                        <p className="text-xs text-gray-400 mt-2">Rilevato su: {item.property_name}</p>
-                    </div>
-                    
-                    <div className="text-right min-w-[120px]">
-                        <p className="text-sm text-gray-500">Costo Stimato</p>
-                        <p className="font-bold text-lg">€ {item.estimated_cost}</p>
-                        <Button size="sm" className="mt-2 w-full" variant="outline">
-                            <CheckCircle className="w-4 h-4 mr-2" /> Esegui
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-        ))}
-
-        {suggestions.length === 0 && (
-            <div className="text-center py-12 border-2 border-dashed rounded-xl bg-gray-50 text-green-600">
-                <CheckCircle className="w-12 h-12 mx-auto mb-4" />
-                <p className="text-lg font-medium">Tutto perfetto!</p>
-                <p className="text-sm opacity-70">Il sistema non rileva criticità o scadenze imminenti.</p>
+      {/* DOCUMENTO STAMPABILE */}
+      <div ref={printRef} className="bg-white p-8 rounded-xl border shadow-sm print:shadow-none print:border-none print:p-0 min-h-[600px]">
+        <div className="flex justify-between items-start mb-8 border-b pb-6">
+            <div>
+                <h2 className="text-3xl font-bold text-slate-900 uppercase tracking-tight">Prospetto Finanziario</h2>
+                <div className="mt-2 text-slate-500 space-y-1">
+                    <p>Periodo: <span className="font-semibold text-slate-900 capitalize">{format(parseISO(selectedMonth + "-01"), 'MMMM yyyy', { locale: it })}</span></p>
+                    <p>Proprietà: <span className="font-semibold text-slate-900">{selectedProp === 'all' ? 'Portafoglio Completo' : properties?.find(p => p.id === selectedProp)?.nome}</span></p>
+                </div>
             </div>
-        )}
+            <div className="text-right">
+                <div className="text-2xl font-bold text-slate-400 flex items-center justify-end gap-2">Property<Building2 className="w-6 h-6"/></div>
+                <p className="text-xs text-gray-400 mt-1">Generato il {format(new Date(), 'dd/MM/yyyy')}</p>
+            </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-6 mb-10">
+            <div className="p-5 bg-green-50 rounded-xl border border-green-100 print:border-gray-200">
+                <p className="text-xs font-bold text-green-700 uppercase mb-2">Totale Incassi</p>
+                <p className="text-3xl font-bold text-green-900">+ € {totalIncome.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className="p-5 bg-red-50 rounded-xl border border-red-100 print:border-gray-200">
+                <p className="text-xs font-bold text-red-700 uppercase mb-2">Totale Spese</p>
+                <p className="text-3xl font-bold text-red-900">- € {totalExpenses.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+            </div>
+            <div className={`p-5 rounded-xl border ${netIncome >= 0 ? 'bg-orange-50 border-orange-100' : 'bg-slate-50 border-slate-200'} print:border-gray-200`}>
+                <p className="text-xs font-bold text-gray-600 uppercase mb-2">Utile Netto</p>
+                <p className={`text-3xl font-bold ${netIncome >= 0 ? 'text-orange-900' : 'text-slate-900'}`}>€ {netIncome.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+            </div>
+        </div>
+
+        <div className="mb-8">
+            <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2"><TrendingUp className="w-4 h-4 text-green-600" /> Movimenti in Entrata</h3>
+            {reportData?.income.length === 0 ? <p className="text-sm text-gray-400 italic pl-6">Nessun incasso.</p> : (
+                <Table>
+                    <TableHeader><TableRow className="border-b-2 border-slate-100"><TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead className="text-right">Importo</TableHead></TableRow></TableHeader>
+                    <TableBody>{reportData?.income.map((item) => (
+                        <TableRow key={item.id} className="border-b border-slate-50"><TableCell className="font-mono text-xs text-slate-500">{format(new Date(item.data_pagamento || item.data_scadenza), 'dd/MM/yyyy')}</TableCell><TableCell><span className="font-medium text-slate-900">{item.bookings?.nome_ospite}</span></TableCell><TableCell className="text-right font-bold text-green-700">€ {Number(item.importo).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</TableCell></TableRow>
+                    ))}</TableBody>
+                </Table>
+            )}
+        </div>
+
+        <div>
+            <h3 className="text-sm font-bold text-slate-900 uppercase mb-4 flex items-center gap-2"><TrendingDown className="w-4 h-4 text-red-600" /> Movimenti in Uscita</h3>
+            {reportData?.expenses.length === 0 ? <p className="text-sm text-gray-400 italic pl-6">Nessuna spesa.</p> : (
+                <Table>
+                    <TableHeader><TableRow className="border-b-2 border-slate-100"><TableHead>Data</TableHead><TableHead>Descrizione</TableHead><TableHead>Categoria</TableHead><TableHead className="text-right">Importo</TableHead></TableRow></TableHeader>
+                    <TableBody>{reportData?.expenses.map((item) => (
+                        <TableRow key={item.id} className="border-b border-slate-50"><TableCell className="font-mono text-xs text-slate-500">{format(new Date(item.date), 'dd/MM/yyyy')}</TableCell><TableCell className="font-medium text-slate-900">{item.description}</TableCell><TableCell className="text-xs text-slate-400 uppercase">{item.category}</TableCell><TableCell className="text-right font-bold text-red-700">- € {Number(item.amount).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</TableCell></TableRow>
+                    ))}</TableBody>
+                </Table>
+            )}
+        </div>
       </div>
+      <style>{`@media print { body * { visibility: hidden; } #root { display: block; } nav, header, .print\\:hidden { display: none !important; } .bg-white.p-8.rounded-xl { visibility: visible; position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 20px; box-shadow: none; border: none; } .bg-white.p-8.rounded-xl * { visibility: visible; } }`}</style>
     </div>
   );
 }
