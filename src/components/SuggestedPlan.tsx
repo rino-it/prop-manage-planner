@@ -108,7 +108,7 @@ export default function SuggestedPlan() {
             </div>
             <div className="text-right">
                 {/* QUI C'ERA IL LOGO SBAGLIATO, ORA C'È QUELLO VERO */}
-                <img src="/prop-manager-logo.svg" alt="Logo" className="h-12 w-auto ml-auto mb-2 object-contain" />
+                <img src="/prop-manager-logo.png" alt="Logo" className="h-12 w-auto ml-auto mb-2 object-contain" />
                 <p className="text-xs text-gray-400 mt-1">Generato il {format(new Date(), 'dd/MM/yyyy')}</p>
             </div>
         </div>
