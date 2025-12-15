@@ -1,34 +1,41 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Droplet, Zap, Euro, FileText, Upload, Send, CheckCircle, XCircle, Clock, Star, CreditCard, Ticket, UserCog, Mail, Phone, LogIn, ShieldCheck, IdCard, HeartPulse, AlertTriangle } from 'lucide-react';
-import { format } from 'date-fns';
+import { Label } from '@/components/ui/label';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Badge } from '@/components/ui/badge';
+import { 
+  Wifi, MapPin, Lock, Unlock, Youtube, Send, Info, Copy, Loader2, 
+  CheckCircle, User, Phone, Mail, FileText, CreditCard, Calendar, Download, Clock, ShieldCheck
+} from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
 
 export default function TenantPortal() {
   const { id } = useParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [ticketForm, setTicketForm] = useState({ titolo: '', descrizione: '' });
-  const [uploading, setUploading] = useState(false);
-  
-  // STATI PER IL GATE DI ACCESSO
-  const [gateData, setGateData] = useState({ email: '', phone: '' });
+  const [isUploading, setIsUploading] = useState(false);
+  const [isSavingContact, setIsSavingContact] = useState(false);
 
-  // 1. DATI CONTRATTO
+  // 1. DATI PRENOTAZIONE
   const { data: booking, isLoading } = useQuery({
     queryKey: ['tenant-booking', id],
     queryFn: async () => {
-      const { data } = await supabase.from('bookings').select('*, properties_real(*)').eq('id', id).single();
+      const { data } = await supabase
+        .from('bookings')
+        .select('*, properties_real(*)')
+        .eq('id', id)
+        .single();
       return data;
     },
     enabled: !!id
@@ -38,340 +45,311 @@ export default function TenantPortal() {
   const { data: documents } = useQuery({
     queryKey: ['tenant-docs', id],
     queryFn: async () => {
-      const { data } = await supabase.from('booking_documents').select('*').eq('booking_id', id).order('uploaded_at', { ascending: false });
+      const { data } = await supabase.from('booking_documents').select('*').eq('booking_id', id).order('created_at', { ascending: false });
       return data || [];
     },
     enabled: !!id
   });
-
-  // Pre-fill dei dati se esistono
-  useEffect(() => {
-    if (booking) {
-      setGateData({ email: booking.email_ospite || '', phone: booking.telefono_ospite || '' });
-    }
-  }, [booking]);
-
-  // MUTATION: SALVA CONTATTI (STEP 1)
-  const updateContacts = useMutation({
-    mutationFn: async () => {
-        if (!booking) return;
-        const { error } = await supabase.from('bookings').update({ email_ospite: gateData.email, telefono_ospite: gateData.phone }).eq('id', booking.id);
-        if (error) throw error;
-    },
-    onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
-        toast({ title: "Contatti salvati", description: "Procedi con i documenti." });
-    },
-    onError: () => toast({ title: "Errore", variant: "destructive" })
-  });
-
-  // MUTATION: CARICA DOCUMENTI (STEP 2 e DASHBOARD)
-  const handleFileUpload = async (file: File, type: string = 'generic') => {
-    try {
-      if (!booking) return;
-      setUploading(true);
-      const fileExt = file.name.split('.').pop();
-      const fileName = `tenant_${booking.id}_${type}_${Date.now()}.${fileExt}`;
-      
-      const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
-      if (upError) throw upError;
-      
-      // Nomi specifici per riconoscere i documenti obbligatori
-      const displayName = type === 'id' ? "Carta d'Identità" : type === 'health' ? "Tessera Sanitaria" : file.name;
-
-      const { error: dbError } = await supabase.from('booking_documents').insert({
-        booking_id: booking.id, 
-        filename: displayName, 
-        file_url: fileName, 
-        status: 'in_revisione'
-      });
-      
-      if (dbError) throw dbError;
-      
-      toast({ title: "Caricato!", description: `${displayName} aggiunto correttamente.` });
-      queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
-    } catch (error: any) { 
-        toast({ title: "Errore", description: error.message, variant: "destructive" }); 
-    } finally { 
-        setUploading(false); 
-    }
-  };
 
   // 3. PAGAMENTI
   const { data: payments } = useQuery({
     queryKey: ['tenant-payments', id],
     queryFn: async () => {
-      const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', id).order('data_scadenza', { ascending: false });
+      const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', id).order('data_scadenza', { ascending: true });
       return data || [];
     },
     enabled: !!id
   });
 
-  // 4. SERVIZI
-  const { data: services } = useQuery({
-    queryKey: ['tenant-services', booking?.property_id],
-    queryFn: async () => {
-      if (!booking?.property_id) return [];
-      const { data } = await supabase.from('services').select('*').eq('attivo', true);
-      return (data || []).filter(s => !s.property_ids || s.property_ids.length === 0 || s.property_ids.includes(booking.property_id));
+  // --- LOGICA DI SICUREZZA ---
+  const hasContactInfo = booking?.guest_phone && booking?.guest_email;
+  const hasDocuments = documents && documents.length > 0;
+  const isApproved = booking?.documents_approved === true; // NUOVO: Deve essere approvato dall'host
+  
+  // L'accesso è sbloccato SOLO SE: Ha contatti + Ha documenti + È approvato
+  const isCheckinUnlocked = hasContactInfo && hasDocuments && isApproved;
+  const isPendingApproval = hasContactInfo && hasDocuments && !isApproved;
+
+  // --- AZIONI ---
+
+  const saveContactInfo = async () => {
+    if (!contactForm.email || !contactForm.phone) return;
+    setIsSavingContact(true);
+    try {
+        await supabase.from('bookings').update({ guest_email: contactForm.email, guest_phone: contactForm.phone }).eq('id', id);
+        toast({ title: "Contatti Salvati", description: "Procedi con il caricamento documenti." });
+        queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
+    } catch (e) { toast({ title: "Errore", variant: "destructive" }); } 
+    finally { setIsSavingContact(false); }
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      const file = event.target.files?.[0];
+      if (!file || !booking) return;
+      setIsUploading(true);
+      
+      const fileName = `doc_${booking.id}_${Date.now()}.${file.name.split('.').pop()}`;
+      const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
+      if (upError) throw upError;
+
+      await supabase.from('booking_documents').insert({
+        booking_id: booking.id, filename: file.name, file_url: fileName, status: 'in_revisione'
+      });
+
+      // NOTA: Non settiamo più 'online_checkin_completed' a true automaticamente o l'accesso.
+      // Lasciamo che sia l'host a decidere.
+      
+      toast({ title: "Documento Inviato", description: "In attesa di verifica dell'Host." });
+      queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
+    } catch (error: any) { toast({ title: "Errore upload", variant: "destructive" }); } 
+    finally { setIsUploading(false); }
+  };
+
+  const markPaymentSent = useMutation({
+    mutationFn: async (paymentId: string) => {
+        await supabase.from('tenant_payments').update({ stato: 'in_verifica', payment_date_declared: new Date().toISOString() }).eq('id', paymentId);
     },
-    enabled: !!booking?.property_id
+    onSuccess: () => {
+        toast({ title: "Segnalato", description: "Verificheremo l'incasso." });
+        queryClient.invalidateQueries({ queryKey: ['tenant-payments'] });
+    }
   });
 
-  // 5. TICKET
-  const { data: myTickets } = useQuery({
-      queryKey: ['tenant-tickets', id],
-      queryFn: async () => {
-          const { data } = await supabase.from('tickets').select('*').eq('booking_id', id).order('created_at', { ascending: false });
-          return data || [];
-      },
-      enabled: !!id
-  });
-
-  const createTicket = useMutation({
-      mutationFn: async () => {
-        if (!booking) return;
-        await supabase.from('tickets').insert({
-          booking_id: booking.id, property_real_id: booking.property_id, titolo: ticketForm.titolo, descrizione: ticketForm.descrizione, stato: 'aperto', creato_da: 'ospite'
-        });
-      },
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-        toast({ title: "Ticket inviato" });
-        setTicketForm({ titolo: '', descrizione: '' });
-      }
-  });
-
-  const handleVoucherDownload = (serviceTitle: string) => {
-    alert(`[SIMULAZIONE PDF]\n\nSconto Inquilino: ${serviceTitle}\nPer: ${booking.nome_ospite}`);
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiato!", duration: 1500 });
   };
 
-  if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale...</div>;
-
-  // --- LOGICA DEL "TENANT GATE" ---
-  const hasContacts = booking.email_ospite && booking.telefono_ospite;
-  
-  // Trova l'ULTIMO documento caricato per tipo (grazie all'ordinamento della query)
-  const idDoc = documents?.find(doc => doc.filename.includes("Carta d'Identità"));
-  const healthDoc = documents?.find(doc => doc.filename.includes("Tessera Sanitaria"));
-
-  // È valido se esiste E NON è rifiutato
-  const isIdValid = idDoc && idDoc.status !== 'rifiutato';
-  const isHealthValid = healthDoc && healthDoc.status !== 'rifiutato';
-  
-  // Lo step è completo solo se entrambi sono validi
-  const step2Completed = isIdValid && isHealthValid;
-
-  // L'accesso finale richiede che almeno uno sia approvato (o logica più stretta se vuoi)
-  const isApproved = documents?.some(d => d.status === 'approvato');
-
-  // ==========================================
-  // STEP 1: INSERIMENTO CONTATTI
-  // ==========================================
-  if (!hasContacts) {
-    return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-            <Card className="w-full max-w-md shadow-lg border-t-4 border-t-blue-600 animate-in zoom-in-95 duration-300">
-                <CardHeader className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4"><Home className="w-8 h-8 text-blue-600" /></div>
-                    <CardTitle className="text-xl">Benvenuto, {booking.nome_ospite}!</CardTitle>
-                    <CardDescription>Per accedere alla tua area inquilino, conferma i tuoi recapiti.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2"><Label>Email</Label><div className="relative"><Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><Input className="pl-10" value={gateData.email} onChange={(e) => setGateData({...gateData, email: e.target.value})} placeholder="nome@email.com" /></div></div>
-                    <div className="space-y-2"><Label>Telefono</Label><div className="relative"><Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><Input className="pl-10" value={gateData.phone} onChange={(e) => setGateData({...gateData, phone: e.target.value})} placeholder="+39 333..." /></div></div>
-                </CardContent>
-                <CardFooter><Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => updateContacts.mutate()} disabled={!gateData.email || !gateData.phone}><LogIn className="w-4 h-4 mr-2" /> Salva e Continua</Button></CardFooter>
-            </Card>
-        </div>
-    );
-  }
-
-  // ==========================================
-  // STEP 2: CARICAMENTO DOCUMENTI OBBLIGATORI
-  // ==========================================
-  if (!step2Completed) {
-    return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-            <Card className="w-full max-w-md shadow-lg border-t-4 border-t-purple-600 animate-in zoom-in-95 duration-300">
-                <CardHeader className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-purple-100 rounded-full flex items-center justify-center mb-4"><ShieldCheck className="w-8 h-8 text-purple-600" /></div>
-                    <CardTitle>Identificazione</CardTitle>
-                    <CardDescription>Carica i documenti richiesti per completare la registrazione.</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                    
-                    {/* BOX 1: CARTA D'IDENTITÀ */}
-                    <div className={`p-4 border rounded-lg transition-all ${isIdValid ? 'bg-green-50 border-green-200' : idDoc?.status === 'rifiutato' ? 'bg-red-50 border-red-200' : 'bg-white border-dashed border-gray-300'}`}>
-                        <div className="flex justify-between items-center mb-2">
-                            <Label className="flex items-center gap-2 font-bold text-gray-700">
-                                <IdCard className="w-4 h-4 text-purple-600" /> Carta d'Identità
-                            </Label>
-                            {isIdValid ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : idDoc?.status === 'rifiutato' ? <Badge className="bg-red-100 text-red-700">Rifiutato</Badge> : <Badge variant="outline">Mancante</Badge>}
-                        </div>
-                        
-                        {/* Mostra bottone se MANCANTE o RIFIUTATO */}
-                        {(!isIdValid) && (
-                            <>
-                                {idDoc?.status === 'rifiutato' && <p className="text-xs text-red-600 mb-2 font-medium flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Documento non valido. Ricarica:</p>}
-                                <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-purple-50 text-purple-700 rounded-md text-xs font-medium hover:bg-purple-100 transition-colors">
-                                    {uploading ? 'Caricamento...' : 'Seleziona File'}
-                                    <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'id')} disabled={uploading} />
-                                </label>
-                            </>
-                        )}
-                        {isIdValid && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
-                    </div>
-
-                    {/* BOX 2: TESSERA SANITARIA */}
-                    <div className={`p-4 border rounded-lg transition-all ${isHealthValid ? 'bg-green-50 border-green-200' : healthDoc?.status === 'rifiutato' ? 'bg-red-50 border-red-200' : 'bg-white border-dashed border-gray-300'}`}>
-                        <div className="flex justify-between items-center mb-2">
-                            <Label className="flex items-center gap-2 font-bold text-gray-700">
-                                <HeartPulse className="w-4 h-4 text-red-500" /> Tessera Sanitaria
-                            </Label>
-                            {isHealthValid ? <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Caricato</Badge> : healthDoc?.status === 'rifiutato' ? <Badge className="bg-red-100 text-red-700">Rifiutato</Badge> : <Badge variant="outline">Mancante</Badge>}
-                        </div>
-
-                        {(!isHealthValid) && (
-                            <>
-                                {healthDoc?.status === 'rifiutato' && <p className="text-xs text-red-600 mb-2 font-medium flex items-center"><AlertTriangle className="w-3 h-3 mr-1"/> Documento non valido. Ricarica:</p>}
-                                <label className="cursor-pointer flex items-center justify-center w-full h-12 bg-red-50 text-red-700 rounded-md text-xs font-medium hover:bg-red-100 transition-colors">
-                                    {uploading ? 'Caricamento...' : 'Seleziona File'}
-                                    <input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0], 'health')} disabled={uploading} />
-                                </label>
-                            </>
-                        )}
-                        {isHealthValid && <p className="text-xs text-green-600 flex items-center"><CheckCircle className="w-3 h-3 mr-1"/> File ricevuto</p>}
-                    </div>
-
-                </CardContent>
-                <CardFooter>
-                    <Button 
-                        className="w-full bg-purple-600 hover:bg-purple-700" 
-                        onClick={() => window.location.reload()} 
-                        disabled={!step2Completed}
-                    >
-                        {step2Completed ? "Completa Registrazione" : "Carica tutto per procedere"}
-                    </Button>
-                </CardFooter>
-            </Card>
-        </div>
-    );
-  }
-
-  // ==========================================
-  // STEP 3: ATTESA APPROVAZIONE (Gate Finale)
-  // ==========================================
-  if (!isApproved) {
-    return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-            <Card className="w-full max-w-md shadow-lg border-t-4 border-t-yellow-500 animate-in zoom-in-95 duration-300">
-                <CardHeader className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4"><Clock className="w-8 h-8 text-yellow-600" /></div>
-                    <CardTitle>Verifica in Corso</CardTitle>
-                    <CardDescription>Grazie! I tuoi documenti sono stati ricevuti.</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="space-y-2 mb-4">
-                        <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border"><IdCard className="w-4 h-4 text-purple-600"/><span className="text-sm">Carta d'Identità</span><Badge className="ml-auto bg-yellow-100 text-yellow-700">Ok</Badge></div>
-                        <div className="flex items-center gap-2 p-2 bg-slate-50 rounded border"><HeartPulse className="w-4 h-4 text-red-600"/><span className="text-sm">Tessera Sanitaria</span><Badge className="ml-auto bg-yellow-100 text-yellow-700">Ok</Badge></div>
-                    </div>
-                    <p className="text-xs text-center text-gray-500">
-                        Lo staff verificherà la documentazione a breve.<br/>
-                        Una volta approvati, avrai accesso completo a questa pagina.
-                    </p>
-                </CardContent>
-            </Card>
-        </div>
-    );
-  }
-
-  // ==========================================
-  // DASHBOARD COMPLETA (Accesso Garantito)
-  // ==========================================
-  const daPagare = payments?.filter(p => p.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
-
-  const getStatusBadge = (status: string) => {
-      if (status === 'approvato') return <Badge className="bg-green-100 text-green-700">Approvato</Badge>;
-      if (status === 'rifiutato') return <Badge className="bg-red-100 text-red-700">Rifiutato</Badge>;
-      return <Badge className="bg-yellow-100 text-yellow-700">In Attesa</Badge>;
-  };
-
-  const getIcon = (tipo: string) => {
-    if (tipo === 'bolletta_luce') return <Zap className="w-5 h-5 text-yellow-600" />;
-    if (tipo === 'bolletta_gas' || tipo === 'acqua') return <Droplet className="w-5 h-5 text-blue-600" />;
-    return <Home className="w-5 h-5 text-purple-600" />;
-  };
+  if (isLoading || !booking) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-slate-400"/></div>;
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-8 max-w-4xl mx-auto animate-in fade-in duration-500">
-      <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-xl shadow-sm border">
-        <div><h1 className="text-2xl font-bold text-gray-900">Ciao, {booking.nome_ospite}</h1><p className="text-gray-500 flex items-center gap-2 mt-1"><Home className="w-4 h-4" /> {booking.properties_real?.nome}</p></div>
-        <div className={`px-6 py-3 rounded-lg border text-center min-w-[200px] ${daPagare > 0 ? 'bg-orange-50 border-orange-200' : 'bg-green-50 border-green-200'}`}><p className="text-xs uppercase font-bold text-gray-500 mb-1">Da Saldare</p><p className={`text-2xl font-bold ${daPagare > 0 ? 'text-orange-600' : 'text-green-600'}`}>€ {daPagare.toLocaleString()}</p></div>
+    <div className="min-h-screen bg-slate-50 font-sans pb-20">
+      
+      {/* HEADER */}
+      <div className="bg-white border-b sticky top-0 z-10 shadow-sm px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+             <img src="/prop-manager-logo.svg" alt="Logo" className="h-8 w-auto object-contain" />
+             <span className="font-bold text-slate-800 hidden sm:block">Portale Ospiti</span>
+          </div>
+          <div className="text-right">
+             <p className="text-sm font-bold text-slate-900 truncate max-w-[150px]">{booking.properties_real?.nome}</p>
+             <p className="text-xs text-slate-500">{booking.properties_real?.citta}</p>
+          </div>
       </div>
 
-      <Tabs defaultValue="payments" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-4">
-          <TabsTrigger value="payments">Pagamenti</TabsTrigger>
-          <TabsTrigger value="services">Esperienze</TabsTrigger>
-          <TabsTrigger value="support">Assistenza</TabsTrigger>
-          <TabsTrigger value="docs">Documenti</TabsTrigger>
-        </TabsList>
+      <div className="max-w-2xl mx-auto p-4 space-y-6 mt-4">
 
-        <TabsContent value="payments" className="space-y-4">
-          {payments?.map((pay) => (
-            <Card key={pay.id} className="border-l-4 overflow-hidden" style={{ borderLeftColor: pay.stato === 'pagato' ? '#22c55e' : '#f97316' }}>
-              <CardContent className="p-0">
-                <div className="flex items-center p-4">
-                  <div className="p-3 bg-gray-100 rounded-full mr-4">{getIcon(pay.tipo || '')}</div>
-                  <div className="flex-1"><p className="font-bold capitalize text-gray-900">{pay.tipo?.replace('_', ' ') || 'Rata'}</p><p className="text-sm text-gray-500">{pay.description}</p><p className="text-xs text-gray-400">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p></div>
-                  <div className="text-right"><p className="font-bold text-lg">€{pay.importo}</p><Badge variant={pay.stato === 'pagato' ? 'default' : 'outline'}>{pay.stato}</Badge></div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </TabsContent>
-
-        <TabsContent value="services" className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
-                {services?.map(service => {
-                    const isPremium = !!service.payment_link;
-                    return (
-                        <Card key={service.id} className={`overflow-hidden border-l-4 transition-shadow hover:shadow-md flex flex-col ${isPremium ? 'border-l-yellow-400' : 'border-l-green-500'}`}>
-                            <div className="h-32 bg-gray-100 relative">
-                                {service.immagine_url ? <img src={service.immagine_url} alt={service.titolo} className="w-full h-full object-cover" /> : <div className="w-full h-full flex items-center justify-center text-gray-300"><FileText className="w-10 h-10" /></div>}
-                                <div className="absolute top-2 right-2">{isPremium ? <Badge className="bg-yellow-400 text-yellow-900">Premium</Badge> : <Badge className="bg-green-500">Partner</Badge>}</div>
-                            </div>
-                            <CardHeader className="pb-2"><CardTitle className="text-lg flex justify-between">{service.titolo} <span className="text-base font-bold">€ {service.prezzo}</span></CardTitle><CardDescription className="line-clamp-2">{service.descrizione}</CardDescription></CardHeader>
-                            <CardFooter className="mt-auto pt-0">
-                                {isPremium ? <Button className="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-semibold" onClick={() => window.open(service.payment_link, '_blank')}><CreditCard className="w-4 h-4 mr-2" /> Prenota</Button> : <Button variant="outline" className="w-full border-green-500 text-green-600" onClick={() => handleVoucherDownload(service.titolo)}><Ticket className="w-4 h-4 mr-2" /> Voucher</Button>}
-                            </CardFooter>
-                        </Card>
-                    );
-                })}
-            </div>
-        </TabsContent>
-
-        <TabsContent value="support" className="space-y-6">
-            <Card><CardHeader><CardTitle>Segnala Problema</CardTitle></CardHeader><CardContent className="space-y-4"><Input placeholder="Oggetto" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} /><Textarea placeholder="Descrizione..." value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} /><Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4 mr-2" /> Invia</Button></CardContent></Card>
-            <div className="space-y-3">
-                {myTickets?.map(t => (
-                    <div key={t.id} className="bg-white p-4 rounded-lg border flex justify-between items-center">
-                        <div className="flex-1">
-                            <p className="font-medium">{t.titolo}</p>
-                            <p className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM')}</p>
+        {/* --- CARD DI ACCESSO (SMART LOCK) --- */}
+        <Card className={`border overflow-hidden shadow-md transition-all duration-500 
+            ${isCheckinUnlocked ? 'border-green-200 bg-white' : 
+              isPendingApproval ? 'border-yellow-300 bg-yellow-50' : 'border-red-200 bg-white'}`}>
+            
+            <div className={`h-2 w-full transition-colors duration-500 
+                ${isCheckinUnlocked ? 'bg-green-500' : isPendingApproval ? 'bg-yellow-400' : 'bg-red-500'}`} />
+            
+            <CardHeader className="pb-2 bg-slate-50/50">
+                <CardTitle className="flex justify-between items-center text-lg">
+                    {isCheckinUnlocked ? <span className="text-green-800">Accesso Autorizzato</span> : 
+                     isPendingApproval ? <span className="text-yellow-800">Verifica in Corso</span> :
+                     <span className="text-red-800">Check-in Richiesto</span>}
+                    
+                    {isCheckinUnlocked ? <Unlock className="text-green-600 w-5 h-5"/> : 
+                     isPendingApproval ? <Clock className="text-yellow-600 w-5 h-5"/> :
+                     <Lock className="text-red-500 w-5 h-5"/>}
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-6">
+                
+                {/* FASE 0: CONTATTI */}
+                {!hasContactInfo && (
+                    <div className="space-y-4 animate-in fade-in">
+                        <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 text-sm text-blue-800 flex gap-2">
+                            <Info className="w-5 h-5 flex-shrink-0"/>
+                            <div>Per ragioni di sicurezza, inserisci i tuoi contatti validi.</div>
                         </div>
-                        <Badge>{t.stato}</Badge>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="space-y-1">
+                                <Label>Email Personale</Label>
+                                <Input placeholder="email@esempio.com" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} />
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Cellulare</Label>
+                                <Input placeholder="+39 ..." value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} />
+                            </div>
+                        </div>
+                        <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact}>
+                            {isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : "Salva e Procedi"}
+                        </Button>
                     </div>
-                ))}
-            </div>
-        </TabsContent>
+                )}
 
-        <TabsContent value="docs">
-           <Card className="mb-6"><CardContent className="py-8 text-center"><h3 className="font-bold text-gray-900 mb-4">Carica Documenti Extra</h3><label className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium bg-blue-600 text-white h-10 px-6 py-2">{uploading ? "Caricamento..." : "Seleziona File"}<input type="file" className="hidden" onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])} disabled={uploading} /></label></CardContent></Card>
-           <div className="space-y-3">{documents?.map(doc => (<div key={doc.id} className="bg-white p-4 rounded-lg border flex justify-between items-center"><div className="flex items-center gap-3"><FileText className="w-5 h-5" /><span className="font-medium text-sm">{doc.filename}</span></div>{getStatusBadge(doc.status)}</div>))}</div>
-        </TabsContent>
-      </Tabs>
+                {/* FASE 1: UPLOAD DOCUMENTI */}
+                {hasContactInfo && !isCheckinUnlocked && (
+                    <div className="space-y-4 animate-in fade-in">
+                        {!isPendingApproval && (
+                             <div className="flex items-center gap-2 justify-center text-green-700 font-bold bg-green-50 py-1 px-3 rounded-full text-xs w-fit mx-auto mb-2">
+                                <CheckCircle className="w-3 h-3"/> Contatti Ricevuti
+                            </div>
+                        )}
+
+                        <div className={`p-4 rounded-xl text-center border-2 border-dashed 
+                            ${isPendingApproval ? 'border-yellow-300 bg-yellow-50/50' : 'border-slate-200 bg-slate-50'}`}>
+                            
+                            {isPendingApproval ? (
+                                <div className="py-2">
+                                    <ShieldCheck className="w-12 h-12 text-yellow-500 mx-auto mb-2"/>
+                                    <h3 className="font-bold text-yellow-800">Documenti inviati!</h3>
+                                    <p className="text-sm text-yellow-700 mt-1">
+                                        Stiamo verificando la tua identità.<br/>
+                                        Riceverai una notifica o l'accesso verrà sbloccato qui a breve.
+                                    </p>
+                                    <p className="text-xs text-yellow-600 mt-4 italic">Hai dimenticato qualcosa? Puoi caricare altri file.</p>
+                                </div>
+                            ) : (
+                                <div className="py-2">
+                                    <p className="font-medium text-slate-800 mb-1">Caricamento Documenti Obbligatorio</p>
+                                    <p className="text-sm text-slate-500 mb-4">
+                                        Carica foto fronte/retro di: <br/>
+                                        <strong>1. Carta d'Identità</strong> <br/>
+                                        <strong>2. Tessera Sanitaria / Codice Fiscale</strong>
+                                    </p>
+                                </div>
+                            )}
+
+                            <div className="flex justify-center mt-2">
+                                <label className={`cursor-pointer w-full max-w-xs flex items-center justify-center gap-2 
+                                    ${isPendingApproval ? 'bg-white text-yellow-700 border border-yellow-300' : 'bg-slate-900 text-white'} 
+                                    hover:opacity-90 py-3 px-6 rounded-xl font-bold shadow-sm transition-all active:scale-95`}>
+                                    {isUploading ? <Loader2 className="animate-spin w-5 h-5"/> : isPendingApproval ? "➕ Aggiungi altro file" : "📸 Scatta/Carica Foto"}
+                                    <input type="file" accept="image/*,.pdf" className="hidden" onChange={handleFileUpload} disabled={isUploading} />
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* FASE 2: ACCESSO SBLOCCATO (Solo dopo approvazione) */}
+                {isCheckinUnlocked && (
+                    <div className="space-y-5 animate-in fade-in slide-in-from-bottom-2">
+                        <div className="bg-green-50 border border-green-100 p-4 rounded-xl text-center shadow-sm relative overflow-hidden">
+                            <p className="text-xs text-green-800 uppercase font-bold tracking-widest mb-1">Codice Cassetta</p>
+                            <div className="text-4xl font-mono font-black text-green-700 tracking-widest select-all">
+                                {booking.properties_real?.keybox_code || "----"}
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                             {booking.properties_real?.checkin_video_url && (
+                                 <Button variant="outline" className="h-auto py-3 flex flex-col gap-1 hover:bg-red-50 hover:border-red-200 group transition-all" 
+                                    onClick={() => window.open(booking.properties_real.checkin_video_url, '_blank')}>
+                                    <Youtube className="w-5 h-5 text-slate-400 group-hover:text-red-600" />
+                                    <span className="text-xs font-medium text-slate-600">Video</span>
+                                 </Button>
+                             )}
+                             <Button variant="outline" className="h-auto py-3 flex flex-col gap-1 hover:bg-blue-50 hover:border-blue-200 group transition-all"
+                                onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((booking.properties_real?.via || '') + ' ' + (booking.properties_real?.citta || ''))}`, '_blank')}>
+                                <MapPin className="w-5 h-5 text-slate-400 group-hover:text-blue-600" />
+                                <span className="text-xs font-medium text-slate-600">Mappa</span>
+                             </Button>
+                        </div>
+                         
+                         {/* WIFI */}
+                         <div className="flex justify-between items-center p-3 bg-white rounded-lg border border-slate-200 shadow-sm" 
+                             onClick={() => copyToClipboard(booking.properties_real?.wifi_password || "")}>
+                            <div className="flex items-center gap-3">
+                                <div className="bg-blue-50 p-2 rounded-full text-blue-600"><Wifi className="w-4 h-4"/></div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 uppercase font-bold">Wi-Fi</p>
+                                    <p className="font-bold text-slate-800 text-sm">{booking.properties_real?.wifi_ssid || "N/A"}</p>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <code className="font-mono font-bold text-xs bg-slate-100 px-2 py-1 rounded text-slate-700 border">
+                                    {booking.properties_real?.wifi_password || "N/A"}
+                                </code>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </CardContent>
+        </Card>
+
+        {/* --- TABS: PAGAMENTI & STORICO DOCUMENTI --- */}
+        <Tabs defaultValue="payments" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+                <TabsTrigger value="payments">💰 Pagamenti</TabsTrigger>
+                <TabsTrigger value="documents">📂 I Miei File</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="payments" className="space-y-3">
+                {payments?.length === 0 ? (
+                    <div className="text-center p-6 bg-white rounded-lg border border-dashed text-slate-400 text-sm">
+                        <CreditCard className="w-6 h-6 mx-auto mb-2 opacity-30"/>
+                        Nessun pagamento in programma.
+                    </div>
+                ) : (
+                    payments?.map(pay => (
+                        <Card key={pay.id} className="border-l-4 border-l-blue-500 shadow-sm">
+                            <CardContent className="p-4 flex justify-between items-center">
+                                <div>
+                                    <p className="font-bold text-slate-800 text-sm">{pay.tipo === 'canone_locazione' ? 'Canone Affitto' : 'Rimborso Spese'}</p>
+                                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                                        <Calendar className="w-3 h-3"/> Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM', { locale: it })}
+                                    </p>
+                                </div>
+                                <div className="text-right">
+                                    <p className="font-bold">€{pay.importo}</p>
+                                    {pay.stato === 'pagato' ? (
+                                        <Badge className="bg-green-100 text-green-800 text-[10px]">Pagato</Badge>
+                                    ) : pay.stato === 'in_verifica' ? (
+                                        <Badge className="bg-yellow-100 text-yellow-800 text-[10px]">Verifica</Badge>
+                                    ) : (
+                                        <Button size="sm" variant="outline" className="mt-1 h-7 text-xs border-blue-200 text-blue-700" 
+                                            onClick={() => markPaymentSent.mutate(pay.id)}>
+                                            Segnala
+                                        </Button>
+                                    )}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))
+                )}
+            </TabsContent>
+
+            <TabsContent value="documents" className="space-y-3">
+                <Card className="shadow-sm">
+                    <CardHeader className="pb-3 pt-4"><CardTitle className="text-sm font-bold">File Caricati</CardTitle></CardHeader>
+                    <CardContent className="grid gap-2">
+                        {documents?.map(doc => (
+                            <div key={doc.id} className="flex items-center justify-between p-3 bg-slate-50 rounded border text-sm">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <FileText className="w-4 h-4 text-slate-400 flex-shrink-0"/>
+                                    <span className="truncate max-w-[150px]">{doc.filename}</span>
+                                </div>
+                                <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => window.open(`https://pcikhldamcqvirwkokim.supabase.co/storage/v1/object/public/documents/${doc.file_url}`, '_blank')}>
+                                    <Download className="w-3 h-3"/>
+                                </Button>
+                            </div>
+                        ))}
+                        {documents?.length === 0 && <p className="text-center text-slate-400 text-xs py-2">Nessun documento.</p>}
+                    </CardContent>
+                </Card>
+            </TabsContent>
+        </Tabs>
+
+        {/* --- ASSISTENZA --- */}
+        <div className="pt-4 pb-8">
+            <h3 className="font-bold text-slate-800 mb-2 text-sm uppercase tracking-wide ml-1">Assistenza</h3>
+            <div className="flex gap-2">
+                <Input className="bg-white border-slate-200" placeholder="Messaggio..." value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
+                <Button className="bg-slate-900 text-white px-4" onClick={() => toast({ title: "Inviato", description: "Ti risponderemo presto." })} disabled={!ticketForm.titolo}>
+                    <Send className="w-4 h-4" />
+                </Button>
+            </div>
+        </div>
+
+      </div>
     </div>
   );
 }
