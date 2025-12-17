@@ -1,3 +1,4 @@
+// FIX: Added MessageSquare import to prevent crash
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -9,30 +10,31 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye, Home, User } from 'lucide-react';
+// MODIFICA QUI SOTTO: Aggiunto MessageSquare e Home/User per icone
+import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye, Home, User, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import TicketManager from '@/components/TicketManager';
-import { usePropertiesReal } from '@/hooks/useProperties'; // IMPORT AGGIUNTO
+import { usePropertiesReal } from '@/hooks/useProperties'; // IMPORT NECESSARIO PER STEP 2.1
 
 export default function Activities() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: properties } = usePropertiesReal(); // HOOK PROPRIETÀ
-
+  const { data: properties } = usePropertiesReal(); // STEP 2.1: Carica proprietà
+  
   // STATI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null);
+  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
 
   const [formData, setFormData] = useState({
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    property_id: '', // NUOVO CAMPO
+    property_id: '', // STEP 2.1: Nuovo campo
     booking_id: 'none'
   });
 
-  // FETCH INQUILINI ATTIVI (Dipende dalla proprietà selezionata)
+  // STEP 2.1: FETCH INQUILINI ATTIVI (Dipende dalla proprietà selezionata)
   const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants-ticket', formData.property_id],
     queryFn: async () => {
@@ -60,10 +62,11 @@ export default function Activities() {
         .from('tickets')
         .select(`
           *,
-          properties_real (nome), -- Fetch nome proprietà diretta
+          properties_real (nome), -- STEP 2.1: Fetch nome proprietà diretta
           bookings (
             nome_ospite,
-            telefono_ospite
+            telefono_ospite,
+            properties_real (nome, indirizzo)
           )
         `)
         .order('created_at', { ascending: false });
@@ -81,7 +84,7 @@ export default function Activities() {
         titolo: newTicket.titolo,
         descrizione: newTicket.descrizione,
         priorita: newTicket.priorita,
-        property_id: newTicket.property_id || null, // Salvataggio Proprietà
+        property_id: newTicket.property_id || null, // STEP 2.1: Salva Proprietà
         user_id: user?.id,
         creato_da: 'manager',
         stato: 'aperto',
@@ -95,9 +98,9 @@ export default function Activities() {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
       setFormData({ titolo: '', descrizione: '', priorita: 'media', property_id: '', booking_id: 'none' });
-      toast({ title: "Ticket creato", description: "Assegnato correttamente." });
+      toast({ title: "Ticket creato", description: "Aggiunto alla lista attività." });
     },
-    onError: (err: any) => toast({ title: "Errore creazione", description: err.message, variant: "destructive" })
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
   // 3. RIAPRI TICKET
@@ -105,7 +108,12 @@ export default function Activities() {
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('tickets')
-        .update({ stato: 'aperto', cost: null, resolution_photo_url: null }) 
+        .update({ 
+            stato: 'aperto', 
+            cost: null, 
+            resolution_photo_url: null,
+            quote_status: 'none' // Reset preventivo se riapro
+        }) 
         .eq('id', id);
       if (error) throw error;
     },
@@ -139,7 +147,7 @@ export default function Activities() {
             <DialogHeader><DialogTitle>Apri Ticket Interno</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               
-              {/* SELEZIONE PROPRIETÀ (OBBLIGATORIA) */}
+              {/* STEP 2.1: SELEZIONE PROPRIETÀ (OBBLIGATORIA) */}
               <div className="grid gap-2">
                 <Label className="flex items-center gap-2">
                     <Home className="w-4 h-4 text-blue-600" /> Proprietà (Obbligatorio)
@@ -154,7 +162,7 @@ export default function Activities() {
                 </Select>
               </div>
 
-              {/* SELEZIONE INQUILINO (DINAMICA) */}
+              {/* STEP 2.1: SELEZIONE INQUILINO (DINAMICA) */}
               <div className="grid gap-2">
                 <Label className="flex items-center gap-2">
                     <User className="w-4 h-4 text-green-600" /> Inquilino (Opzionale)
@@ -218,10 +226,16 @@ export default function Activities() {
                         <MessageSquare className="w-3 h-3 mr-1" /> Ospite
                       </Badge>
                     )}
-                      {ticket.stato === 'risolto' && (
+                     {ticket.stato === 'risolto' && (
                       <Badge className="bg-green-100 text-green-800 border-green-200">
                         <CheckCircle className="w-3 h-3 mr-1" /> Risolto
                       </Badge>
+                    )}
+                    {/* STEP 2.2: Badge Preventivo */}
+                    {ticket.quote_status === 'pending' && (
+                        <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                            <AlertTriangle className="w-3 h-3 mr-1"/> Preventivo
+                        </Badge>
                     )}
                   </div>
                   
@@ -232,18 +246,17 @@ export default function Activities() {
                         <Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}
                     </span>
                     
-                    {/* VISUALIZZAZIONE PROPRIETÀ DIRETTA */}
+                    {/* STEP 2.1: VISUALIZZAZIONE PROPRIETÀ DIRETTA */}
                     {ticket.properties_real?.nome && (
                       <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
                         🏠 {ticket.properties_real.nome}
                       </span>
                     )}
-                    
-                    {/* FALLBACK: Se non c'è la proprietà diretta, prova a vedere se c'è nel booking (vecchi ticket) */}
+                    {/* FALLBACK VECCHI TICKET */}
                     {!ticket.properties_real?.nome && ticket.bookings?.properties_real?.nome && (
-                         <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                         🏠 {ticket.bookings.properties_real.nome}
-                       </span>
+                      <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
+                        🏠 {ticket.bookings.properties_real.nome}
+                      </span>
                     )}
 
                     {ticket.bookings?.nome_ospite && (
@@ -251,19 +264,24 @@ export default function Activities() {
                         👤 {ticket.bookings.nome_ospite}
                       </span>
                     )}
+                    {ticket.supplier && (
+                        <span className="font-medium text-purple-700">
+                            🛠️ {ticket.supplier}
+                        </span>
+                    )}
                   </div>
                 </div>
                 
                 <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
-                    {ticket.stato !== 'risolto' ? (
+                   {ticket.stato !== 'risolto' ? (
                       <Button 
                         size="sm" 
                         className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm"
                         onClick={() => setTicketManagerOpen(ticket)} 
                       >
-                          <UserCog className="w-4 h-4 mr-2" /> Gestisci
+                         <UserCog className="w-4 h-4 mr-2" /> Gestisci
                       </Button>
-                    ) : (
+                   ) : (
                       <div className="flex flex-col gap-2">
                           <Button 
                             size="sm" 
@@ -284,7 +302,7 @@ export default function Activities() {
                              <RotateCcw className="w-3 h-3 mr-1" /> Riapri
                           </Button>
                       </div>
-                    )}
+                   )}
                 </div>
               </div>
             </CardContent>
