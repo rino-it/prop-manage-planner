@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -9,11 +9,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 import { 
   CheckCircle, Save, User, Send, Clock, 
-  Euro, FileText, Share2, Hammer, Eye, Upload, XCircle, AlertTriangle 
+  Euro, FileText, Share2, Hammer, Eye, Upload, AlertTriangle, XCircle 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -29,26 +29,24 @@ interface TicketManagerProps {
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // DATI GENERALI
+  // --- DATI ORIGINALI (TAB 1 & 3) ---
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
-  
-  // DATI ASSEGNAZIONE
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
   const [supplierContact, setSupplierContact] = useState(''); 
   const [assignedPartner, setAssignedPartner] = useState('');
-
-  // STEP 2.2: DATI PREVENTIVO
-  const [quoteAmount, setQuoteAmount] = useState(ticket?.quote_amount || '');
-  const [quoteFile, setQuoteFile] = useState<File | null>(null);
-
-  // DATI CHIUSURA & COSTI
+  
   const [costAmount, setCostAmount] = useState(ticket?.cost || '');
   const [costVisible, setCostVisible] = useState(ticket?.spesa_visibile_ospite || false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  
+  // --- NUOVI DATI (TAB 2: PREVENTIVO) ---
+  const [quoteAmount, setQuoteAmount] = useState(ticket?.quote_amount || '');
+  const [quoteFile, setQuoteFile] = useState<File | null>(null);
+
   const [uploading, setUploading] = useState(false);
 
-  // Recupera soci per la delega
+  // Recupera soci per la delega (LOGICA ORIGINALE)
   const { data: colleagues } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
@@ -57,7 +55,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   });
 
-  // SALVA AGGIORNAMENTI PARZIALI
+  // --- AZIONI ORIGINALI ---
+  
+  // SALVA STATO PARZIALE
   const saveProgress = async () => {
     const { error } = await supabase
       .from('tickets')
@@ -76,7 +76,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   };
 
-  // INVIA DELEGA WHATSAPP
+  // DELEGA WHATSAPP
   const handleDelegate = () => {
     if (!assignedPartner) return toast({ title: "Chi se ne occupa?", description: "Seleziona un socio prima di delegare.", variant: "destructive" });
     
@@ -87,24 +87,25 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // STEP 2.2: UPLOAD PREVENTIVO
+  // --- NUOVE AZIONI (PREVENTIVI) ---
+
+  // UPLOAD PREVENTIVO
   const handleQuoteUpload = async () => {
       setUploading(true);
       try {
-        let quoteUrl = ticket.quote_url;
+        let finalUrl = ticket.quote_url;
         if (quoteFile) {
            const fileName = `quote_${ticket.id}_${Date.now()}.${quoteFile.name.split('.').pop()}`;
            const { error: upError } = await supabase.storage.from('documents').upload(fileName, quoteFile);
            if (upError) throw upError;
-           quoteUrl = fileName;
+           finalUrl = fileName;
         }
 
-        const { error } = await supabase
-          .from('tickets')
+        const { error } = await supabase.from('tickets')
           .update({
             quote_amount: parseFloat(quoteAmount),
-            quote_url: quoteUrl,
-            quote_status: 'pending', 
+            quote_url: finalUrl,
+            quote_status: 'pending', // Invia in approvazione
             stato: 'in_attesa'
           })
           .eq('id', ticket.id);
@@ -113,12 +114,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         toast({ title: "Preventivo Caricato", description: "In attesa di approvazione." });
         onUpdate();
         onClose();
-      } catch (error: any) { 
-          toast({ title: "Errore", description: error.message, variant: "destructive" }); 
+      } catch (e: any) { 
+          toast({ title: "Errore", description: e.message, variant: "destructive" }); 
       } finally { setUploading(false); }
   };
 
-  // STEP 2.2: APPROVA / RIFIUTA PREVENTIVO
+  // APPROVA / RIFIUTA
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       const newState = decision === 'approved' ? 'in_corso' : 'aperto';
       const { error } = await supabase
@@ -134,14 +135,16 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       }
   };
 
-  // CHIUDI TICKET (CONFERMA O RISOLUZIONE)
+  // --- AZIONI ORIGINALI (CHIUSURA) ---
+
   const handleResolveFlow = async () => {
     try {
         setUploading(true);
         let receiptUrl = ticket.ricevuta_url;
 
         if (receiptFile) {
-            const fileName = `receipt_${ticket.id}_${Date.now()}.${receiptFile.name.split('.').pop()}`;
+            const fileExt = receiptFile.name.split('.').pop();
+            const fileName = `receipt_${ticket.id}_${Date.now()}.${fileExt}`;
             const { error: upError } = await supabase.storage.from('documents').upload(fileName, receiptFile);
             if (upError) throw upError;
             receiptUrl = fileName;
@@ -194,8 +197,10 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <TabsTrigger value="closing">3. Chiusura</TabsTrigger>
             </TabsList>
 
-            {/* TAB 1: OPERATIVITÀ (Esistente) */}
+            {/* TAB 1: OPERATIVITÀ (Tuo Codice Originale) */}
             <TabsContent value="management" className="space-y-4 py-4">
+                
+                {/* Assegnazione Fornitore */}
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
                     <Label className="text-slate-700 font-semibold">Chi interviene? (Fornitore)</Label>
                     <div className="flex gap-2">
@@ -216,6 +221,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     </div>
                 </div>
 
+                {/* Note Interne e Visibilità */}
                 <div className="grid gap-2">
                     <div className="flex justify-between items-center">
                         <Label>Diario / Note di Lavoro</Label>
@@ -240,6 +246,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     />
                 </div>
 
+                {/* Delega a Socio */}
                 <div className="border-t pt-4 mt-2">
                     <Label className="mb-2 block font-semibold text-slate-700">Non puoi farlo tu? Delega a un socio.</Label>
                     <div className="flex gap-2">
@@ -272,53 +279,61 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
             </TabsContent>
 
-            {/* TAB 2: PREVENTIVO (Nuovo Step 2.2) */}
+            {/* TAB 2: PREVENTIVI (Nuova Funzionalità) */}
             <TabsContent value="quote" className="space-y-4 py-4">
+                
+                {/* Visualizzazione Preventivo Esistente */}
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex justify-between items-center">
-                        <div className="flex items-center gap-2 text-lg font-bold">
+                        <div className="flex items-center gap-2 text-lg font-bold text-slate-700">
                             <Euro className="w-5 h-5 text-gray-500" /> {ticket.quote_amount}
                         </div>
-                        <Badge className={
-                            ticket.quote_status === 'approved' ? 'bg-green-100 text-green-800' :
-                            ticket.quote_status === 'rejected' ? 'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800'
+                        <Badge variant="outline" className={
+                            ticket.quote_status === 'approved' ? 'bg-green-50 text-green-700 border-green-200' :
+                            ticket.quote_status === 'rejected' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-orange-50 text-orange-700 border-orange-200'
                         }>{ticket.quote_status?.toUpperCase()}</Badge>
                     </div>
                 )}
 
+                {/* Workflow Approvazione */}
                 {ticket.quote_status === 'pending' && !isReadOnly && (
                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <Button className="bg-green-600 hover:bg-green-700" onClick={() => handleQuoteDecision('approved')}>
+                        <Button className="bg-green-600 hover:bg-green-700 h-10" onClick={() => handleQuoteDecision('approved')}>
                             <CheckCircle className="w-4 h-4 mr-2" /> Approva Spesa
                         </Button>
-                        <Button variant="destructive" onClick={() => handleQuoteDecision('rejected')}>
+                        <Button variant="destructive" className="h-10" onClick={() => handleQuoteDecision('rejected')}>
                             <XCircle className="w-4 h-4 mr-2" /> Rifiuta
                         </Button>
                     </div>
                 )}
 
+                {/* Form Caricamento (Visibile se non approvato) */}
                 {ticket.quote_status !== 'approved' && !isReadOnly && (
                     <div className="bg-slate-50 p-4 rounded border border-dashed border-slate-300">
-                        <h4 className="font-bold text-sm mb-3 flex items-center gap-2"><Upload className="w-4 h-4" /> Carica/Aggiorna Preventivo</h4>
+                        <h4 className="font-bold text-sm mb-3 flex items-center gap-2 text-slate-700">
+                            <Upload className="w-4 h-4" /> Carica / Aggiorna Preventivo
+                        </h4>
                         <div className="space-y-3">
                             <div className="grid gap-2">
-                                <Label>Importo (€)</Label>
-                                <Input type="number" value={quoteAmount} onChange={e => setQuoteAmount(e.target.value)} placeholder="0.00" />
+                                <Label>Importo Preventivato (€)</Label>
+                                <Input type="number" value={quoteAmount} onChange={e => setQuoteAmount(e.target.value)} placeholder="0.00" className="bg-white"/>
                             </div>
                             <div className="grid gap-2">
-                                <Label>File (PDF/IMG)</Label>
-                                <Input type="file" onChange={e => setQuoteFile(e.target.files?.[0] || null)} />
+                                <Label>Allegato (PDF/IMG)</Label>
+                                <Input type="file" onChange={e => setQuoteFile(e.target.files?.[0] || null)} className="bg-white"/>
                             </div>
                             <Button className="w-full" disabled={uploading} onClick={handleQuoteUpload}>
-                                {uploading ? 'Caricamento...' : 'Invia per Approvazione'}
+                                {uploading ? 'Caricamento...' : 'Salva e Invia per Approvazione'}
                             </Button>
                         </div>
                     </div>
                 )}
-                {isReadOnly && ticket.quote_status !== 'approved' && <p className="text-gray-500 italic">Nessun preventivo attivo o ticket chiuso.</p>}
+                {isReadOnly && ticket.quote_status !== 'approved' && (
+                    <p className="text-center text-gray-400 italic py-4">Nessun preventivo in corso.</p>
+                )}
             </TabsContent>
 
-            {/* TAB 3: COSTI & CHIUSURA (Esistente) */}
+            {/* TAB 3: COSTI & CHIUSURA (Tuo Codice Originale) */}
             <TabsContent value="closing" className="space-y-4 py-4">
                 <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
                     <h4 className="font-bold text-yellow-800 flex items-center gap-2 mb-3">
@@ -363,18 +378,19 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                                     </Badge>
                                 )}
                             </div>
+                            {costVisible && <p className="text-[10px] text-red-500 mt-1">* Se spuntato, l'ospite vedrà questo documento.</p>}
                         </div>
                     </div>
                 </div>
 
                 <Separator className="my-4" />
 
-                {!isReadOnly && (
+                {!isReadOnly ? (
                     <div className="space-y-2">
                         <Label className="font-bold text-green-800">Conclusione Intervento</Label>
                         <p className="text-sm text-gray-500">
                             Cliccando su "Completa", lo stato passerà a <b>In Verifica</b>. 
-                            L'ospite riceverà una notifica.
+                            L'ospite riceverà una notifica per confermare.
                         </p>
                         <Button 
                             className="w-full bg-green-600 hover:bg-green-700 py-6 text-lg font-bold shadow-md mt-2"
@@ -384,6 +400,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                             {uploading ? "Caricamento in corso..." : "✅ Completa Lavoro e Notifica Ospite"}
                         </Button>
                     </div>
+                ) : (
+                    <p className="text-center text-green-600 font-bold py-4">Ticket Completato e Chiuso.</p>
                 )}
             </TabsContent>
         </Tabs>
