@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { TrendingUp, Plus, DollarSign, Calendar as CalendarIcon, Trash2, CheckCircle, AlertCircle, RefreshCw } from 'lucide-react';
+import { TrendingUp, Plus, DollarSign, Calendar as CalendarIcon, Trash2, CheckCircle, AlertCircle, RefreshCw, CalendarPlus } from 'lucide-react';
 import { format, isPast, isToday } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 
@@ -33,7 +33,7 @@ export default function Revenue() {
 
   const today = new Date().toISOString().split('T')[0];
   
-const { data: activeTenants } = useQuery({
+  const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants', selectedProp],
     queryFn: async () => {
         console.log("selectedProp", selectedProp);
@@ -72,7 +72,21 @@ const { data: activeTenants } = useQuery({
     setFormData({ ...formData, amount: '', description: '' });
   };
 
-  // CALCOLO KPI (USA 'importo')
+  // Funzione Export Calendario (.ics)
+  const downloadIcs = (p: any) => {
+    const text = [
+      'BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT',
+      `SUMMARY:Incasso ${p.bookings?.nome_ospite || 'Affitto'}`,
+      `DESCRIPTION:${p.notes || p.description || ''}`,
+      `DTSTART;VALUE=DATE:${p.data_scadenza.replace(/-/g, '')}`,
+      'END:VEVENT', 'END:VCALENDAR'
+    ].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([text], {type: 'text/calendar'}));
+    a.download = `scadenza_${p.data_scadenza}.ics`; a.click();
+  };
+
+  // CALCOLO KPI
   const totalCollected = revenues?.filter(r => r.stato === 'pagato').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
   const totalPending = revenues?.filter(r => r.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
 
@@ -163,8 +177,8 @@ const { data: activeTenants } = useQuery({
               </div>
 
               <div className="grid gap-2">
-                <Label>Note</Label>
-                <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Es. Affitto Maggio" />
+                <Label>Note / Descrizione</Label>
+                <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Es. Affitto Maggio o Note particolari" />
               </div>
               
               <Button onClick={handleSubmit} className="w-full bg-green-600 hover:bg-green-700 font-bold">
@@ -205,9 +219,9 @@ const { data: activeTenants } = useQuery({
                     const isOverdue = rev.stato === 'da_pagare' && isPast(new Date(rev.data_scadenza)) && !isToday(new Date(rev.data_scadenza));
                     
                     return (
-                    <div key={rev.id} className={`flex flex-col md:flex-row md:items-center justify-between p-4 border-b last:border-0 hover:bg-slate-50 transition-colors ${isOverdue ? 'bg-red-50/50' : ''}`}>
-                        <div className="flex items-center gap-4 mb-2 md:mb-0">
-                            <div className={`p-2 rounded-full ${rev.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                    <div key={rev.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between p-4 border-b hover:bg-slate-50 transition-colors ${isOverdue ? 'bg-red-50/50' : ''}`}>
+                        <div className="flex items-start gap-4 mb-2 md:mb-0 w-full md:w-1/3">
+                            <div className={`p-2 rounded-full mt-1 ${rev.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
                                 <DollarSign className="w-5 h-5" />
                             </div>
                             <div>
@@ -215,16 +229,26 @@ const { data: activeTenants } = useQuery({
                                     <p className="font-bold text-gray-900">{rev.bookings?.nome_ospite || 'N/A'}</p>
                                     <span className="text-xs text-gray-400 bg-white border px-1 rounded">{rev.bookings?.properties_real?.nome}</span>
                                 </div>
-                                <p className="text-sm text-gray-500 capitalize flex items-center gap-2">
-                                    {rev.category?.replace('_', ' ') || 'Generico'} • {rev.description}
-                                    {isOverdue && <Badge variant="destructive" className="h-5 text-[10px]">SCADUTO</Badge>}
+                                <p className="text-sm text-gray-500 capitalize">
+                                    {rev.category?.replace('_', ' ') || 'Generico'}
                                 </p>
+                                {/* VISUALIZZAZIONE NOTE INTEGRATA */}
+                                {(rev.notes || rev.description) && (
+                                  <p className="text-xs text-blue-600 mt-1 italic border-l-2 border-blue-200 pl-2">
+                                    "{rev.notes || rev.description}"
+                                  </p>
+                                )}
+                                {isOverdue && <Badge variant="destructive" className="mt-1 h-5 text-[10px]">SCADUTO</Badge>}
                             </div>
                         </div>
                         
-                        <div className="flex items-center gap-4 justify-between md:justify-end w-full md:w-auto">
-                            <div className="text-right">
-                                {/* CORRETTO: Usa rev.importo invece di rev.amount */}
+                        <div className="flex items-center gap-4 justify-between w-full md:w-auto mt-2 md:mt-0">
+                             {/* EXPORT CALENDARIO */}
+                             <Button variant="outline" size="icon" className="h-8 w-8 text-blue-500 border-blue-200 hover:bg-blue-50" onClick={() => downloadIcs(rev)} title="Aggiungi al Calendario">
+                                <CalendarPlus className="w-4 h-4" />
+                             </Button>
+
+                            <div className="text-right min-w-[100px]">
                                 <p className={`font-bold ${rev.stato === 'pagato' ? 'text-green-600' : 'text-slate-600'}`}>€{rev.importo}</p>
                                 <p className="text-xs text-gray-400">Scad: {format(new Date(rev.data_scadenza), 'dd MMM yyyy')}</p>
                             </div>
