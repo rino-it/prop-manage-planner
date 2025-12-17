@@ -12,11 +12,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Wrench, AlertTriangle, CheckCircle, XCircle, FileText, Upload, Paperclip, Euro } from 'lucide-react';
+import { Plus, CheckCircle, XCircle, Paperclip, Euro } from 'lucide-react';
 import { format } from 'date-fns';
 
 export default function TicketManager() {
-  const { activities, createActivity, updateActivity, handleQuoteDecision, deleteActivity, isLoading } = useActivities();
+  const { activities, createActivity, updateActivity, handleQuoteDecision, isLoading } = useActivities();
   const { data: properties } = usePropertiesReal();
   
   const [isDialogOpen, setIsDialogOpen] = useState(false);
