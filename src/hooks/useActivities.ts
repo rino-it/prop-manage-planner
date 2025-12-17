@@ -1,185 +1,124 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import type { Tables, TablesInsert } from '@/integrations/supabase/types';
 
-type Activity = Tables<'activities'>;
-type ActivityInsert = TablesInsert<'activities'>;
+// Definiamo il tipo esteso per le attività con i preventivi
+export interface Activity {
+  id: string;
+  nome: string; // Titolo ticket
+  descrizione?: string;
+  tipo: 'manutenzione' | 'pulizia' | 'ispezione' | 'generale';
+  priorita: 'alta' | 'media' | 'bassa';
+  stato: 'aperto' | 'in_corso' | 'completato' | 'in_attesa';
+  
+  // Nuovi Campi Fase 2
+  property_real_id?: string | null;
+  booking_id?: string | null; // Link all'inquilino
+  quote_url?: string | null;
+  quote_amount?: number | null;
+  quote_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  
+  created_at: string;
+  properties_real?: { nome: string };
+  bookings?: { nome_ospite: string };
+}
 
 export const useActivities = () => {
   const { toast } = useToast();
-  
-  return useQuery({
-    queryKey: ['activities'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('activities')
-        .select(`
-          *,
-          properties_real(nome),
-          properties_mobile(nome)
-        `)
-        .order('prossima_scadenza', { ascending: true });
-      
-      if (error) throw error;
-      return data;
-    },
-    meta: {
-      onError: () => {
-        toast({
-          title: "Errore",
-          description: "Impossibile caricare le attività",
-          variant: "destructive",
-        });
-      },
-    },
-  });
-};
-
-export const useUpcomingActivities = () => {
-  const { toast } = useToast();
-  
-  return useQuery({
-    queryKey: ['upcoming-activities'],
-    queryFn: async () => {
-      const sevenDaysFromNow = new Date();
-      sevenDaysFromNow.setDate(sevenDaysFromNow.getDate() + 7);
-      
-      const { data, error } = await supabase
-        .from('activities')
-        .select(`
-          *,
-          properties_real(nome),
-          properties_mobile(nome)
-        `)
-        .gte('prossima_scadenza', new Date().toISOString())
-        .lte('prossima_scadenza', sevenDaysFromNow.toISOString())
-        .eq('completata', false)
-        .order('prossima_scadenza', { ascending: true })
-        .limit(8);
-      
-      if (error) throw error;
-      return data;
-    },
-    meta: {
-      onError: () => {
-        toast({
-          title: "Errore",
-          description: "Impossibile caricare le attività programmate",
-          variant: "destructive",
-        });
-      },
-    },
-  });
-};
-
-export const useActivityStats = () => {
-  const { toast } = useToast();
-  
-  return useQuery({
-    queryKey: ['activity-stats'],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from('activities')
-        .select('completata, priorita, prossima_scadenza');
-      
-      if (error) throw error;
-      
-      const totalActivities = data.length;
-      const completedActivities = data.filter(a => a.completata).length;
-      const urgentActivities = data.filter(a => 
-        !a.completata && 
-        a.priorita === 'alta' && 
-        new Date(a.prossima_scadenza) <= new Date()
-      ).length;
-      
-      return {
-        totalActivities,
-        completedActivities,
-        urgentActivities,
-        pendingActivities: totalActivities - completedActivities
-      };
-    },
-    meta: {
-      onError: () => {
-        toast({
-          title: "Errore",
-          description: "Impossibile caricare le statistiche delle attività",
-          variant: "destructive",
-        });
-      },
-    },
-  });
-};
-
-export const useCreateActivity = () => {
   const queryClient = useQueryClient();
-  const { toast } = useToast();
-  
-  return useMutation({
-    mutationFn: async (activity: ActivityInsert) => {
+
+  // 1. FETCH ATTIVITÀ / TICKET
+  const { data: activities, isLoading } = useQuery({
+    queryKey: ['activities-tickets'],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from('activities')
-        .insert(activity)
-        .select()
-        .single();
+        .select(`
+          *,
+          properties_real (nome),
+          bookings (nome_ospite)
+        `)
+        .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data;
+      return data as Activity[];
+    },
+  });
+
+  // 2. CREA TICKET (Con controlli orfani)
+  const createActivity = useMutation({
+    mutationFn: async (newTicket: any) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from('activities')
+        .insert({
+            ...newTicket,
+            user_id: user?.id,
+            stato: 'aperto',
+            quote_status: 'none' // Default
+        });
+        
+      if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['activities'] });
-      queryClient.invalidateQueries({ queryKey: ['upcoming-activities'] });
-      queryClient.invalidateQueries({ queryKey: ['activity-stats'] });
-      toast({
-        title: "Attività aggiunta",
-        description: "L'attività è stata aggiunta con successo",
-      });
+      queryClient.invalidateQueries({ queryKey: ['activities-tickets'] });
+      toast({ title: "Ticket Aperto", description: "La richiesta è stata registrata." });
     },
-    onError: () => {
-      toast({
-        title: "Errore",
-        description: "Impossibile aggiungere l'attività",
-        variant: "destructive",
-      });
-    },
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
-};
 
-export const useCompleteActivity = () => {
-  const queryClient = useQueryClient();
-  const { toast } = useToast();
-  
-  return useMutation({
-    mutationFn: async (activityId: string) => {
-      const { data, error } = await supabase
+  // 3. AGGIORNA / CARICA PREVENTIVO
+  const updateActivity = useMutation({
+    mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
+      const { error } = await supabase
+        .from('activities')
+        .update(updates)
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['activities-tickets'] });
+      toast({ title: "Aggiornato", description: "Ticket modificato con successo." });
+    }
+  });
+
+  // 4. APPROVAZIONE PREVENTIVO (Workflow)
+  const handleQuoteDecision = useMutation({
+    mutationFn: async ({ id, decision }: { id: string, decision: 'approved' | 'rejected' }) => {
+       const { error } = await supabase
         .from('activities')
         .update({ 
-          completata: true, 
-          ultima_esecuzione: new Date().toISOString() 
+            quote_status: decision,
+            stato: decision === 'approved' ? 'in_corso' : 'in_attesa' 
         })
-        .eq('id', activityId)
-        .select()
-        .single();
-      
-      if (error) throw error;
-      return data;
+        .eq('id', id);
+       if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+        queryClient.invalidateQueries({ queryKey: ['activities-tickets'] });
+        const msg = variables.decision === 'approved' ? "Spesa approvata! Procedere." : "Preventivo rifiutato.";
+        toast({ title: "Decisione Registrata", description: msg, variant: variables.decision === 'approved' ? "default" : "destructive" });
+    }
+  });
+
+  // 5. DELETE
+  const deleteActivity = useMutation({
+    mutationFn: async (id: string) => {
+       await supabase.from('activities').delete().eq('id', id);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['activities'] });
-      queryClient.invalidateQueries({ queryKey: ['upcoming-activities'] });
-      queryClient.invalidateQueries({ queryKey: ['activity-stats'] });
-      toast({
-        title: "Attività completata",
-        description: "L'attività è stata marcata come completata",
-      });
-    },
-    onError: () => {
-      toast({
-        title: "Errore",
-        description: "Impossibile completare l'attività",
-        variant: "destructive",
-      });
-    },
+       queryClient.invalidateQueries({ queryKey: ['activities-tickets'] });
+       toast({ title: "Ticket eliminato" });
+    }
   });
+
+  return {
+    activities,
+    isLoading,
+    createActivity,
+    updateActivity,
+    handleQuoteDecision,
+    deleteActivity
+  };
 };
