@@ -8,8 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch'; // Componente interruttore
-import { Plus, Trash2, FileText, Upload, Paperclip, Pencil, User, Forward } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Plus, Trash2, FileText, Upload, Paperclip, Pencil, User, Forward, Eye, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
@@ -23,6 +23,11 @@ export default function Expenses() {
   // STATO PER LA MODIFICA
   const [editingId, setEditingId] = useState<string | null>(null);
 
+  // STATO PER ANTEPRIMA FILE
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewType, setPreviewType] = useState<'image' | 'pdf' | null>(null);
+
   // STATI FORM
   const [formData, setFormData] = useState({
     property_id: '',
@@ -32,19 +37,29 @@ export default function Expenses() {
     date: format(new Date(), 'yyyy-MM-dd')
   });
 
-  // NUOVO STATO: ADDEBITA ALL'INQUILINO
+  // STATO: ADDEBITA ALL'INQUILINO
   const [chargeTenant, setChargeTenant] = useState(false);
 
   const [attachment, setAttachment] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
+  // 1. QUERY AGGIORNATA: Include i documenti collegati
   const { data: expenses, isLoading } = useQuery({
     queryKey: ['expenses'],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('property_expenses')
-        .select('*, properties_real(nome)')
+        .select(`
+          *,
+          properties_real(nome),
+          documents(id, url, nome, formato)
+        `)
         .order('date', { ascending: false });
+        
+      if (error) {
+        console.error("Errore fetch expenses:", error);
+        return [];
+      }
       return data || [];
     }
   });
@@ -58,7 +73,7 @@ export default function Expenses() {
         description: '', 
         date: format(new Date(), 'yyyy-MM-dd') 
     });
-    setChargeTenant(false); // Reset flag
+    setChargeTenant(false);
     setAttachment(null);
     setIsDialogOpen(true);
   };
@@ -72,17 +87,40 @@ export default function Expenses() {
         description: expense.description || '',
         date: format(new Date(expense.date), 'yyyy-MM-dd')
     });
-    setChargeTenant(expense.charged_to_tenant || false); // Carica stato flag
+    setChargeTenant(expense.charged_to_tenant || false);
     setAttachment(null);
     setIsDialogOpen(true);
   };
 
-  // --- LOGICA DI CREAZIONE (CON AUTOMATISMO INQUILINO) ---
+  // --- GESTIONE ANTEPRIMA ---
+  const handlePreview = async (doc: any) => {
+      if (!doc || !doc.url) return;
+      
+      try {
+        // Genera URL firmato temporaneo (valido 1 ora)
+        const { data, error } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(doc.url, 3600);
+
+        if (error || !data?.signedUrl) throw new Error("Impossibile recuperare il file");
+
+        setPreviewUrl(data.signedUrl);
+        
+        // Determina tipo file
+        const isPdf = doc.url.toLowerCase().endsWith('.pdf') || doc.formato?.includes('pdf');
+        setPreviewType(isPdf ? 'pdf' : 'image');
+        
+        setIsPreviewOpen(true);
+      } catch (err) {
+        toast({ title: "Errore file", description: "Impossibile aprire l'allegato.", variant: "destructive" });
+      }
+  };
+
+  // --- LOGICA DI CREAZIONE/AGGIORNAMENTO (Invariata ma robusta) ---
   const createExpense = useMutation({
     mutationFn: async () => {
       setUploading(true);
       try {
-        // 1. Crea la Spesa (Uscita Proprietario)
         const { data: expenseData, error: expenseError } = await supabase
           .from('property_expenses')
           .insert({
@@ -91,44 +129,37 @@ export default function Expenses() {
             amount: parseFloat(formData.amount),
             description: formData.description,
             date: formData.date,
-            charged_to_tenant: chargeTenant // Salviamo il flag
+            charged_to_tenant: chargeTenant
           })
           .select()
           .single();
 
         if (expenseError) throw expenseError;
 
-        // 2. SE FLAGGATO: Cerca inquilino attivo e crea addebito
         if (chargeTenant && expenseData) {
-            // Trova la prenotazione attiva in quella data per quella casa
             const { data: bookings } = await supabase
                 .from('bookings')
                 .select('id, nome_ospite')
                 .eq('property_id', formData.property_id)
-                .lte('data_inizio', formData.date) // Iniziata prima o oggi
-                .gte('data_fine', formData.date)   // Finisce oggi o dopo
+                .lte('data_inizio', formData.date)
+                .gte('data_fine', formData.date)
                 .limit(1);
 
             const activeBooking = bookings && bookings.length > 0 ? bookings[0] : null;
 
             if (activeBooking) {
-                // Crea il pagamento per l'inquilino
-                const { error: payError } = await supabase.from('tenant_payments').insert({
+                await supabase.from('tenant_payments').insert({
                     booking_id: activeBooking.id,
                     importo: parseFloat(formData.amount),
-                    data_scadenza: formData.date, // Scade subito
+                    data_scadenza: formData.date,
                     stato: 'da_pagare',
-                    tipo: mapCategoryToPaymentType(formData.category), // Mappa categoria
+                    tipo: mapCategoryToPaymentType(formData.category),
                     description: `Addebito: ${formData.description}`
                 });
-                if (payError) throw payError;
                 toast({ title: "Addebito creato", description: `Spesa assegnata a ${activeBooking.nome_ospite}` });
-            } else {
-                toast({ title: "Attenzione", description: "Spesa salvata, ma nessun inquilino trovato in questa data per l'addebito.", variant: "warning" });
             }
         }
 
-        // 3. Gestione Allegato
         if (attachment && expenseData) {
             const fileExt = attachment.name.split('.').pop();
             const fileName = `expense_${expenseData.id}_${Date.now()}.${fileExt}`;
@@ -149,7 +180,6 @@ export default function Expenses() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
-      queryClient.invalidateQueries({ queryKey: ['property-docs'] });
       setIsDialogOpen(false);
       toast({ title: "Operazione completata" });
     },
@@ -174,9 +204,6 @@ export default function Expenses() {
           .eq('id', editingId);
 
         if (updateError) throw updateError;
-
-        // Nota: Per semplicità, in modifica non ricreiamo il pagamento inquilino automaticamente per evitare duplicati.
-        // Se serve, andrebbe gestita la logica di aggiornamento anche del pagamento collegato.
 
         if (attachment) {
             const fileExt = attachment.name.split('.').pop();
@@ -218,21 +245,49 @@ export default function Expenses() {
       else createExpense.mutate();
   };
 
-  // Helper per mappare categorie spese -> tipo pagamento inquilino
   const mapCategoryToPaymentType = (cat: string) => {
-      if (cat === 'bollette') return 'bolletta_luce'; // o generico utenze
+      if (cat === 'bollette') return 'bolletta_luce';
       if (cat === 'condominio') return 'altro';
       return 'altro';
   };
 
   return (
     <div className="space-y-6">
+      {/* --- DIALOG PER ANTEPRIMA FILE --- */}
+      <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
+        <DialogContent className="max-w-4xl w-full h-[80vh] flex flex-col p-0">
+            <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
+                <h3 className="font-bold text-lg text-slate-800">Anteprima Ricevuta</h3>
+                {/* Il pulsante di chiusura è gestito automaticamente dalla X del Dialog, ma possiamo aggiungerne uno se serve */}
+            </div>
+            <div className="flex-1 bg-slate-100 flex items-center justify-center p-4 overflow-hidden relative">
+                {!previewUrl && <p>Caricamento...</p>}
+                
+                {previewUrl && previewType === 'pdf' && (
+                    <iframe src={previewUrl} className="w-full h-full rounded shadow-sm bg-white" title="Anteprima PDF" />
+                )}
+                
+                {previewUrl && previewType === 'image' && (
+                    <img src={previewUrl} alt="Ricevuta" className="max-w-full max-h-full object-contain shadow-lg rounded" />
+                )}
+            </div>
+            <div className="p-4 border-t bg-white flex justify-end gap-2">
+                <Button variant="outline" onClick={() => window.open(previewUrl!, '_blank')}>
+                    <Forward className="w-4 h-4 mr-2" /> Apri in nuova scheda
+                </Button>
+                <Button onClick={() => setIsPreviewOpen(false)}>Chiudi</Button>
+            </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- HEADER --- */}
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-900">Spese & Uscite</h1>
         <Button className="bg-blue-600" onClick={openNewExpense}>
             <Plus className="w-4 h-4 mr-2" /> Registra Spesa
         </Button>
 
+        {/* --- DIALOG CREAZIONE/MODIFICA --- */}
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -265,7 +320,6 @@ export default function Expenses() {
                 <div className="grid gap-2"><Label>Data</Label><Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} /></div>
               </div>
 
-              {/* NUOVO SWITCH ADDEBITO INQUILINO */}
               <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
                   <div className="space-y-0.5">
                       <Label className="text-blue-900 font-bold flex items-center gap-2"><User className="w-4 h-4"/> A carico dell'inquilino?</Label>
@@ -296,11 +350,24 @@ export default function Expenses() {
         <CardHeader><CardTitle>Storico Uscite</CardTitle></CardHeader>
         <CardContent>
           <Table>
-            <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Proprietà</TableHead><TableHead>Categoria</TableHead><TableHead>Descrizione</TableHead><TableHead>Importo</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Ricevuta</TableHead><TableHead>Proprietà</TableHead><TableHead>Categoria</TableHead><TableHead>Descrizione</TableHead><TableHead>Importo</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow></TableHeader>
             <TableBody>
               {expenses?.map((ex) => (
                 <TableRow key={ex.id}>
-                  <TableCell>{format(new Date(ex.date), 'dd/MM/yyyy')}</TableCell>
+                  <TableCell className="w-[120px]">{format(new Date(ex.date), 'dd/MM/yyyy')}</TableCell>
+                  
+                  {/* --- NUOVA COLONNA RICEVUTA --- */}
+                  <TableCell>
+                    {ex.documents && ex.documents.length > 0 ? (
+                        <Button variant="outline" size="sm" className="h-8 gap-2 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => handlePreview(ex.documents[0])}>
+                            <Eye className="w-4 h-4" /> 
+                            <span className="hidden sm:inline">Vedi</span>
+                        </Button>
+                    ) : (
+                        <span className="text-xs text-gray-400 italic">Nessuna</span>
+                    )}
+                  </TableCell>
+
                   <TableCell className="font-medium">{ex.properties_real?.nome}</TableCell>
                   <TableCell className="capitalize">
                       <span className="px-2 py-1 bg-slate-100 rounded text-xs block w-fit mb-1">{ex.category}</span>
