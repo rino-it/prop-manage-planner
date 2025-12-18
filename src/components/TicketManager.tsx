@@ -12,22 +12,10 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, User, Send, Euro, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, Lock 
+  CheckCircle, User, Send, Euro, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
-
-// Helper per i link cliccabili
-const renderTextWithLinks = (text: string) => {
-  if (!text) return null;
-  const urlRegex = /(https?:\/\/[^\s]+)/g;
-  const parts = text.split(urlRegex);
-  return parts.map((part, i) => 
-    urlRegex.test(part) ? (
-      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800 break-all">{part}</a>
-    ) : part
-  );
-};
 
 interface TicketManagerProps {
   ticket: any;
@@ -44,8 +32,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
-  const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || ''); 
-  const [assignedPartner, setAssignedPartner] = useState(ticket?.assigned_partner_id || ''); 
+  const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || '');
+  const [assignedPartner, setAssignedPartner] = useState(ticket?.assigned_partner_id || '');
   
   // --- STATI TAB 2: PREVENTIVO ---
   const [quoteAmount, setQuoteAmount] = useState(ticket?.quote_amount || '');
@@ -58,7 +46,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   
   const [uploading, setUploading] = useState(false);
 
-  // QUERY: Recupera soci per la delega
+  // QUERY: Recupera soci
   const { data: colleagues } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
@@ -67,7 +55,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   });
 
-  // --- LOGICA TAB 1: GESTIONE ---
+  // --- AZIONI TAB 1: GESTIONE ---
   const saveProgress = async () => {
     const { error } = await supabase
       .from('tickets')
@@ -81,7 +69,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       })
       .eq('id', ticket.id);
 
-    if (error) toast({ title: "Errore", variant: "destructive" });
+    if (error) toast({ title: "Errore salvataggio", description: error.message, variant: "destructive" });
     else {
       toast({ title: "Salvato", description: "Modifiche registrate." });
       onUpdate();
@@ -94,30 +82,39 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     const partner = colleagues?.find(c => c.id === assignedPartner);
     const phone = partner?.phone;
 
-    // 1. Salva la delega
+    // 1. Salva delega
     await supabase.from('tickets').update({ assigned_partner_id: assignedPartner }).eq('id', ticket.id);
     onUpdate();
 
-    // 2. Apri WhatsApp
-    const text = `Ciao ${partner?.first_name}, ti delego il ticket: ${ticket.titolo} presso ${ticket.properties_real?.nome || 'N/A'}.\nNote: ${notes}`;
+    // 2. WhatsApp
+    const text = `Ciao ${partner?.first_name}, ti delego il ticket: ${ticket.titolo} presso ${ticket.bookings?.properties_real?.nome || 'N/A'}.\nNote: ${notes}`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // --- LOGICA TAB 2: PREVENTIVO ---
+  // --- AZIONI TAB 2: PREVENTIVO ---
   const handleQuoteUpload = async () => {
       setUploading(true);
       try {
         let quoteUrl = ticket.quote_url;
         if (quoteFile) {
-           const fileName = `quote_${ticket.id}_${Date.now()}.${quoteFile.name.split('.').pop()}`;
-           const { error: upError } = await supabase.storage.from('documents').upload(fileName, quoteFile);
+           const fileExt = quoteFile.name.split('.').pop();
+           const fileName = `quote_${ticket.id}_${Date.now()}.${fileExt}`;
+           
+           // Upload su Storage 'documents'
+           const { error: upError } = await supabase.storage
+              .from('documents')
+              .upload(fileName, quoteFile, { upsert: true });
+           
            if (upError) throw upError;
            quoteUrl = fileName;
         }
 
+        // Parsing sicuro del numero
+        const amountValue = quoteAmount ? parseFloat(quoteAmount.toString().replace(',', '.')) : null;
+
         const { error } = await supabase.from('tickets')
           .update({
-            quote_amount: parseFloat(quoteAmount),
+            quote_amount: amountValue,
             quote_url: quoteUrl,
             quote_status: 'pending',
             stato: 'in_attesa'
@@ -125,11 +122,13 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
           .eq('id', ticket.id);
 
         if (error) throw error;
+        
         toast({ title: "Preventivo Caricato", description: "In attesa di approvazione." });
         onUpdate();
         onClose();
       } catch (e: any) { 
-          toast({ title: "Errore", description: e.message, variant: "destructive" }); 
+          console.error("Errore Upload:", e);
+          toast({ title: "Errore Upload", description: e.message || "Verifica permessi storage", variant: "destructive" }); 
       } finally { setUploading(false); }
   };
 
@@ -145,30 +144,32 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       }
   };
 
-  // Funzione per vedere file
   const viewFile = async (path: string) => {
       if (!path) return;
       const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
-  // --- LOGICA TAB 3: CHIUSURA ---
+  // --- AZIONI TAB 3: CHIUSURA ---
   const handleResolveFlow = async () => {
     try {
         setUploading(true);
         let receiptUrl = ticket.ricevuta_url;
 
         if (receiptFile) {
-            const fileName = `receipt_${ticket.id}_${Date.now()}.${receiptFile.name.split('.').pop()}`;
+            const fileExt = receiptFile.name.split('.').pop();
+            const fileName = `receipt_${ticket.id}_${Date.now()}.${fileExt}`;
             const { error: upError } = await supabase.storage.from('documents').upload(fileName, receiptFile);
             if (upError) throw upError;
             receiptUrl = fileName;
         }
 
+        const amountValue = costAmount ? parseFloat(costAmount.toString().replace(',', '.')) : 0;
+
         const { error } = await supabase.from('tickets')
             .update({ 
                 stato: 'in_verifica', 
-                cost: parseFloat(costAmount) || 0,
+                cost: amountValue,
                 ricevuta_url: receiptUrl,
                 spesa_visibile_ospite: costVisible,
                 admin_notes: notes,
@@ -239,15 +240,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <div className="grid gap-2">
                     <Label>Note Interne</Label>
                     <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Link e note qui..." disabled={isReadOnly}/>
-                    
-                    {/* Anteprima link cliccabili */}
-                    {notes && (notes.includes('http') || notes.includes('www')) && (
-                        <div className="text-xs bg-gray-50 p-2 rounded border text-gray-600 break-all">
-                            <strong>Anteprima Link:</strong><br/>
-                            {renderTextWithLinks(notes)}
-                        </div>
-                    )}
-
                     <div className="flex items-center gap-2 mt-1">
                         <Switch checked={shareNotes} onCheckedChange={setShareNotes} disabled={isReadOnly}/>
                         <Label className="text-xs">Visibile a ospite</Label>
@@ -258,9 +250,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     <div className="flex-1">
                         <Label className="mb-1 block">Delega a Socio</Label>
                         <Select value={assignedPartner || ''} onValueChange={setAssignedPartner} disabled={isReadOnly}>
-                            <SelectTrigger><SelectValue placeholder="Scegli socio..." /></SelectTrigger>
+                            <SelectTrigger className="flex-1"><SelectValue placeholder="Scegli socio..." /></SelectTrigger>
                             <SelectContent>
-                                {colleagues?.map(c => <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>)}
+                                {colleagues?.map(col => (
+                                    <SelectItem key={col.id} value={col.id}>{col.first_name} {col.last_name}</SelectItem>
+                                ))}
                             </SelectContent>
                         </Select>
                     </div>
