@@ -62,7 +62,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   });
 
-  // LOGICA DI SALVATAGGIO STATO (TAB 1)
+  // --- AZIONI ---
+
   const saveProgress = async () => {
     const { error } = await supabase.from('tickets').update({ 
         admin_notes: notes,
@@ -116,58 +117,45 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { toast({ title: "Reset Effettuato" }); onUpdate(); }
   };
 
-  // --- CUORE DEL PROBLEMA: CREAZIONE SPESA CON DEBUG ---
+  // --- PUNTO CRUCIALE: INSERT IN PROPERTY_EXPENSES ---
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
-        console.log("Inizio approvazione preventivo...");
         const newState = decision === 'approved' ? 'in_corso' : 'aperto';
         
         // 1. Aggiorna Ticket
         const { error: ticketError } = await supabase.from('tickets')
             .update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
         
-        if (ticketError) throw new Error(`Errore aggiornamento ticket: ${ticketError.message}`);
+        if (ticketError) throw new Error(ticketError.message);
 
-        // 2. CREAZIONE SPESA (Solo se approvato)
+        // 2. CREA SPESA NELLA TABELLA REALE (property_expenses)
         if (decision === 'approved') {
             const { data: { user } } = await supabase.auth.getUser();
-            if(!user) throw new Error("Utente non loggato. Ricarica la pagina.");
+            if(!user) throw new Error("Utente non loggato");
 
-            console.log("Dati Ticket per Spesa:", ticket);
-
-            // Preparazione Payload Spesa
             const amount = ticket.quote_amount ? parseFloat(ticket.quote_amount) : 0;
+            
+            // PAYLOAD CORRETTO PER LA TUA TABELLA
             const payload = {
                 user_id: user.id,
-                property_real_id: ticket.property_real_id || null, // Se null, la spesa è generica
-                descrizione: `Manutenzione: ${ticket.titolo}`,
-                importo: amount,
-                importo_originale: amount,
-                scadenza: new Date().toISOString(),
-                stato: 'in_attesa',
-                categoria: 'manutenzione', // Deve esistere in Enum
-                fornitore: supplier || ticket.supplier || 'Fornitore Ticket',
-                note: `Generato da Ticket #${ticket.id.slice(0,4)}`,
-                allegato_url: ticket.quote_url,
-                ricorrenza_tipo: 'una_tantum' // Deve esistere in Enum
+                property_id: ticket.property_real_id, // Usa property_id come da tuo DB
+                description: `Ticket: ${ticket.titolo}`, // Usa description (inglese)
+                amount: amount, // Usa amount (inglese)
+                date: new Date().toISOString().split('T')[0], // Usa date (YYYY-MM-DD)
+                category: 'manutenzione', // Usa category
+                attachment_url: ticket.quote_url // Nuova colonna creata dallo script
             };
 
-            console.log("Payload Spesa:", payload);
-
-            // Inserimento
-            const { data: expenseData, error: expenseError } = await supabase
-                .from('payments')
-                .insert(payload)
-                .select();
+            const { error: expenseError } = await supabase
+                .from('property_expenses') // TABELLA CORRETTA
+                .insert(payload);
 
             if (expenseError) {
-                console.error("ERRORE CRITICO SPESA:", expenseError);
-                // ALERT VISIVO PER L'UTENTE
-                alert(`ERRORE CREAZIONE SPESA:\n\nMessaggio: ${expenseError.message}\nDettagli: ${expenseError.details}\nHint: ${expenseError.hint}`);
+                console.error("Errore inserimento spesa:", expenseError);
+                alert(`Errore creazione spesa: ${expenseError.message}\nControlla che la proprietà sia selezionata.`);
             } else {
-                console.log("Spesa creata con successo:", expenseData);
-                toast({ title: "Approvato & Registrato", description: "Spesa inserita correttamente in contabilità." });
+                toast({ title: "Approvato", description: "Spesa aggiunta a property_expenses" });
             }
         } else {
             toast({ title: "Rifiutato", description: "Ticket riaperto." });
@@ -175,8 +163,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         onUpdate();
         onClose();
       } catch (e: any) {
-          console.error("Errore Generale:", e);
-          alert(`ERRORE GENERALE: ${e.message}`);
+          toast({ title: "Errore", description: e.message, variant: "destructive" });
       } finally {
           setUploading(false);
       }
@@ -232,7 +219,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <TabsTrigger value="closing">3. Chiusura</TabsTrigger>
             </TabsList>
 
-            {/* TAB 1 */}
             <TabsContent value="management" className="space-y-4 py-4">
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
                     <Label className="text-slate-700 font-semibold">Fornitore</Label>
@@ -263,7 +249,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {!isReadOnly && <DialogFooter className="mt-4"><Button type="button" variant="outline" onClick={saveProgress}>Salva Stato</Button></DialogFooter>}
             </TabsContent>
 
-            {/* TAB 2 */}
             <TabsContent value="quote" className="space-y-4 py-4">
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
@@ -274,7 +259,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                                 <Badge className={ticket.quote_status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{ticket.quote_status}</Badge>
                             </div>
                         </div>
-                        {/* TASTO RESET */}
                         {ticket.quote_status === 'approved' && !isReadOnly && (
                             <Button variant="destructive" size="sm" className="w-full mt-2" onClick={handleResetQuote}>
                                 <RotateCcw className="w-4 h-4 mr-2" /> Annulla Approvazione / Reset
@@ -304,7 +288,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
             </TabsContent>
 
-            {/* TAB 3 */}
             <TabsContent value="closing" className="space-y-4 py-4">
                 <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
                     <Label className="font-bold text-yellow-800 block mb-2">Spese Finali</Label>
@@ -326,4 +309,4 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       </DialogContent>
     </Dialog>
   );
-}
+}   
