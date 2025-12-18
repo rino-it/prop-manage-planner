@@ -12,10 +12,22 @@ import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, User, Send, Euro, Share2, Hammer, Eye, Upload, XCircle, Phone, Download, FileText 
+  CheckCircle, User, Send, Euro, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, Lock 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
+
+// Helper per i link cliccabili
+const renderTextWithLinks = (text: string) => {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => 
+    urlRegex.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800 break-all">{part}</a>
+    ) : part
+  );
+};
 
 interface TicketManagerProps {
   ticket: any;
@@ -28,25 +40,25 @@ interface TicketManagerProps {
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // DATI TAB 1
+  // --- STATI TAB 1: GESTIONE ---
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
-  const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || ''); // ORA COLLEGATO
-  const [assignedPartner, setAssignedPartner] = useState(ticket?.assigned_partner_id || ''); // ORA COLLEGATO
+  const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || ''); 
+  const [assignedPartner, setAssignedPartner] = useState(ticket?.assigned_partner_id || ''); 
   
-  // DATI TAB 2
+  // --- STATI TAB 2: PREVENTIVO ---
   const [quoteAmount, setQuoteAmount] = useState(ticket?.quote_amount || '');
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
 
-  // DATI TAB 3
+  // --- STATI TAB 3: CHIUSURA ---
   const [costAmount, setCostAmount] = useState(ticket?.cost || '');
   const [costVisible, setCostVisible] = useState(ticket?.spesa_visibile_ospite || false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   
   const [uploading, setUploading] = useState(false);
 
-  // FETCH SOCI
+  // QUERY: Recupera soci per la delega
   const { data: colleagues } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
@@ -55,7 +67,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   });
 
-  // --- AZIONI TAB 1 ---
+  // --- LOGICA TAB 1: GESTIONE ---
   const saveProgress = async () => {
     const { error } = await supabase
       .from('tickets')
@@ -63,15 +75,15 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         admin_notes: notes,
         share_notes: shareNotes,
         supplier: supplier,
-        supplier_contact: supplierContact, // SALVATAGGIO TELEFONO
-        assigned_partner_id: assignedPartner || null, // SALVATAGGIO DELEGA
+        supplier_contact: supplierContact,
+        assigned_partner_id: assignedPartner || null,
         stato: 'in_lavorazione' 
       })
       .eq('id', ticket.id);
 
     if (error) toast({ title: "Errore", variant: "destructive" });
     else {
-      toast({ title: "Salvato", description: "Dati aggiornati." });
+      toast({ title: "Salvato", description: "Modifiche registrate." });
       onUpdate();
     }
   };
@@ -82,7 +94,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     const partner = colleagues?.find(c => c.id === assignedPartner);
     const phone = partner?.phone;
 
-    // 1. Salva la delega nel DB
+    // 1. Salva la delega
     await supabase.from('tickets').update({ assigned_partner_id: assignedPartner }).eq('id', ticket.id);
     onUpdate();
 
@@ -91,7 +103,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
-  // --- AZIONI TAB 2 (PREVENTIVI) ---
+  // --- LOGICA TAB 2: PREVENTIVO ---
   const handleQuoteUpload = async () => {
       setUploading(true);
       try {
@@ -113,7 +125,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
           .eq('id', ticket.id);
 
         if (error) throw error;
-        toast({ title: "Preventivo Caricato" });
+        toast({ title: "Preventivo Caricato", description: "In attesa di approvazione." });
         onUpdate();
         onClose();
       } catch (e: any) { 
@@ -124,6 +136,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       const newState = decision === 'approved' ? 'in_corso' : 'aperto';
       const { error } = await supabase.from('tickets').update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
+      
       if (error) toast({ title: "Errore", variant: "destructive" });
       else {
           toast({ title: decision === 'approved' ? "Preventivo Approvato" : "Rifiutato" });
@@ -132,14 +145,14 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       }
   };
 
-  // FUNZIONE HELPER: Visualizza File
+  // Funzione per vedere file
   const viewFile = async (path: string) => {
       if (!path) return;
       const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
-  // --- AZIONI TAB 3 (CHIUSURA) ---
+  // --- LOGICA TAB 3: CHIUSURA ---
   const handleResolveFlow = async () => {
     try {
         setUploading(true);
@@ -164,9 +177,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             .eq('id', ticket.id);
 
         if (error) throw error;
-        toast({ title: "Ticket Completato" });
+
+        toast({ title: "Ticket Completato", description: "In attesa di conferma dall'ospite." });
         onUpdate();
         onClose();
+
     } catch (error: any) {
         toast({ title: "Errore", description: error.message, variant: "destructive" });
     } finally {
@@ -182,7 +197,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             <span className="bg-blue-100 text-blue-700 p-1 rounded"><Hammer className="w-5 h-5"/></span>
             Gestione: {ticket.titolo}
           </DialogTitle>
-          <DialogDescription>Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')}</DialogDescription>
+          <DialogDescription>
+            Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')}
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="management" className="w-full mt-2">
@@ -221,7 +238,16 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
                 <div className="grid gap-2">
                     <Label>Note Interne</Label>
-                    <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Diario dei lavori..." disabled={isReadOnly}/>
+                    <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Link e note qui..." disabled={isReadOnly}/>
+                    
+                    {/* Anteprima link cliccabili */}
+                    {notes && (notes.includes('http') || notes.includes('www')) && (
+                        <div className="text-xs bg-gray-50 p-2 rounded border text-gray-600 break-all">
+                            <strong>Anteprima Link:</strong><br/>
+                            {renderTextWithLinks(notes)}
+                        </div>
+                    )}
+
                     <div className="flex items-center gap-2 mt-1">
                         <Switch checked={shareNotes} onCheckedChange={setShareNotes} disabled={isReadOnly}/>
                         <Label className="text-xs">Visibile a ospite</Label>
@@ -242,7 +268,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         <Share2 className="w-4 h-4 mr-2" /> WhatsApp
                     </Button>
                 </div>
-                {!isReadOnly && <DialogFooter className="mt-4"><Button variant="outline" onClick={saveProgress}>Salva Stato</Button></DialogFooter>}
+                {!isReadOnly && (
+                    <DialogFooter className="mt-4">
+                        <Button type="button" variant="outline" onClick={saveProgress}>Salva Stato (Senza Chiudere)</Button>
+                    </DialogFooter>
+                )}
             </TabsContent>
 
             {/* TAB 2: PREVENTIVO */}
@@ -276,6 +306,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         </div>
                     </div>
                 )}
+                {isReadOnly && <p className="text-gray-500 italic text-center py-4">Modifiche bloccate.</p>}
             </TabsContent>
 
             {/* TAB 3: CHIUSURA */}

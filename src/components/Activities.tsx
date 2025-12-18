@@ -19,6 +19,18 @@ import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import TicketManager from '@/components/TicketManager';
 
+// Helper locale per link
+const renderTextWithLinks = (text: string) => {
+  if (!text) return null;
+  const urlRegex = /(https?:\/\/[^\s]+)/g;
+  const parts = text.split(urlRegex);
+  return parts.map((part, i) => 
+    urlRegex.test(part) ? (
+      <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800 break-all">{part}</a>
+    ) : part
+  );
+};
+
 export default function Activities() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -51,7 +63,7 @@ export default function Activities() {
     enabled: !!formData.property_real_id
   });
 
-  // QUERY AGGIORNATA: Include ora supplier_contact e assigned_partner (profiles)
+  // CARICA TICKET CON TUTTE LE RELAZIONI
   const { data: tickets, isLoading, isError, error } = useQuery({
     queryKey: ['tickets'],
     queryFn: async () => {
@@ -186,7 +198,7 @@ export default function Activities() {
         </Dialog>
       </div>
 
-      {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati.</div>}
+      {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati: {(error as any)?.message}</div>}
 
       <div className="grid gap-4">
         {isLoading ? <p>Caricamento...</p> : tickets?.map((ticket: any) => (
@@ -204,12 +216,13 @@ export default function Activities() {
                   
                   <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
                   
-                  {/* NOTE STAFF */}
+                  {/* NOTE STAFF (Con Link Cliccabili) */}
                   {ticket.admin_notes && (
                     <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
                         <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
-                        <div className="text-xs text-yellow-900">
-                            <span className="font-bold">Note Staff:</span> {ticket.admin_notes}
+                        <div className="text-xs text-yellow-900 break-all">
+                            <span className="font-bold block mb-1">Note Staff:</span> 
+                            {renderTextWithLinks(ticket.admin_notes)}
                         </div>
                     </div>
                   )}
@@ -221,9 +234,8 @@ export default function Activities() {
                     {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
                   </div>
 
-                  {/* AZIONI RAPIDE IN LINEA */}
+                  {/* AZIONI RAPIDE */}
                   <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
-                      {/* 1. Chiama Fornitore */}
                       {ticket.supplier_contact && (
                           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" 
                             onClick={() => window.open(`tel:${ticket.supplier_contact}`)} title={`Chiama: ${ticket.supplier}`}>
@@ -231,7 +243,6 @@ export default function Activities() {
                           </Button>
                       )}
                       
-                      {/* 2. Contatta Socio Delegato */}
                       {ticket.assigned_partner && ticket.assigned_partner.phone && (
                           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50"
                             onClick={() => contactPartner(ticket.assigned_partner.phone, ticket.titolo)} title={`Delegato a: ${ticket.assigned_partner.first_name}`}>
@@ -239,7 +250,6 @@ export default function Activities() {
                           </Button>
                       )}
 
-                      {/* 3. Vedi Preventivo / Ricevuta */}
                       {(ticket.quote_url || ticket.ricevuta_url) && (
                           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
                             onClick={() => openFile(ticket.quote_url || ticket.ricevuta_url)}>
