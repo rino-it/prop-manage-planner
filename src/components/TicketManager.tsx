@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, Trash2, RotateCcw, Euro 
+  CheckCircle, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, RotateCcw, Euro 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -62,8 +62,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   });
 
-  // --- AZIONI ---
-
+  // LOGICA DI SALVATAGGIO STATO (TAB 1)
   const saveProgress = async () => {
     const { error } = await supabase.from('tickets').update({ 
         admin_notes: notes,
@@ -110,62 +109,65 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       } finally { setUploading(false); }
   };
 
-  // NUOVO: Funzione per RESETTARE un preventivo approvato
   const handleResetQuote = async () => {
-    if(!confirm("Sei sicuro? Questo riporterà il ticket 'In Attesa' e potrai modificare il preventivo. (Nota: Se avevi già creato la spesa in contabilità, dovrai cancellarla manualmente).")) return;
-    
-    const { error } = await supabase.from('tickets').update({
-        quote_status: 'pending', // Riporta a pending (o 'none' se vuoi cancellare tutto)
-        stato: 'in_attesa'
-    }).eq('id', ticket.id);
-
+    if(!confirm("Confermi il reset? Il ticket tornerà 'In Attesa'.")) return;
+    const { error } = await supabase.from('tickets').update({ quote_status: 'pending', stato: 'in_attesa' }).eq('id', ticket.id);
     if(error) toast({ title: "Errore", description: error.message, variant: "destructive" });
-    else {
-        toast({ title: "Reset Effettuato", description: "Ora puoi modificare il preventivo." });
-        onUpdate();
-    }
+    else { toast({ title: "Reset Effettuato" }); onUpdate(); }
   };
 
+  // --- CUORE DEL PROBLEMA: CREAZIONE SPESA CON DEBUG ---
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
+        console.log("Inizio approvazione preventivo...");
         const newState = decision === 'approved' ? 'in_corso' : 'aperto';
+        
+        // 1. Aggiorna Ticket
         const { error: ticketError } = await supabase.from('tickets')
             .update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
         
-        if (ticketError) throw ticketError;
+        if (ticketError) throw new Error(`Errore aggiornamento ticket: ${ticketError.message}`);
 
+        // 2. CREAZIONE SPESA (Solo se approvato)
         if (decision === 'approved') {
             const { data: { user } } = await supabase.auth.getUser();
-            
-            // CHECK CRITICO: La proprietà esiste?
-            if (!ticket.property_real_id) {
-                alert("ATTENZIONE: Questo ticket non è associato a nessuna proprietà. La spesa verrà creata ma non sarà visibile sotto una casa specifica.");
-            }
+            if(!user) throw new Error("Utente non loggato. Ricarica la pagina.");
 
+            console.log("Dati Ticket per Spesa:", ticket);
+
+            // Preparazione Payload Spesa
             const amount = ticket.quote_amount ? parseFloat(ticket.quote_amount) : 0;
             const payload = {
-                user_id: user?.id,
-                property_real_id: ticket.property_real_id || null, // Passa null se manca
+                user_id: user.id,
+                property_real_id: ticket.property_real_id || null, // Se null, la spesa è generica
                 descrizione: `Manutenzione: ${ticket.titolo}`,
                 importo: amount,
                 importo_originale: amount,
                 scadenza: new Date().toISOString(),
                 stato: 'in_attesa',
-                categoria: 'manutenzione',
+                categoria: 'manutenzione', // Deve esistere in Enum
                 fornitore: supplier || ticket.supplier || 'Fornitore Ticket',
-                note: `Da Ticket #${ticket.id.slice(0,4)}.`,
+                note: `Generato da Ticket #${ticket.id.slice(0,4)}`,
                 allegato_url: ticket.quote_url,
-                ricorrenza_tipo: 'una_tantum'
+                ricorrenza_tipo: 'una_tantum' // Deve esistere in Enum
             };
 
-            const { error: expenseError } = await supabase.from('payments').insert(payload);
+            console.log("Payload Spesa:", payload);
+
+            // Inserimento
+            const { data: expenseData, error: expenseError } = await supabase
+                .from('payments')
+                .insert(payload)
+                .select();
 
             if (expenseError) {
-                console.error(expenseError);
-                toast({ title: "Ticket OK ma Errore Spesa", description: expenseError.message, variant: "destructive" });
+                console.error("ERRORE CRITICO SPESA:", expenseError);
+                // ALERT VISIVO PER L'UTENTE
+                alert(`ERRORE CREAZIONE SPESA:\n\nMessaggio: ${expenseError.message}\nDettagli: ${expenseError.details}\nHint: ${expenseError.hint}`);
             } else {
-                toast({ title: "Approvato", description: "Spesa creata in contabilità." });
+                console.log("Spesa creata con successo:", expenseData);
+                toast({ title: "Approvato & Registrato", description: "Spesa inserita correttamente in contabilità." });
             }
         } else {
             toast({ title: "Rifiutato", description: "Ticket riaperto." });
@@ -173,7 +175,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         onUpdate();
         onClose();
       } catch (e: any) {
-          toast({ title: "Errore", description: e.message, variant: "destructive" });
+          console.error("Errore Generale:", e);
+          alert(`ERRORE GENERALE: ${e.message}`);
       } finally {
           setUploading(false);
       }
@@ -229,7 +232,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <TabsTrigger value="closing">3. Chiusura</TabsTrigger>
             </TabsList>
 
-            {/* TAB 1: GESTIONE */}
+            {/* TAB 1 */}
             <TabsContent value="management" className="space-y-4 py-4">
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
                     <Label className="text-slate-700 font-semibold">Fornitore</Label>
@@ -260,7 +263,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {!isReadOnly && <DialogFooter className="mt-4"><Button type="button" variant="outline" onClick={saveProgress}>Salva Stato</Button></DialogFooter>}
             </TabsContent>
 
-            {/* TAB 2: PREVENTIVO */}
+            {/* TAB 2 */}
             <TabsContent value="quote" className="space-y-4 py-4">
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
@@ -271,32 +274,24 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                                 <Badge className={ticket.quote_status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{ticket.quote_status}</Badge>
                             </div>
                         </div>
-                        
-                        {/* TASTO RESET PER PREVENTIVI APPROVATI */}
+                        {/* TASTO RESET */}
                         {ticket.quote_status === 'approved' && !isReadOnly && (
-                            <Button 
-                                variant="destructive" 
-                                size="sm" 
-                                className="w-full mt-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
-                                onClick={handleResetQuote}
-                            >
+                            <Button variant="destructive" size="sm" className="w-full mt-2" onClick={handleResetQuote}>
                                 <RotateCcw className="w-4 h-4 mr-2" /> Annulla Approvazione / Reset
                             </Button>
                         )}
                     </div>
                 )}
-
                 {ticket.quote_status === 'pending' && !isReadOnly && (
                      <div className="grid grid-cols-2 gap-2 mt-2">
                         <Button className="bg-green-600 hover:bg-green-700" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>
-                            <CheckCircle className="w-4 h-4 mr-2" /> Approva
+                            <CheckCircle className="w-4 h-4 mr-2" /> Approva e Crea Spesa
                         </Button>
                         <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>
                             <XCircle className="w-4 h-4 mr-2" /> Rifiuta
                         </Button>
                     </div>
                 )}
-                
                 {ticket.quote_status !== 'approved' && !isReadOnly && (
                     <div className="bg-slate-50 p-4 rounded border border-dashed">
                         <h4 className="font-bold text-sm mb-3 flex gap-2"><Upload className="w-4 h-4"/> Carica / Aggiorna</h4>
@@ -309,7 +304,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
             </TabsContent>
 
-            {/* TAB 3: CHIUSURA */}
+            {/* TAB 3 */}
             <TabsContent value="closing" className="space-y-4 py-4">
                 <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
                     <Label className="font-bold text-yellow-800 block mb-2">Spese Finali</Label>
