@@ -1,4 +1,3 @@
-// FIX: Added MessageSquare import to prevent crash
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,20 +9,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// MODIFICA: Aggiunte icone necessarie per la nuova UI
-import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye, Home, User, AlertTriangle } from 'lucide-react';
+import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye, Home, User, AlertTriangle, AlertCircle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
-import TicketManager from '@/components/TicketManager';
-// MODICA: Import necessario per il dropdown proprietà
 import { usePropertiesReal } from '@/hooks/useProperties';
+import TicketManager from '@/components/TicketManager';
 
 export default function Activities() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: properties } = usePropertiesReal(); // CARICAMENTO PROPRIETÀ
-  
-  // STATI
+  const { data: properties } = usePropertiesReal();
+
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
 
@@ -31,11 +27,10 @@ export default function Activities() {
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    property_id: '', // NUOVO CAMPO FASE 2.1
+    property_id: '',
     booking_id: 'none'
   });
 
-  // LOGICA FASE 2.1: Trova inquilini attivi nella casa selezionata
   const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants-ticket', formData.property_id],
     queryFn: async () => {
@@ -52,15 +47,15 @@ export default function Activities() {
     enabled: !!formData.property_id
   });
 
-  // 1. CARICA TICKET
-  const { data: tickets, isLoading } = useQuery({
+  // 1. CARICA TICKET (Gestione Errori Migliorata)
+  const { data: tickets, isLoading, isError, error } = useQuery({
     queryKey: ['tickets'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('tickets')
         .select(`
           *,
-          properties_real (nome), -- Fetch nome proprietà diretta
+          properties_real (nome),
           bookings (
             nome_ospite,
             telefono_ospite,
@@ -69,12 +64,14 @@ export default function Activities() {
         `)
         .order('created_at', { ascending: false });
       
-      if (error) throw error;
+      if (error) {
+        console.error("Errore Caricamento Ticket:", error);
+        throw error;
+      }
       return data;
     }
   });
 
-  // 2. CREA TICKET
   const createTicket = useMutation({
     mutationFn: async (newTicket: any) => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -82,7 +79,7 @@ export default function Activities() {
         titolo: newTicket.titolo,
         descrizione: newTicket.descrizione,
         priorita: newTicket.priorita,
-        property_id: newTicket.property_id || null, // SALVATAGGIO PROPRIETÀ
+        property_id: newTicket.property_id || null,
         user_id: user?.id,
         creato_da: 'manager',
         stato: 'aperto',
@@ -96,28 +93,25 @@ export default function Activities() {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
       setFormData({ titolo: '', descrizione: '', priorita: 'media', property_id: '', booking_id: 'none' });
-      toast({ title: "Ticket creato", description: "Aggiunto alla lista attività." });
+      toast({ title: "Ticket creato con successo" });
     },
-    onError: () => toast({ title: "Errore", variant: "destructive" })
+    onError: (err: any) => {
+        console.error(err);
+        toast({ title: "Errore creazione", description: err.message || "Controlla la console", variant: "destructive" });
+    }
   });
 
-  // 3. RIAPRI TICKET
   const reopenTicket = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
         .from('tickets')
-        .update({ 
-            stato: 'aperto', 
-            cost: null, 
-            resolution_photo_url: null,
-            quote_status: 'none' // RESET PREVENTIVO
-        }) 
+        .update({ stato: 'aperto', cost: null, resolution_photo_url: null, quote_status: 'none' }) 
         .eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      toast({ title: "Ticket Riaperto", description: "Stato riportato ad 'Aperto'." });
+      toast({ title: "Ticket Riaperto" });
     }
   });
 
@@ -144,41 +138,28 @@ export default function Activities() {
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader><DialogTitle>Apri Ticket Interno</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
-              
-              {/* NUOVO: SELEZIONE PROPRIETÀ */}
               <div className="grid gap-2">
-                <Label className="flex items-center gap-2">
-                    <Home className="w-4 h-4 text-blue-600" /> Proprietà (Obbligatorio)
-                </Label>
+                <Label>Proprietà (Obbligatorio)</Label>
                 <Select value={formData.property_id} onValueChange={v => setFormData({...formData, property_id: v, booking_id: 'none'})}>
                   <SelectTrigger><SelectValue placeholder="Seleziona immobile..." /></SelectTrigger>
                   <SelectContent>
-                    {properties?.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                    ))}
+                    {properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-
-              {/* NUOVO: SELEZIONE INQUILINO */}
               <div className="grid gap-2">
-                <Label className="flex items-center gap-2">
-                    <User className="w-4 h-4 text-green-600" /> Inquilino (Opzionale)
-                </Label>
+                <Label>Inquilino (Opzionale)</Label>
                 <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.property_id}>
                   <SelectTrigger><SelectValue placeholder={!formData.property_id ? "Prima la casa" : "Seleziona..."} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">-- Nessuno / Area Comune --</SelectItem>
-                    {activeTenants?.map(t => (
-                        <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>
-                    ))}
+                    {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-
               <div className="grid gap-2">
                 <Label>Titolo Problema</Label>
-                <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Controllo Caldaia Generale" />
+                <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto Caldaia" />
               </div>
               <div className="grid gap-2">
                 <Label>Priorità</Label>
@@ -204,97 +185,45 @@ export default function Activities() {
         </Dialog>
       </div>
 
+      {/* ERROR DISPLAY */}
+      {isError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-md flex items-center gap-2">
+            <AlertCircle className="w-5 h-5" />
+            <div>
+                <p className="font-bold">Errore caricamento dati</p>
+                <p className="text-sm">{(error as any)?.message || "Controlla che le colonne property_id esistano nel database."}</p>
+            </div>
+        </div>
+      )}
+
       <div className="grid gap-4">
         {isLoading ? <p>Caricamento...</p> : tickets?.map((ticket) => (
           <Card key={ticket.id} className={`border-l-4 shadow-sm transition-all hover:shadow-md ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-80 bg-slate-50' : 'border-l-red-500'}`}>
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
-                    <Badge variant="outline" className={getPriorityColor(ticket.priorita || 'media')}>
-                      {ticket.priorita}
-                    </Badge>
-                    {ticket.creato_da === 'ospite' && (
-                      <Badge className="bg-blue-100 text-blue-800 border-blue-200">
-                        <MessageSquare className="w-3 h-3 mr-1" /> Ospite
-                      </Badge>
-                    )}
-                     {ticket.stato === 'risolto' && (
-                      <Badge className="bg-green-100 text-green-800 border-green-200">
-                        <CheckCircle className="w-3 h-3 mr-1" /> Risolto
-                      </Badge>
-                    )}
-                    {/* NUOVO: BADGE PREVENTIVO */}
-                    {ticket.quote_status === 'pending' && (
-                        <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-                            <AlertTriangle className="w-3 h-3 mr-1"/> Preventivo
-                        </Badge>
-                    )}
+                    <Badge variant="outline" className={getPriorityColor(ticket.priorita || 'media')}>{ticket.priorita}</Badge>
+                    {ticket.creato_da === 'ospite' && <Badge className="bg-blue-100 text-blue-800 border-blue-200"><MessageSquare className="w-3 h-3 mr-1" /> Ospite</Badge>}
+                    {ticket.stato === 'risolto' && <Badge className="bg-green-100 text-green-800 border-green-200"><CheckCircle className="w-3 h-3 mr-1" /> Risolto</Badge>}
+                    {ticket.quote_status === 'pending' && <Badge className="bg-orange-100 text-orange-800 border-orange-200"><AlertTriangle className="w-3 h-3 mr-1"/> Preventivo</Badge>}
                   </div>
-                  
                   <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
-                  
                   <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-                    <span className="flex items-center bg-gray-100 px-2 py-1 rounded border">
-                        <Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}
-                    </span>
-                    
-                    {/* VISUALIZZAZIONE CASA */}
-                    {ticket.properties_real?.nome && (
-                      <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                        🏠 {ticket.properties_real.nome}
-                      </span>
-                    )}
-                    {!ticket.properties_real?.nome && ticket.bookings?.properties_real?.nome && (
-                      <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
-                        🏠 {ticket.bookings.properties_real.nome}
-                      </span>
-                    )}
-
-                    {ticket.bookings?.nome_ospite && (
-                      <span className="font-medium text-blue-700">
-                        👤 {ticket.bookings.nome_ospite}
-                      </span>
-                    )}
-                    {ticket.supplier && (
-                        <span className="font-medium text-purple-700">
-                            🛠️ {ticket.supplier}
-                        </span>
-                    )}
+                    <span className="flex items-center bg-gray-100 px-2 py-1 rounded border"><Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}</span>
+                    {ticket.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.properties_real.nome}</span>}
+                    {!ticket.properties_real?.nome && ticket.bookings?.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.bookings.properties_real.nome}</span>}
+                    {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
                   </div>
                 </div>
-                
                 <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
                    {ticket.stato !== 'risolto' ? (
-                      <Button 
-                        size="sm" 
-                        className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm"
-                        onClick={() => setTicketManagerOpen(ticket)} 
-                      >
-                         <UserCog className="w-4 h-4 mr-2" /> Gestisci
-                      </Button>
+                      <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={() => setTicketManagerOpen(ticket)}><UserCog className="w-4 h-4 mr-2" /> Gestisci</Button>
                    ) : (
                       <div className="flex flex-col gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            className="w-full text-gray-600 bg-white hover:bg-gray-50"
-                            onClick={() => setTicketManagerOpen(ticket)}
-                          >
-                             <Eye className="w-3 h-3 mr-2" /> Vedi Storico
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="ghost" 
-                            className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => {
-                                if(confirm("Vuoi riaprire questo ticket?")) reopenTicket.mutate(ticket.id);
-                            }}
-                          >
-                             <RotateCcw className="w-3 h-3 mr-1" /> Riapri
-                          </Button>
+                          <Button size="sm" variant="outline" className="w-full text-gray-600 bg-white hover:bg-gray-50" onClick={() => setTicketManagerOpen(ticket)}><Eye className="w-3 h-3 mr-2" /> Vedi Storico</Button>
+                          <Button size="sm" variant="ghost" className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => { if(confirm("Vuoi riaprire questo ticket?")) reopenTicket.mutate(ticket.id); }}><RotateCcw className="w-3 h-3 mr-1" /> Riapri</Button>
                       </div>
                    )}
                 </div>
@@ -309,9 +238,7 @@ export default function Activities() {
             ticket={ticketManagerOpen} 
             isOpen={!!ticketManagerOpen} 
             onClose={() => setTicketManagerOpen(null)}
-            onUpdate={() => {
-                queryClient.invalidateQueries({ queryKey: ['tickets'] }); 
-            }}
+            onUpdate={() => { queryClient.invalidateQueries({ queryKey: ['tickets'] }); }}
             isReadOnly={ticketManagerOpen.stato === 'risolto'} 
         />
       )}
