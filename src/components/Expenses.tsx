@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, FileText, Upload, Paperclip, Pencil, User, Forward, Eye, X } from 'lucide-react';
+import { Plus, Trash2, Pencil, User, Forward, Eye, Paperclip, Filter, X } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
@@ -19,6 +19,12 @@ export default function Expenses() {
   const { data: properties } = usePropertiesReal();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+
+  // --- 1. NUOVI STATI PER I FILTRI ---
+  const [filterProperty, setFilterProperty] = useState("all");
+  const [filterCategory, setFilterCategory] = useState("all");
+  const [filterStart, setFilterStart] = useState("");
+  const [filterEnd, setFilterEnd] = useState("");
 
   // STATO PER LA MODIFICA
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -39,15 +45,15 @@ export default function Expenses() {
 
   // STATO: ADDEBITA ALL'INQUILINO
   const [chargeTenant, setChargeTenant] = useState(false);
-
   const [attachment, setAttachment] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // 1. QUERY AGGIORNATA: Include i documenti collegati
-  const { data: expenses, isLoading } = useQuery({
-    queryKey: ['expenses'],
+  // --- 2. QUERY AGGIORNATA CON I FILTRI ---
+  // La query ora ascolta le variabili dei filtri e si aggiorna automaticamente
+  const { data: expenses = [], isLoading } = useQuery({
+    queryKey: ['expenses', filterProperty, filterCategory, filterStart, filterEnd],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('property_expenses')
         .select(`
           *,
@@ -55,7 +61,15 @@ export default function Expenses() {
           documents(id, url, nome, formato)
         `)
         .order('date', { ascending: false });
+      
+      // Applica filtri se presenti
+      if (filterProperty !== "all") query = query.eq('property_id', filterProperty);
+      if (filterCategory !== "all") query = query.eq('category', filterCategory);
+      if (filterStart) query = query.gte('date', filterStart);
+      if (filterEnd) query = query.lte('date', filterEnd);
         
+      const { data, error } = await query;
+
       if (error) {
         console.error("Errore fetch expenses:", error);
         return [];
@@ -63,6 +77,16 @@ export default function Expenses() {
       return data || [];
     }
   });
+
+  // Calcolo Totale Dinamico
+  const totalAmount = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+
+  const resetFilters = () => {
+      setFilterProperty("all");
+      setFilterCategory("all");
+      setFilterStart("");
+      setFilterEnd("");
+  };
 
   const openNewExpense = () => {
     setEditingId(null);
@@ -97,7 +121,6 @@ export default function Expenses() {
       if (!doc || !doc.url) return;
       
       try {
-        // Genera URL firmato temporaneo (valido 1 ora)
         const { data, error } = await supabase.storage
             .from('documents')
             .createSignedUrl(doc.url, 3600);
@@ -106,7 +129,6 @@ export default function Expenses() {
 
         setPreviewUrl(data.signedUrl);
         
-        // Determina tipo file
         const isPdf = doc.url.toLowerCase().endsWith('.pdf') || doc.formato?.includes('pdf');
         setPreviewType(isPdf ? 'pdf' : 'image');
         
@@ -116,7 +138,7 @@ export default function Expenses() {
       }
   };
 
-  // --- LOGICA DI CREAZIONE/AGGIORNAMENTO (Invariata ma robusta) ---
+  // --- LOGICA DI CREAZIONE/AGGIORNAMENTO ---
   const createExpense = useMutation({
     mutationFn: async () => {
       setUploading(true);
@@ -153,7 +175,7 @@ export default function Expenses() {
                     importo: parseFloat(formData.amount),
                     data_scadenza: formData.date,
                     stato: 'da_pagare',
-                    tipo: mapCategoryToPaymentType(formData.category),
+                    category: 'altro',
                     description: `Addebito: ${formData.description}`
                 });
                 toast({ title: "Addebito creato", description: `Spesa assegnata a ${activeBooking.nome_ospite}` });
@@ -245,12 +267,6 @@ export default function Expenses() {
       else createExpense.mutate();
   };
 
-  const mapCategoryToPaymentType = (cat: string) => {
-      if (cat === 'bollette') return 'bolletta_luce';
-      if (cat === 'condominio') return 'altro';
-      return 'altro';
-  };
-
   return (
     <div className="space-y-6">
       {/* --- DIALOG PER ANTEPRIMA FILE --- */}
@@ -258,7 +274,6 @@ export default function Expenses() {
         <DialogContent className="max-w-4xl w-full h-[80vh] flex flex-col p-0">
             <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
                 <h3 className="font-bold text-lg text-slate-800">Anteprima Ricevuta</h3>
-                {/* Il pulsante di chiusura è gestito automaticamente dalla X del Dialog, ma possiamo aggiungerne uno se serve */}
             </div>
             <div className="flex-1 bg-slate-100 flex items-center justify-center p-4 overflow-hidden relative">
                 {!previewUrl && <p>Caricamento...</p>}
@@ -281,14 +296,70 @@ export default function Expenses() {
       </Dialog>
 
       {/* --- HEADER --- */}
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900">Spese & Uscite</h1>
-        <Button className="bg-blue-600" onClick={openNewExpense}>
-            <Plus className="w-4 h-4 mr-2" /> Registra Spesa
-        </Button>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+           <h1 className="text-3xl font-bold text-gray-900">Spese & Uscite</h1>
+           <p className="text-gray-500 text-sm">Gestione contabile proprietà</p>
+        </div>
+        <div className="flex items-center gap-4">
+            <div className="bg-white px-4 py-2 rounded-lg border shadow-sm">
+                <span className="text-sm text-gray-500 mr-2">Totale Visualizzato:</span>
+                <span className="text-xl font-bold text-emerald-600">€ {totalAmount.toFixed(2)}</span>
+            </div>
+            <Button className="bg-blue-600" onClick={openNewExpense}>
+                <Plus className="w-4 h-4 mr-2" /> Registra Spesa
+            </Button>
+        </div>
+      </div>
 
-        {/* --- DIALOG CREAZIONE/MODIFICA --- */}
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+       {/* --- 3. BARRA DEI FILTRI (NUOVA) --- */}
+       <Card className="bg-slate-50 border-slate-200">
+        <CardHeader className="pb-2 pt-4">
+            <CardTitle className="text-sm uppercase text-slate-500 flex items-center gap-2"><Filter className="w-4 h-4" /> Filtri</CardTitle>
+        </CardHeader>
+        <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
+                <div className="space-y-1">
+                    <Label className="text-xs">Proprietà</Label>
+                    <Select value={filterProperty} onValueChange={setFilterProperty}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Tutte" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">🏠 Tutte</SelectItem>
+                            {properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-xs">Categoria</Label>
+                    <Select value={filterCategory} onValueChange={setFilterCategory}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Tutte" /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Tutte</SelectItem>
+                            <SelectItem value="manutenzione">Manutenzione</SelectItem>
+                            <SelectItem value="bollette">Bollette</SelectItem>
+                            <SelectItem value="tasse">Tasse</SelectItem>
+                            <SelectItem value="condominio">Condominio</SelectItem>
+                            <SelectItem value="altro">Altro</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-xs">Da Data</Label>
+                    <Input type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} className="bg-white" />
+                </div>
+                <div className="space-y-1">
+                    <Label className="text-xs">A Data</Label>
+                    <Input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} className="bg-white" />
+                </div>
+                <Button variant="outline" onClick={resetFilters} className="text-slate-500 hover:text-red-600 border-slate-300">
+                    <X className="w-4 h-4 mr-2" /> Reset
+                </Button>
+            </div>
+        </CardContent>
+      </Card>
+
+      {/* --- DIALOG CREAZIONE/MODIFICA (INVARIATO) --- */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
             <DialogHeader>
                 <DialogTitle>{editingId ? 'Modifica Spesa' : 'Nuova Spesa'}</DialogTitle>
@@ -323,7 +394,6 @@ export default function Expenses() {
               <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
                   <div className="space-y-0.5">
                       <Label className="text-blue-900 font-bold flex items-center gap-2"><User className="w-4 h-4"/> A carico dell'inquilino?</Label>
-                      <p className="text-[10px] text-blue-700">Se attivo, creerà una richiesta di pagamento nel portale inquilino.</p>
                   </div>
                   <Switch checked={chargeTenant} onCheckedChange={setChargeTenant} />
               </div>
@@ -332,10 +402,10 @@ export default function Expenses() {
               
               <div className="grid gap-2 border p-3 rounded-md bg-slate-50 border-dashed border-slate-300">
                 <Label className="flex items-center gap-2 cursor-pointer">
-                    <Paperclip className="w-4 h-4 text-blue-600" /> {editingId ? 'Aggiungi nuovo allegato (Opzionale)' : 'Allegato (Fattura/Scontrino)'}
+                    <Paperclip className="w-4 h-4 text-blue-600" /> {editingId ? 'Nuovo allegato' : 'Allegato'}
                 </Label>
                 <Input type="file" className="bg-white" onChange={(e) => setAttachment(e.target.files?.[0] || null)} />
-                {attachment && <p className="text-xs text-green-600 font-medium">File selezionato: {attachment.name}</p>}
+                {attachment && <p className="text-xs text-green-600 font-medium">File: {attachment.name}</p>}
               </div>
 
               <Button className="w-full bg-blue-600" onClick={handleSubmit} disabled={!formData.property_id || !formData.amount || uploading}>
@@ -343,31 +413,39 @@ export default function Expenses() {
               </Button>
             </div>
           </DialogContent>
-        </Dialog>
-      </div>
+      </Dialog>
 
+      {/* --- TABELLA (FILTRATA) --- */}
       <Card>
-        <CardHeader><CardTitle>Storico Uscite</CardTitle></CardHeader>
-        <CardContent>
+        <CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow><TableHead>Data</TableHead><TableHead>Ricevuta</TableHead><TableHead>Proprietà</TableHead><TableHead>Categoria</TableHead><TableHead>Descrizione</TableHead><TableHead>Importo</TableHead><TableHead className="text-right">Azioni</TableHead></TableRow></TableHeader>
+            <TableHeader className="bg-slate-50">
+                <TableRow>
+                    <TableHead>Data</TableHead>
+                    <TableHead>Ricevuta</TableHead>
+                    <TableHead>Proprietà</TableHead>
+                    <TableHead>Categoria</TableHead>
+                    <TableHead>Descrizione</TableHead>
+                    <TableHead>Importo</TableHead>
+                    <TableHead className="text-right">Azioni</TableHead>
+                </TableRow>
+            </TableHeader>
             <TableBody>
-              {expenses?.map((ex) => (
+              {expenses.length === 0 ? (
+                <TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessuna spesa con questi filtri.</TableCell></TableRow>
+              ) : (
+                expenses.map((ex: any) => (
                 <TableRow key={ex.id}>
                   <TableCell className="w-[120px]">{format(new Date(ex.date), 'dd/MM/yyyy')}</TableCell>
-                  
-                  {/* --- NUOVA COLONNA RICEVUTA --- */}
                   <TableCell>
                     {ex.documents && ex.documents.length > 0 ? (
                         <Button variant="outline" size="sm" className="h-8 gap-2 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => handlePreview(ex.documents[0])}>
-                            <Eye className="w-4 h-4" /> 
-                            <span className="hidden sm:inline">Vedi</span>
+                            <Eye className="w-4 h-4" /> <span className="hidden sm:inline">Vedi</span>
                         </Button>
                     ) : (
                         <span className="text-xs text-gray-400 italic">Nessuna</span>
                     )}
                   </TableCell>
-
                   <TableCell className="font-medium">{ex.properties_real?.nome}</TableCell>
                   <TableCell className="capitalize">
                       <span className="px-2 py-1 bg-slate-100 rounded text-xs block w-fit mb-1">{ex.category}</span>
@@ -382,7 +460,7 @@ export default function Expenses() {
                       </div>
                   </TableCell>
                 </TableRow>
-              ))}
+              )))}
             </TableBody>
           </Table>
         </CardContent>
