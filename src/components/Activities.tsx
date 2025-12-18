@@ -10,17 +10,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-// MODIFICA QUI SOTTO: Aggiunto MessageSquare e Home/User per icone
+// MODIFICA: Aggiunte icone necessarie per la nuova UI
 import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye, Home, User, AlertTriangle } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import TicketManager from '@/components/TicketManager';
-import { usePropertiesReal } from '@/hooks/useProperties'; // IMPORT NECESSARIO PER STEP 2.1
+// MODICA: Import necessario per il dropdown proprietà
+import { usePropertiesReal } from '@/hooks/useProperties';
 
 export default function Activities() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: properties } = usePropertiesReal(); // STEP 2.1: Carica proprietà
+  const { data: properties } = usePropertiesReal(); // CARICAMENTO PROPRIETÀ
   
   // STATI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -30,25 +31,22 @@ export default function Activities() {
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    property_id: '', // STEP 2.1: Nuovo campo
+    property_id: '', // NUOVO CAMPO FASE 2.1
     booking_id: 'none'
   });
 
-  // STEP 2.1: FETCH INQUILINI ATTIVI (Dipende dalla proprietà selezionata)
+  // LOGICA FASE 2.1: Trova inquilini attivi nella casa selezionata
   const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants-ticket', formData.property_id],
     queryFn: async () => {
         if (!formData.property_id) return [];
         const today = new Date().toISOString();
-        
-        // Cerca prenotazioni attive oggi per questa casa
         const { data } = await supabase
             .from('bookings')
             .select('id, nome_ospite')
             .eq('property_id', formData.property_id)
-            .lte('data_inizio', today)  // Iniziata prima di oggi
-            .gte('data_fine', today);   // Finisce dopo oggi
-            
+            .lte('data_inizio', today)
+            .gte('data_fine', today);
         return data || [];
     },
     enabled: !!formData.property_id
@@ -62,7 +60,7 @@ export default function Activities() {
         .from('tickets')
         .select(`
           *,
-          properties_real (nome), -- STEP 2.1: Fetch nome proprietà diretta
+          properties_real (nome), -- Fetch nome proprietà diretta
           bookings (
             nome_ospite,
             telefono_ospite,
@@ -84,7 +82,7 @@ export default function Activities() {
         titolo: newTicket.titolo,
         descrizione: newTicket.descrizione,
         priorita: newTicket.priorita,
-        property_id: newTicket.property_id || null, // STEP 2.1: Salva Proprietà
+        property_id: newTicket.property_id || null, // SALVATAGGIO PROPRIETÀ
         user_id: user?.id,
         creato_da: 'manager',
         stato: 'aperto',
@@ -100,7 +98,7 @@ export default function Activities() {
       setFormData({ titolo: '', descrizione: '', priorita: 'media', property_id: '', booking_id: 'none' });
       toast({ title: "Ticket creato", description: "Aggiunto alla lista attività." });
     },
-    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
+    onError: () => toast({ title: "Errore", variant: "destructive" })
   });
 
   // 3. RIAPRI TICKET
@@ -112,7 +110,7 @@ export default function Activities() {
             stato: 'aperto', 
             cost: null, 
             resolution_photo_url: null,
-            quote_status: 'none' // Reset preventivo se riapro
+            quote_status: 'none' // RESET PREVENTIVO
         }) 
         .eq('id', id);
       if (error) throw error;
@@ -147,7 +145,7 @@ export default function Activities() {
             <DialogHeader><DialogTitle>Apri Ticket Interno</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
               
-              {/* STEP 2.1: SELEZIONE PROPRIETÀ (OBBLIGATORIA) */}
+              {/* NUOVO: SELEZIONE PROPRIETÀ */}
               <div className="grid gap-2">
                 <Label className="flex items-center gap-2">
                     <Home className="w-4 h-4 text-blue-600" /> Proprietà (Obbligatorio)
@@ -162,13 +160,13 @@ export default function Activities() {
                 </Select>
               </div>
 
-              {/* STEP 2.1: SELEZIONE INQUILINO (DINAMICA) */}
+              {/* NUOVO: SELEZIONE INQUILINO */}
               <div className="grid gap-2">
                 <Label className="flex items-center gap-2">
                     <User className="w-4 h-4 text-green-600" /> Inquilino (Opzionale)
                 </Label>
                 <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.property_id}>
-                  <SelectTrigger><SelectValue placeholder={!formData.property_id ? "Seleziona prima la casa" : "Seleziona inquilino..."} /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={!formData.property_id ? "Prima la casa" : "Seleziona..."} /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">-- Nessuno / Area Comune --</SelectItem>
                     {activeTenants?.map(t => (
@@ -176,9 +174,6 @@ export default function Activities() {
                     ))}
                   </SelectContent>
                 </Select>
-                {formData.property_id && activeTenants?.length === 0 && (
-                    <p className="text-[10px] text-orange-500">Nessun inquilino attivo trovato in questa proprietà oggi.</p>
-                )}
               </div>
 
               <div className="grid gap-2">
@@ -231,7 +226,7 @@ export default function Activities() {
                         <CheckCircle className="w-3 h-3 mr-1" /> Risolto
                       </Badge>
                     )}
-                    {/* STEP 2.2: Badge Preventivo */}
+                    {/* NUOVO: BADGE PREVENTIVO */}
                     {ticket.quote_status === 'pending' && (
                         <Badge className="bg-orange-100 text-orange-800 border-orange-200">
                             <AlertTriangle className="w-3 h-3 mr-1"/> Preventivo
@@ -246,13 +241,12 @@ export default function Activities() {
                         <Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}
                     </span>
                     
-                    {/* STEP 2.1: VISUALIZZAZIONE PROPRIETÀ DIRETTA */}
+                    {/* VISUALIZZAZIONE CASA */}
                     {ticket.properties_real?.nome && (
                       <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
                         🏠 {ticket.properties_real.nome}
                       </span>
                     )}
-                    {/* FALLBACK VECCHI TICKET */}
                     {!ticket.properties_real?.nome && ticket.bookings?.properties_real?.nome && (
                       <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
                         🏠 {ticket.bookings.properties_real.nome}
