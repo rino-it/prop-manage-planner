@@ -9,7 +9,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye, Home, User, AlertTriangle, AlertCircle } from 'lucide-react';
+// INTEGRATO: Aggiunta StickyNote per le note
+import { Calendar, MessageSquare, UserCog, Plus, CheckCircle, RotateCcw, Eye, Home, User, AlertTriangle, AlertCircle, StickyNote } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
@@ -27,7 +28,7 @@ export default function Activities() {
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    property_real_id: '', // FIX: Nome colonna corretto
+    property_real_id: '',
     booking_id: 'none'
   });
 
@@ -81,7 +82,7 @@ export default function Activities() {
         titolo: newTicket.titolo,
         descrizione: newTicket.descrizione,
         priorita: newTicket.priorita,
-        property_real_id: newTicket.property_real_id || null, // FIX: Nome colonna corretto
+        property_real_id: newTicket.property_real_id || null,
         user_id: user?.id,
         creato_da: 'manager',
         stato: 'aperto',
@@ -218,12 +219,24 @@ export default function Activities() {
                   
                   <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
                   
+                  {/* --- NUOVA SEZIONE NOTE STAFF --- */}
+                  {ticket.admin_notes && (
+                    <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2 shadow-sm">
+                        <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
+                        <div className="text-xs text-yellow-900">
+                            <span className="font-bold block mb-0.5">Note Staff:</span> 
+                            {ticket.admin_notes}
+                        </div>
+                    </div>
+                  )}
+                  {/* ------------------------------- */}
+
                   <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                     <span className="flex items-center bg-gray-100 px-2 py-1 rounded border">
                         <Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM HH:mm')}
                     </span>
                     
-                    {/* VISUALIZZAZIONE CASA (Diretta o tramite Booking) */}
+                    {/* VISUALIZZAZIONE CASA */}
                     {ticket.properties_real?.nome && (
                       <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">
                         🏠 {ticket.properties_real.nome}
@@ -270,7 +283,7 @@ export default function Activities() {
             ticket={ticketManagerOpen} 
             isOpen={!!ticketManagerOpen} 
             onClose={() => setTicketManagerOpen(null)}
-            onUpdate={() => queryClient.invalidateQueries({ queryKey: ['tickets'] })}
+            onUpdate={() => { queryClient.invalidateQueries({ queryKey: ['tickets'] }); }}
             isReadOnly={ticketManagerOpen.stato === 'risolto'} 
         />
       )}
