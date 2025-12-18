@@ -62,8 +62,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   });
 
-  // --- AZIONI ---
-
   const saveProgress = async () => {
     const { error } = await supabase.from('tickets').update({ 
         admin_notes: notes,
@@ -117,7 +115,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { toast({ title: "Reset Effettuato" }); onUpdate(); }
   };
 
-  // --- PUNTO CRUCIALE: INSERT IN PROPERTY_EXPENSES ---
+  // --- PUNTO CRUCIALE: INSERT DOPPIO (SPESA + ARCHIVIO DOCUMENTI) ---
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
@@ -129,34 +127,57 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         
         if (ticketError) throw new Error(ticketError.message);
 
-        // 2. CREA SPESA NELLA TABELLA REALE (property_expenses)
         if (decision === 'approved') {
             const { data: { user } } = await supabase.auth.getUser();
             if(!user) throw new Error("Utente non loggato");
 
             const amount = ticket.quote_amount ? parseFloat(ticket.quote_amount) : 0;
             
-            // PAYLOAD CORRETTO PER LA TUA TABELLA
-            const payload = {
+            // A. INSERIMENTO SPESA (property_expenses)
+            const expensePayload = {
                 user_id: user.id,
-                property_id: ticket.property_real_id, // Usa property_id come da tuo DB
-                description: `Ticket: ${ticket.titolo}`, // Usa description (inglese)
-                amount: amount, // Usa amount (inglese)
-                date: new Date().toISOString().split('T')[0], // Usa date (YYYY-MM-DD)
-                category: 'manutenzione', // Usa category
-                attachment_url: ticket.quote_url // Nuova colonna creata dallo script
+                property_id: ticket.property_real_id, 
+                description: `Ticket: ${ticket.titolo}`, 
+                amount: amount, 
+                date: new Date().toISOString().split('T')[0], 
+                category: 'manutenzione', 
+                attachment_url: ticket.quote_url, 
+                supplier: supplier || ticket.supplier 
             };
+            
+            // Inserisci e recupera ID per collegarlo al documento (opzionale)
+            const { data: expenseData, error: expenseError } = await supabase
+                .from('property_expenses')
+                .insert(expensePayload)
+                .select();
 
-            const { error: expenseError } = await supabase
-                .from('property_expenses') // TABELLA CORRETTA
-                .insert(payload);
+            if (expenseError) throw new Error(`Errore Spesa: ${expenseError.message}`);
 
-            if (expenseError) {
-                console.error("Errore inserimento spesa:", expenseError);
-                alert(`Errore creazione spesa: ${expenseError.message}\nControlla che la proprietà sia selezionata.`);
+            // B. INSERIMENTO ARCHIVIO DOCUMENTI (documents)
+            // Se c'è un file allegato, lo registriamo anche nell'archivio della casa
+            if (ticket.quote_url) {
+                const docPayload = {
+                    user_id: user.id,
+                    property_real_id: ticket.property_real_id, // Nota: qui la colonna si chiama property_real_id
+                    nome: `Preventivo - ${ticket.titolo}`,
+                    url: ticket.quote_url,
+                    tipo: 'preventivo',
+                    data_caricamento: new Date().toISOString(),
+                    expense_id: expenseData?.[0]?.id // Colleghiamo alla spesa appena creata
+                };
+
+                const { error: docError } = await supabase.from('documents').insert(docPayload);
+                
+                if (docError) {
+                    console.error("Errore Archivio:", docError);
+                    toast({ title: "Attenzione", description: "Spesa creata, ma errore nel salvare in Archivio Documenti.", variant: "destructive" });
+                } else {
+                    toast({ title: "Successo Completo", description: "✅ Spesa contabilizzata e File archiviato." });
+                }
             } else {
-                toast({ title: "Approvato", description: "Spesa aggiunta a property_expenses" });
+                toast({ title: "Approvato", description: "✅ Spesa aggiunta (Nessun file da archiviare)." });
             }
+
         } else {
             toast({ title: "Rifiutato", description: "Ticket riaperto." });
         }
@@ -309,4 +330,4 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       </DialogContent>
     </Dialog>
   );
-}   
+}
