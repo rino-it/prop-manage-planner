@@ -8,16 +8,14 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, User, Send, Euro, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText 
+  CheckCircle, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, Trash2, RotateCcw, Euro 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 
-// Helper per i link cliccabili
 const renderTextWithLinks = (text: string) => {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -67,35 +65,25 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   // --- AZIONI ---
 
   const saveProgress = async () => {
-    const { error } = await supabase
-      .from('tickets')
-      .update({ 
+    const { error } = await supabase.from('tickets').update({ 
         admin_notes: notes,
         share_notes: shareNotes,
         supplier: supplier,
         supplier_contact: supplierContact,
         assigned_partner_id: assignedPartner || null,
         stato: 'in_lavorazione' 
-      })
-      .eq('id', ticket.id);
+      }).eq('id', ticket.id);
 
-    if (error) toast({ title: "Errore salvataggio", description: error.message, variant: "destructive" });
-    else {
-      toast({ title: "Salvato", description: "Modifiche registrate." });
-      onUpdate();
-    }
+    if (error) toast({ title: "Errore", description: error.message, variant: "destructive" });
+    else { toast({ title: "Salvato" }); onUpdate(); }
   };
 
   const handleDelegate = async () => {
     if (!assignedPartner) return toast({ title: "Seleziona socio", variant: "destructive" });
     const partner = colleagues?.find(c => c.id === assignedPartner);
-    const phone = partner?.phone;
-
     await supabase.from('tickets').update({ assigned_partner_id: assignedPartner }).eq('id', ticket.id);
     onUpdate();
-
-    const text = `Ciao ${partner?.first_name}, ticket: ${ticket.titolo}\nNote: ${notes}`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+    window.open(`https://wa.me/${partner?.phone}?text=${encodeURIComponent(`Ciao, ticket: ${ticket.titolo}\nNote: ${notes}`)}`, '_blank');
   };
 
   const handleQuoteUpload = async () => {
@@ -104,97 +92,88 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         let quoteUrl = ticket.quote_url;
         if (quoteFile) {
            const fileName = `quote_${ticket.id}_${Date.now()}.${quoteFile.name.split('.').pop()}`;
-           const { error: upError } = await supabase.storage.from('documents').upload(fileName, quoteFile, { upsert: true });
-           if (upError) throw upError;
+           const { error } = await supabase.storage.from('documents').upload(fileName, quoteFile, { upsert: true });
+           if (error) throw error;
            quoteUrl = fileName;
         }
 
         const amountVal = quoteAmount ? parseFloat(quoteAmount.toString().replace(',', '.')) : null;
-
-        const { error } = await supabase.from('tickets')
-          .update({
-            quote_amount: amountVal,
-            quote_url: quoteUrl,
-            quote_status: 'pending',
-            stato: 'in_attesa'
-          })
-          .eq('id', ticket.id);
+        const { error } = await supabase.from('tickets').update({
+            quote_amount: amountVal, quote_url: quoteUrl, quote_status: 'pending', stato: 'in_attesa'
+          }).eq('id', ticket.id);
 
         if (error) throw error;
-        toast({ title: "Preventivo caricato" });
+        toast({ title: "Caricato", description: "Preventivo in attesa." });
         onUpdate();
-        onClose();
       } catch (e: any) { 
           toast({ title: "Errore Upload", description: e.message, variant: "destructive" }); 
       } finally { setUploading(false); }
   };
 
-  // --- CUORE DEL PROBLEMA: CREAZIONE SPESA ---
+  // NUOVO: Funzione per RESETTARE un preventivo approvato
+  const handleResetQuote = async () => {
+    if(!confirm("Sei sicuro? Questo riporterà il ticket 'In Attesa' e potrai modificare il preventivo. (Nota: Se avevi già creato la spesa in contabilità, dovrai cancellarla manualmente).")) return;
+    
+    const { error } = await supabase.from('tickets').update({
+        quote_status: 'pending', // Riporta a pending (o 'none' se vuoi cancellare tutto)
+        stato: 'in_attesa'
+    }).eq('id', ticket.id);
+
+    if(error) toast({ title: "Errore", description: error.message, variant: "destructive" });
+    else {
+        toast({ title: "Reset Effettuato", description: "Ora puoi modificare il preventivo." });
+        onUpdate();
+    }
+  };
+
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
         const newState = decision === 'approved' ? 'in_corso' : 'aperto';
-        
-        // 1. Aggiorna Ticket
-        const { error: ticketError } = await supabase
-            .from('tickets')
-            .update({ quote_status: decision, stato: newState })
-            .eq('id', ticket.id);
+        const { error: ticketError } = await supabase.from('tickets')
+            .update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
         
         if (ticketError) throw ticketError;
 
-        // 2. SE APPROVATO -> CREA SPESA IN PAYMENTS
         if (decision === 'approved') {
-            // Recupera Utente Corrente (Fondamentale per RLS)
             const { data: { user } } = await supabase.auth.getUser();
             
-            if (!user) throw new Error("Utente non autenticato. Ricarica la pagina.");
+            // CHECK CRITICO: La proprietà esiste?
+            if (!ticket.property_real_id) {
+                alert("ATTENZIONE: Questo ticket non è associato a nessuna proprietà. La spesa verrà creata ma non sarà visibile sotto una casa specifica.");
+            }
 
-            // Parsing sicuro importo
             const amount = ticket.quote_amount ? parseFloat(ticket.quote_amount) : 0;
-
             const payload = {
-                user_id: user.id, // ID Utente obbligatorio
-                property_real_id: ticket.property_real_id, // Collega alla casa
+                user_id: user?.id,
+                property_real_id: ticket.property_real_id || null, // Passa null se manca
                 descrizione: `Manutenzione: ${ticket.titolo}`,
                 importo: amount,
                 importo_originale: amount,
                 scadenza: new Date().toISOString(),
                 stato: 'in_attesa',
-                categoria: 'manutenzione', // Deve esistere nell'Enum
+                categoria: 'manutenzione',
                 fornitore: supplier || ticket.supplier || 'Fornitore Ticket',
-                note: `Generato da Ticket #${ticket.id.slice(0,4)}. Note: ${notes}`,
+                note: `Da Ticket #${ticket.id.slice(0,4)}.`,
                 allegato_url: ticket.quote_url,
-                ricorrenza_tipo: 'una_tantum' // Deve esistere nell'Enum
+                ricorrenza_tipo: 'una_tantum'
             };
-
-            console.log("Tentativo creazione spesa:", payload);
 
             const { error: expenseError } = await supabase.from('payments').insert(payload);
 
             if (expenseError) {
-                console.error("ERRORE SPESA:", expenseError);
-                toast({ 
-                    title: "Attenzione!", 
-                    description: `Ticket approvato MA errore creazione spesa: ${expenseError.message}`,
-                    variant: "destructive" 
-                });
+                console.error(expenseError);
+                toast({ title: "Ticket OK ma Errore Spesa", description: expenseError.message, variant: "destructive" });
             } else {
-                toast({ 
-                    title: "Tutto ok!", 
-                    description: "Preventivo approvato e spesa inserita in contabilità.",
-                    className: "bg-green-100 border-green-600 text-green-800"
-                });
+                toast({ title: "Approvato", description: "Spesa creata in contabilità." });
             }
         } else {
-            toast({ title: "Preventivo Rifiutato" });
+            toast({ title: "Rifiutato", description: "Ticket riaperto." });
         }
-
         onUpdate();
         onClose();
-
       } catch (e: any) {
-          toast({ title: "Errore Critico", description: e.message, variant: "destructive" });
+          toast({ title: "Errore", description: e.message, variant: "destructive" });
       } finally {
           setUploading(false);
       }
@@ -210,36 +189,26 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     try {
         setUploading(true);
         let receiptUrl = ticket.ricevuta_url;
-
         if (receiptFile) {
             const fileName = `receipt_${ticket.id}_${Date.now()}.${receiptFile.name.split('.').pop()}`;
-            const { error: upError } = await supabase.storage.from('documents').upload(fileName, receiptFile, {upsert: true});
-            if (upError) throw upError;
+            const { error } = await supabase.storage.from('documents').upload(fileName, receiptFile, {upsert: true});
+            if (error) throw error;
             receiptUrl = fileName;
         }
 
         const costVal = costAmount ? parseFloat(costAmount.toString().replace(',', '.')) : 0;
-
-        const { error } = await supabase.from('tickets')
-            .update({ 
-                stato: 'in_verifica', 
-                cost: costVal,
-                ricevuta_url: receiptUrl,
-                spesa_visibile_ospite: costVisible,
-                admin_notes: notes,
-                share_notes: shareNotes 
-            })
-            .eq('id', ticket.id);
+        const { error } = await supabase.from('tickets').update({ 
+            stato: 'in_verifica', cost: costVal, ricevuta_url: receiptUrl,
+            spesa_visibile_ospite: costVisible, admin_notes: notes, share_notes: shareNotes 
+        }).eq('id', ticket.id);
 
         if (error) throw error;
-        toast({ title: "Ticket Completato" });
+        toast({ title: "Completato", description: "Ticket mandato in verifica." });
         onUpdate();
         onClose();
     } catch (error: any) {
         toast({ title: "Errore", description: error.message, variant: "destructive" });
-    } finally {
-        setUploading(false);
-    }
+    } finally { setUploading(false); }
   };
 
   return (
@@ -250,9 +219,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             <span className="bg-blue-100 text-blue-700 p-1 rounded"><Hammer className="w-5 h-5"/></span>
             Gestione: {ticket.titolo}
           </DialogTitle>
-          <DialogDescription>
-            Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')}
-          </DialogDescription>
+          <DialogDescription>Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')}</DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="management" className="w-full mt-2">
@@ -262,20 +229,18 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <TabsTrigger value="closing">3. Chiusura</TabsTrigger>
             </TabsList>
 
-            {/* TAB 1 */}
+            {/* TAB 1: GESTIONE */}
             <TabsContent value="management" className="space-y-4 py-4">
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
-                    <Label className="text-slate-700 font-semibold">Fornitore / Operaio</Label>
+                    <Label className="text-slate-700 font-semibold">Fornitore</Label>
                     <div className="flex gap-2">
                         <Input placeholder="Ditta" value={supplier} onChange={e => setSupplier(e.target.value)} disabled={isReadOnly}/>
                         <Input placeholder="Tel" value={supplierContact} onChange={e => setSupplierContact(e.target.value)} className="w-1/3" disabled={isReadOnly}/>
-                        {supplierContact && (
-                            <Button size="icon" variant="outline" onClick={() => window.open(`tel:${supplierContact}`)}><Phone className="w-4 h-4 text-blue-600"/></Button>
-                        )}
+                        {supplierContact && <Button size="icon" variant="outline" onClick={() => window.open(`tel:${supplierContact}`)}><Phone className="w-4 h-4 text-blue-600"/></Button>}
                     </div>
                 </div>
                 <div className="grid gap-2">
-                    <Label>Note Interne</Label>
+                    <Label>Note</Label>
                     <Textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={isReadOnly}/>
                     {notes && (notes.includes('http') || notes.includes('www')) && (
                         <div className="text-xs bg-gray-50 p-2 rounded border text-gray-600 break-all">{renderTextWithLinks(notes)}</div>
@@ -285,40 +250,53 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         <Label className="text-xs">Visibile a ospite</Label>
                     </div>
                 </div>
-                <div className="border-t pt-4 flex gap-2 items-end">
-                    <div className="flex-1">
-                        <Label className="mb-1 block">Delega a Socio</Label>
-                        <Select value={assignedPartner || ''} onValueChange={setAssignedPartner} disabled={isReadOnly}>
-                            <SelectTrigger><SelectValue placeholder="Scegli..." /></SelectTrigger>
-                            <SelectContent>{colleagues?.map(c => <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>)}</SelectContent>
-                        </Select>
-                    </div>
-                    <Button onClick={handleDelegate} disabled={!assignedPartner || isReadOnly} className="bg-green-600"><Share2 className="w-4 h-4 mr-2"/> WhatsApp</Button>
+                <div className="border-t pt-4 flex gap-2">
+                    <Select value={assignedPartner || ''} onValueChange={setAssignedPartner} disabled={isReadOnly}>
+                        <SelectTrigger className="flex-1"><SelectValue placeholder="Delega..." /></SelectTrigger>
+                        <SelectContent>{colleagues?.map(c => <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>)}</SelectContent>
+                    </Select>
+                    <Button onClick={handleDelegate} disabled={!assignedPartner || isReadOnly} className="bg-green-600"><Share2 className="w-4 h-4 mr-2"/> WA</Button>
                 </div>
                 {!isReadOnly && <DialogFooter className="mt-4"><Button type="button" variant="outline" onClick={saveProgress}>Salva Stato</Button></DialogFooter>}
             </TabsContent>
 
-            {/* TAB 2 */}
+            {/* TAB 2: PREVENTIVO */}
             <TabsContent value="quote" className="space-y-4 py-4">
                 {(ticket.quote_amount || ticket.quote_url) && (
-                    <div className="border rounded p-4 mb-4 bg-white shadow-sm flex justify-between items-center">
-                        <div className="flex items-center gap-2 font-bold"><Euro className="w-5 h-5"/> {ticket.quote_amount}</div>
-                        <div className="flex items-center gap-2">
-                            {ticket.quote_url && <Button size="sm" variant="ghost" onClick={() => viewFile(ticket.quote_url)}><FileText className="w-4 h-4 mr-2"/> Vedi</Button>}
-                            <Badge>{ticket.quote_status}</Badge>
+                    <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
+                        <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2 font-bold"><Euro className="w-5 h-5"/> {ticket.quote_amount}</div>
+                            <div className="flex items-center gap-2">
+                                {ticket.quote_url && <Button size="sm" variant="ghost" onClick={() => viewFile(ticket.quote_url)}><FileText className="w-4 h-4 mr-2"/> Vedi</Button>}
+                                <Badge className={ticket.quote_status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{ticket.quote_status}</Badge>
+                            </div>
                         </div>
+                        
+                        {/* TASTO RESET PER PREVENTIVI APPROVATI */}
+                        {ticket.quote_status === 'approved' && !isReadOnly && (
+                            <Button 
+                                variant="destructive" 
+                                size="sm" 
+                                className="w-full mt-2 bg-red-50 text-red-600 hover:bg-red-100 border border-red-200"
+                                onClick={handleResetQuote}
+                            >
+                                <RotateCcw className="w-4 h-4 mr-2" /> Annulla Approvazione / Reset
+                            </Button>
+                        )}
                     </div>
                 )}
+
                 {ticket.quote_status === 'pending' && !isReadOnly && (
                      <div className="grid grid-cols-2 gap-2 mt-2">
                         <Button className="bg-green-600 hover:bg-green-700" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>
-                            <CheckCircle className="w-4 h-4 mr-2" /> {uploading ? '...' : 'Approva e Crea Spesa'}
+                            <CheckCircle className="w-4 h-4 mr-2" /> Approva
                         </Button>
                         <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>
                             <XCircle className="w-4 h-4 mr-2" /> Rifiuta
                         </Button>
                     </div>
                 )}
+                
                 {ticket.quote_status !== 'approved' && !isReadOnly && (
                     <div className="bg-slate-50 p-4 rounded border border-dashed">
                         <h4 className="font-bold text-sm mb-3 flex gap-2"><Upload className="w-4 h-4"/> Carica / Aggiorna</h4>
@@ -331,7 +309,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
             </TabsContent>
 
-            {/* TAB 3 */}
+            {/* TAB 3: CHIUSURA */}
             <TabsContent value="closing" className="space-y-4 py-4">
                 <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
                     <Label className="font-bold text-yellow-800 block mb-2">Spese Finali</Label>
@@ -347,7 +325,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         </div>
                     </div>
                 </div>
-                {!isReadOnly && <Button className="w-full bg-green-600 mt-4 py-6" onClick={handleResolveFlow} disabled={uploading}>{uploading ? "..." : "✅ Completa Lavoro"}</Button>}
+                {!isReadOnly && <Button className="w-full bg-green-600 mt-4 py-6" onClick={handleResolveFlow} disabled={uploading}>{uploading ? "..." : "✅ Completa"}</Button>}
             </TabsContent>
         </Tabs>
       </DialogContent>
