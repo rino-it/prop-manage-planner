@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
-import { CheckCircle, Share2, Hammer, Euro, Upload, XCircle } from 'lucide-react';
+import { CheckCircle, Share2, Hammer, Euro, Upload, AlertTriangle, XCircle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 
@@ -26,7 +26,7 @@ interface TicketManagerProps {
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // STATI ESISTENTI
+  // --- STATI ESISTENTI ---
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
@@ -37,7 +37,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [costVisible, setCostVisible] = useState(ticket?.spesa_visibile_ospite || false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   
-  // STATI NUOVI (PREVENTIVI)
+  // --- STATI PREVENTIVO (Fase 2.2) ---
   const [quoteAmount, setQuoteAmount] = useState(ticket?.quote_amount || '');
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
 
@@ -63,7 +63,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     if (!assignedPartner) return toast({ title: "Seleziona socio", variant: "destructive" });
     const partner = colleagues?.find(c => c.phone === assignedPartner || c.id === assignedPartner);
     const phone = partner?.phone || assignedPartner;
-    const text = `Ciao, delego ticket: ${ticket.titolo}\nNote: ${notes}`;
+    
+    // FIX: Supporto per proprietà diretta (senza booking)
+    const propertyName = ticket.properties_real?.nome || ticket.bookings?.properties_real?.nome || 'N/A';
+    
+    const text = `Ciao, delego ticket: ${ticket.titolo}\n🏠 ${propertyName}\nNote: ${notes}`;
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
