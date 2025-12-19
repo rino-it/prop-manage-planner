@@ -49,7 +49,6 @@ export default function Expenses() {
   const [uploading, setUploading] = useState(false);
 
   // --- 2. QUERY AGGIORNATA CON I FILTRI ---
-  // La query ora ascolta le variabili dei filtri e si aggiorna automaticamente
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['expenses', filterProperty, filterCategory, filterStart, filterEnd],
     queryFn: async () => {
@@ -269,7 +268,6 @@ export default function Expenses() {
 
   return (
     <div className="space-y-6">
-      {/* --- DIALOG PER ANTEPRIMA FILE --- */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="max-w-4xl w-full h-[80vh] flex flex-col p-0">
             <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
@@ -277,11 +275,9 @@ export default function Expenses() {
             </div>
             <div className="flex-1 bg-slate-100 flex items-center justify-center p-4 overflow-hidden relative">
                 {!previewUrl && <p>Caricamento...</p>}
-                
                 {previewUrl && previewType === 'pdf' && (
                     <iframe src={previewUrl} className="w-full h-full rounded shadow-sm bg-white" title="Anteprima PDF" />
                 )}
-                
                 {previewUrl && previewType === 'image' && (
                     <img src={previewUrl} alt="Ricevuta" className="max-w-full max-h-full object-contain shadow-lg rounded" />
                 )}
@@ -295,7 +291,6 @@ export default function Expenses() {
         </DialogContent>
       </Dialog>
 
-      {/* --- HEADER --- */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
            <h1 className="text-3xl font-bold text-gray-900">Spese & Uscite</h1>
@@ -312,7 +307,6 @@ export default function Expenses() {
         </div>
       </div>
 
-       {/* --- 3. BARRA DEI FILTRI (NUOVA) --- */}
        <Card className="bg-slate-50 border-slate-200">
         <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-sm uppercase text-slate-500 flex items-center gap-2"><Filter className="w-4 h-4" /> Filtri</CardTitle>
@@ -358,7 +352,6 @@ export default function Expenses() {
         </CardContent>
       </Card>
 
-      {/* --- DIALOG CREAZIONE/MODIFICA (INVARIATO) --- */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
             <DialogHeader>
@@ -415,7 +408,6 @@ export default function Expenses() {
           </DialogContent>
       </Dialog>
 
-      {/* --- TABELLA (FILTRATA) --- */}
       <Card>
         <CardContent className="p-0">
           <Table>
