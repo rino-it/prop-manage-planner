@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Truck, Plus, Trash2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Truck, Plus, Trash2 } from 'lucide-react'; // REMOVED: RefreshCw, AlertTriangle
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -21,7 +21,6 @@ export default function MobileProperties() {
     data_revisione: '', scadenza_assicurazione: '', note: ''
   });
 
-  // CARICAMENTO AUTOMATICO SICURO
   const fetchVehicles = async () => {
     try {
       setLoading(true);
@@ -48,19 +47,15 @@ export default function MobileProperties() {
     fetchVehicles();
   }, []);
 
-  // SALVATAGGIO DATI (Con gestione campi DB)
   const handleSave = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return alert("Sessione scaduta.");
 
       const payload = {
-        // Campi di compatibilità per evitare errori SQL
         nome: formData.veicolo,
         categoria: 'Veicolo',
         status: 'active',
-        
-        // Campi reali
         veicolo: formData.veicolo,
         targa: formData.targa ? formData.targa.toUpperCase() : null,
         anno: formData.anno ? parseInt(formData.anno) : null,
@@ -77,7 +72,7 @@ export default function MobileProperties() {
       toast({ title: "Veicolo salvato con successo!" });
       setIsDialogOpen(false);
       setFormData({ veicolo: '', targa: '', anno: '', km: '', data_revisione: '', scadenza_assicurazione: '', note: '' });
-      fetchVehicles(); // Ricarica lista
+      fetchVehicles();
 
     } catch (err: any) {
       toast({ title: "Errore salvataggio", description: err.message, variant: "destructive" });

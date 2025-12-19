@@ -2,11 +2,11 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom"; // REMOVED: Navigate
 import Index from "./pages/Index";
 import Properties from "./components/Properties";
 import Tenants from "./components/TenantManager";
-import Expenses from "./pages/Expenses"; // Nota: controlla se è pages o components nel tuo file tree attuale
+import Expenses from "./pages/Expenses";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -24,7 +24,7 @@ const App = () => (
         <Routes>
           <Route path="/auth" element={<Auth />} />
           
-          {/* ROTTA DASHBOARD (INDEX) */}
+          {/* DASHBOARD */}
           <Route
             path="/"
             element={
@@ -39,7 +39,7 @@ const App = () => (
             }
           />
 
-          {/* ROTTA PROPRIETA' IMMOBILIARI */}
+          {/* PROPERTIES */}
           <Route
             path="/properties"
             element={
@@ -54,7 +54,7 @@ const App = () => (
             }
           />
 
-          {/* ROTTA INQUILINI */}
+          {/* TENANTS */}
           <Route
             path="/tenants"
             element={
@@ -69,7 +69,7 @@ const App = () => (
             }
           />
 
-          {/* ROTTA SPESE */}
+          {/* EXPENSES */}
           <Route
             path="/expenses"
             element={
@@ -84,7 +84,7 @@ const App = () => (
             }
           />
 
-          {/* --- FIX: ROTTA PARCO MEZZI (MOBILE PROPERTIES) --- */}
+          {/* MOBILE PROPERTIES (PARCO MEZZI) */}
           <Route
             path="/mobile-properties"
             element={
@@ -98,7 +98,6 @@ const App = () => (
               </ProtectedRoute>
             }
           />
-          {/* -------------------------------------------------- */}
 
           <Route path="*" element={<NotFound />} />
         </Routes>
