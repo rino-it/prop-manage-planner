@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Truck, Plus, Pencil, Trash2, Shield, Wrench, AlertTriangle } from 'lucide-react';
+import { Truck, Plus, Pencil, Trash2, Shield, Wrench, AlertTriangle, RefreshCcw } from 'lucide-react';
 import { format, isPast, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -22,22 +22,37 @@ export default function MobileProperties() {
     data_revisione: '', scadenza_assicurazione: '', note: ''
   });
 
-  const { data: vehicles = [], isLoading, error } = useQuery({
+  // FETCH DATI CON GESTIONE ERRORI
+  const { data: vehicles = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['mobile_properties'],
     queryFn: async () => {
-      // Seleziona tutto in modo esplicito per debugging
-      const { data, error } = await supabase.from('properties_mobile').select('*').order('created_at', { ascending: false });
+      console.log("Tentativo fetch veicoli...");
+      const { data, error } = await supabase
+        .from('properties_mobile')
+        .select('*')
+        .order('created_at', { ascending: false });
       
       if (error) {
-        console.error("Errore fetch veicoli:", error);
+        console.error("ERRORE SUPABASE:", error);
         throw error;
       }
       return data || [];
-    }
+    },
+    retry: 1 // Riprova solo una volta se fallisce
   });
 
-  if (error) {
-      return <div className="p-8 text-red-600 font-bold">Errore di caricamento: {(error as any).message}. Controlla il Database.</div>;
+  // SE C'È UN ERRORE, MOSTRALO INVECE DI CRASHARE
+  if (isError) {
+    return (
+      <div className="p-8 flex flex-col items-center justify-center space-y-4 text-red-600">
+        <AlertTriangle className="w-12 h-12" />
+        <h2 className="text-xl font-bold">Errore di Caricamento</h2>
+        <p className="text-slate-700 bg-slate-100 p-4 rounded border">
+          {(error as any)?.message || "Errore sconosciuto nel database"}
+        </p>
+        <Button onClick={() => refetch()} variant="outline"><RefreshCcw className="mr-2 h-4 w-4"/> Riprova</Button>
+      </div>
+    );
   }
 
   const openNew = () => {
@@ -49,8 +64,12 @@ export default function MobileProperties() {
   const openEdit = (v: any) => {
     setEditingId(v.id);
     setFormData({
-      veicolo: v.veicolo || '', targa: v.targa || '', anno: v.anno ? String(v.anno) : '', km: v.km ? String(v.km) : '',
-      data_revisione: v.data_revisione || '', scadenza_assicurazione: v.scadenza_assicurazione || '', note: v.note || ''
+      veicolo: v.veicolo || '', targa: v.targa || '', 
+      anno: v.anno ? String(v.anno) : '', 
+      km: v.km ? String(v.km) : '',
+      data_revisione: v.data_revisione || '', 
+      scadenza_assicurazione: v.scadenza_assicurazione || '', 
+      note: v.note || ''
     });
     setIsDialogOpen(true);
   };
@@ -58,8 +77,8 @@ export default function MobileProperties() {
   const upsertVehicle = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Utente non autenticato");
-      
+      if (!user) throw new Error("Utente non autenticato. Fai login.");
+
       const payload = {
         veicolo: formData.veicolo,
         targa: formData.targa ? formData.targa.toUpperCase() : null,
@@ -82,9 +101,12 @@ export default function MobileProperties() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mobile_properties'] });
       setIsDialogOpen(false);
-      toast({ title: editingId ? "Veicolo aggiornato" : "Veicolo aggiunto" });
+      toast({ title: "Salvataggio completato" });
     },
-    onError: (err: any) => toast({ title: "Errore Salvataggio", description: err.message, variant: "destructive" })
+    onError: (err: any) => {
+      console.error(err);
+      toast({ title: "Errore Salvataggio", description: err.message, variant: "destructive" });
+    }
   });
 
   const deleteVehicle = useMutation({
@@ -101,8 +123,7 @@ export default function MobileProperties() {
   const renderDateStatus = (dateStr: string) => {
     if (!dateStr) return <span className="text-gray-300">-</span>;
     const date = parseISO(dateStr);
-    if (!isValid(date)) return <span className="text-red-300">Data invalida</span>;
-    
+    if (!isValid(date)) return <span>-</span>;
     const expired = isPast(date);
     return (
       <span className={`flex items-center gap-1 font-medium ${expired ? 'text-red-600' : 'text-green-700'}`}>
@@ -132,10 +153,10 @@ export default function MobileProperties() {
             </TableHeader>
             <TableBody>
               {isLoading ? (<TableRow><TableCell colSpan={7} className="text-center p-4">Caricamento...</TableCell></TableRow>) : 
-               vehicles.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessun veicolo.</TableCell></TableRow>) : (
+               vehicles.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessun veicolo trovato.</TableCell></TableRow>) : (
                 vehicles.map((v: any) => (
-                  <TableRow key={v.id}>
-                    <TableCell className="font-bold">{v.veicolo || 'Senza nome'}</TableCell>
+                  <TableRow key={v.id || Math.random()}>
+                    <TableCell className="font-bold">{v.veicolo || '...'}</TableCell>
                     <TableCell><span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs border uppercase">{v.targa || '-'}</span></TableCell>
                     <TableCell>{v.anno || '-'}</TableCell>
                     <TableCell>{v.km ? v.km.toLocaleString() : '0'} km</TableCell>
