@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Truck, Plus, Pencil, Trash2, Shield, Wrench, AlertTriangle, RefreshCcw } from 'lucide-react';
+import { Truck, Plus, Pencil, Trash2, Shield, Wrench, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format, isPast, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
@@ -22,11 +22,11 @@ export default function MobileProperties() {
     data_revisione: '', scadenza_assicurazione: '', note: ''
   });
 
-  // FETCH DATI CON GESTIONE ERRORI
+  // FETCH DATI BLINDATA
   const { data: vehicles = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['mobile_properties'],
     queryFn: async () => {
-      console.log("Tentativo fetch veicoli...");
+      console.log("Tentativo connessione Supabase...");
       const { data, error } = await supabase
         .from('properties_mobile')
         .select('*')
@@ -37,20 +37,23 @@ export default function MobileProperties() {
         throw error;
       }
       return data || [];
-    },
-    retry: 1 // Riprova solo una volta se fallisce
+    }
   });
 
-  // SE C'È UN ERRORE, MOSTRALO INVECE DI CRASHARE
+  // GESTIONE ERRORI CRITICI (Evita il blocco pagina)
   if (isError) {
     return (
-      <div className="p-8 flex flex-col items-center justify-center space-y-4 text-red-600">
-        <AlertTriangle className="w-12 h-12" />
-        <h2 className="text-xl font-bold">Errore di Caricamento</h2>
-        <p className="text-slate-700 bg-slate-100 p-4 rounded border">
-          {(error as any)?.message || "Errore sconosciuto nel database"}
+      <div className="p-8 text-center space-y-4">
+        <div className="text-red-600 font-bold text-xl flex items-center justify-center gap-2">
+          <AlertTriangle /> Errore di Connessione
+        </div>
+        <p className="text-gray-600">
+          Impossibile caricare il parco mezzi. <br/>
+          Dettaglio tecnico: {error instanceof Error ? error.message : "Errore sconosciuto"}
         </p>
-        <Button onClick={() => refetch()} variant="outline"><RefreshCcw className="mr-2 h-4 w-4"/> Riprova</Button>
+        <Button onClick={() => refetch()} variant="outline">
+          <RefreshCw className="mr-2 h-4 w-4"/> Riprova
+        </Button>
       </div>
     );
   }
@@ -64,8 +67,9 @@ export default function MobileProperties() {
   const openEdit = (v: any) => {
     setEditingId(v.id);
     setFormData({
-      veicolo: v.veicolo || '', targa: v.targa || '', 
-      anno: v.anno ? String(v.anno) : '', 
+      veicolo: v.veicolo || '', 
+      targa: v.targa || '', 
+      anno: v.anno ?String(v.anno) : '', 
       km: v.km ? String(v.km) : '',
       data_revisione: v.data_revisione || '', 
       scadenza_assicurazione: v.scadenza_assicurazione || '', 
@@ -77,8 +81,8 @@ export default function MobileProperties() {
   const upsertVehicle = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Utente non autenticato. Fai login.");
-
+      if (!user) throw new Error("Devi essere loggato per salvare.");
+      
       const payload = {
         veicolo: formData.veicolo,
         targa: formData.targa ? formData.targa.toUpperCase() : null,
@@ -101,7 +105,7 @@ export default function MobileProperties() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mobile_properties'] });
       setIsDialogOpen(false);
-      toast({ title: "Salvataggio completato" });
+      toast({ title: "Operazione completata con successo" });
     },
     onError: (err: any) => {
       console.error(err);
@@ -116,7 +120,7 @@ export default function MobileProperties() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mobile_properties'] });
-      toast({ title: "Veicolo rimosso" });
+      toast({ title: "Veicolo eliminato" });
     }
   });
 
@@ -153,10 +157,10 @@ export default function MobileProperties() {
             </TableHeader>
             <TableBody>
               {isLoading ? (<TableRow><TableCell colSpan={7} className="text-center p-4">Caricamento...</TableCell></TableRow>) : 
-               vehicles.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessun veicolo trovato.</TableCell></TableRow>) : (
+               vehicles.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessun veicolo presente. Aggiungine uno.</TableCell></TableRow>) : (
                 vehicles.map((v: any) => (
                   <TableRow key={v.id || Math.random()}>
-                    <TableCell className="font-bold">{v.veicolo || '...'}</TableCell>
+                    <TableCell className="font-bold">{v.veicolo || 'Senza Nome'}</TableCell>
                     <TableCell><span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs border uppercase">{v.targa || '-'}</span></TableCell>
                     <TableCell>{v.anno || '-'}</TableCell>
                     <TableCell>{v.km ? v.km.toLocaleString() : '0'} km</TableCell>
