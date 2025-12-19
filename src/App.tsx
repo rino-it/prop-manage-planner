@@ -13,6 +13,10 @@ import NotFound from "./pages/NotFound";
 import GuestPortal from "./pages/GuestPortal";
 import TenantPortal from "./pages/TenantPortal";
 
+// NUOVI IMPORT AGGIUNTI
+import Sidebar from "@/components/Sidebar";
+import MobileProperties from "./pages/MobileProperties";
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -43,6 +47,24 @@ const App = () => (
                   <Index />
                 </ProtectedRoute>
               } 
+            />
+
+            {/* Nuova rotta Mobile Properties */}
+            <Route
+              path="/mobile-properties"
+              element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen w-full">
+                    {/* Sidebar richiede props obbligatorie. 
+                        Impostiamo 'properties' come attivo e una funzione vuota 
+                        perché la navigazione qui è gestita dal router, non dallo state della dashboard. */}
+                    <Sidebar activeTab="properties" setActiveTab={() => {}} />
+                    <main className="flex-1 overflow-y-auto">
+                      <MobileProperties />
+                    </main>
+                  </div>
+                </ProtectedRoute>
+              }
             />
             
             {/* Pagina 404 per tutto il resto */}
