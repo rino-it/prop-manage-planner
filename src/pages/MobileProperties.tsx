@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Truck, Plus, Pencil, Trash2, Shield, Wrench, AlertTriangle } from 'lucide-react';
-import { format, isPast, parseISO } from 'date-fns';
+import { format, isPast, parseISO, isValid } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 
 export default function MobileProperties() {
@@ -22,14 +22,23 @@ export default function MobileProperties() {
     data_revisione: '', scadenza_assicurazione: '', note: ''
   });
 
-  const { data: vehicles = [], isLoading } = useQuery({
+  const { data: vehicles = [], isLoading, error } = useQuery({
     queryKey: ['mobile_properties'],
     queryFn: async () => {
+      // Seleziona tutto in modo esplicito per debugging
       const { data, error } = await supabase.from('properties_mobile').select('*').order('created_at', { ascending: false });
-      if (error) throw error;
+      
+      if (error) {
+        console.error("Errore fetch veicoli:", error);
+        throw error;
+      }
       return data || [];
     }
   });
+
+  if (error) {
+      return <div className="p-8 text-red-600 font-bold">Errore di caricamento: {(error as any).message}. Controlla il Database.</div>;
+  }
 
   const openNew = () => {
     setEditingId(null);
@@ -40,7 +49,7 @@ export default function MobileProperties() {
   const openEdit = (v: any) => {
     setEditingId(v.id);
     setFormData({
-      veicolo: v.veicolo || '', targa: v.targa || '', anno: v.anno || '', km: v.km || '',
+      veicolo: v.veicolo || '', targa: v.targa || '', anno: v.anno ? String(v.anno) : '', km: v.km ? String(v.km) : '',
       data_revisione: v.data_revisione || '', scadenza_assicurazione: v.scadenza_assicurazione || '', note: v.note || ''
     });
     setIsDialogOpen(true);
@@ -53,7 +62,7 @@ export default function MobileProperties() {
       
       const payload = {
         veicolo: formData.veicolo,
-        targa: formData.targa.toUpperCase(),
+        targa: formData.targa ? formData.targa.toUpperCase() : null,
         anno: formData.anno ? parseInt(formData.anno) : null,
         km: formData.km ? parseInt(formData.km) : 0,
         data_revisione: formData.data_revisione || null,
@@ -75,7 +84,7 @@ export default function MobileProperties() {
       setIsDialogOpen(false);
       toast({ title: editingId ? "Veicolo aggiornato" : "Veicolo aggiunto" });
     },
-    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
+    onError: (err: any) => toast({ title: "Errore Salvataggio", description: err.message, variant: "destructive" })
   });
 
   const deleteVehicle = useMutation({
@@ -92,6 +101,8 @@ export default function MobileProperties() {
   const renderDateStatus = (dateStr: string) => {
     if (!dateStr) return <span className="text-gray-300">-</span>;
     const date = parseISO(dateStr);
+    if (!isValid(date)) return <span className="text-red-300">Data invalida</span>;
+    
     const expired = isPast(date);
     return (
       <span className={`flex items-center gap-1 font-medium ${expired ? 'text-red-600' : 'text-green-700'}`}>
@@ -124,10 +135,10 @@ export default function MobileProperties() {
                vehicles.length === 0 ? (<TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessun veicolo.</TableCell></TableRow>) : (
                 vehicles.map((v: any) => (
                   <TableRow key={v.id}>
-                    <TableCell className="font-bold">{v.veicolo}</TableCell>
-                    <TableCell><span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs border uppercase">{v.targa}</span></TableCell>
-                    <TableCell>{v.anno}</TableCell>
-                    <TableCell>{v.km?.toLocaleString()} km</TableCell>
+                    <TableCell className="font-bold">{v.veicolo || 'Senza nome'}</TableCell>
+                    <TableCell><span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs border uppercase">{v.targa || '-'}</span></TableCell>
+                    <TableCell>{v.anno || '-'}</TableCell>
+                    <TableCell>{v.km ? v.km.toLocaleString() : '0'} km</TableCell>
                     <TableCell>{renderDateStatus(v.data_revisione)}</TableCell>
                     <TableCell>{renderDateStatus(v.scadenza_assicurazione)}</TableCell>
                     <TableCell className="text-right">
