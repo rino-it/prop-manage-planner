@@ -43,12 +43,12 @@ export default function Expenses() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // --- QUERY AGGIORNATA (Usa tabella 'payments' ma mantiene logica filtri) ---
+  // --- QUERY UNIFICATA (Tabella 'payments') ---
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['expenses', filterProperty, filterCategory, filterStart, filterEnd],
     queryFn: async () => {
       let query = supabase
-        .from('payments') // FIX: Usa la tabella unificata definita nel DB
+        .from('payments')
         .select(`
           *,
           properties_real(nome),
@@ -104,7 +104,6 @@ export default function Expenses() {
         description: expense.descrizione || '',
         date: format(new Date(expense.scadenza), 'yyyy-MM-dd')
     });
-    // Nota: charged_to_tenant non è nativo in payments, lo gestiamo via logica
     setChargeTenant(false); 
     setAttachment(null);
     setIsDialogOpen(true);
@@ -128,7 +127,6 @@ export default function Expenses() {
       }
   };
 
-  // --- MUTATION DI CREAZIONE (Logica preservata + Adattamento Schema) ---
   const createExpense = useMutation({
     mutationFn: async () => {
       setUploading(true);
@@ -146,15 +144,15 @@ export default function Expenses() {
             importo_originale: parseFloat(formData.amount),
             descrizione: formData.description,
             scadenza: formData.date,
-            stato: 'pagato', // Default per spese registrate manualmente
-            ricorrenza_tipo: 'mensile' // Default tecnico
+            stato: 'pagato',
+            ricorrenza_tipo: 'mensile'
           })
           .select()
           .single();
 
         if (expenseError) throw expenseError;
 
-        // 2. Logica Inquilino (MANTENUTA)
+        // 2. Logica Inquilino (Addebito)
         if (chargeTenant && expenseData && formData.property_id) {
             const { data: bookings } = await supabase
                 .from('bookings')
@@ -172,14 +170,14 @@ export default function Expenses() {
                     importo: parseFloat(formData.amount),
                     data_scadenza: formData.date,
                     stato: 'da_pagare',
-                    tipo: 'altro', // Mappato su tipo in tenant_payments
-                    // description: `Addebito: ${formData.description}` // Verifica se colonna esiste nel DB, altrimenti ometti
+                    tipo: 'altro', 
+                    description: `Addebito: ${formData.description}`
                 });
                 toast({ title: "Addebito creato", description: `Spesa assegnata a ${activeBooking.nome_ospite}` });
             }
         }
 
-        // 3. Logica Documenti (MANTENUTA)
+        // 3. Logica Documenti
         if (attachment && expenseData) {
             const fileExt = attachment.name.split('.').pop();
             const fileName = `expense_${expenseData.id}_${Date.now()}.${fileExt}`;
@@ -189,7 +187,7 @@ export default function Expenses() {
             await supabase.from('documents').insert({
                 user_id: user?.id,
                 property_real_id: formData.property_id || null,
-                payment_id: expenseData.id, // Collega al pagamento
+                payment_id: expenseData.id,
                 nome: `Ricevuta: ${formData.description || 'Spesa'}`,
                 tipo: 'fattura',
                 url: fileName
@@ -206,7 +204,6 @@ export default function Expenses() {
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // --- MUTATION DELETE ---
   const deleteExpense = useMutation({
     mutationFn: async (id: string) => {
       await supabase.from('payments').delete().eq('id', id);
@@ -218,10 +215,8 @@ export default function Expenses() {
   });
 
   const handleSubmit = () => {
-      // Per semplicità e sicurezza, in questa fix gestiamo solo la creazione completa
-      // L'update richiederebbe logica complessa di mapping inverso
       if (editingId) {
-          toast({ title: "Modifica non disponibile", description: "Per ora elimina e ricrea la spesa.", variant: "default" });
+          toast({ title: "Info", description: "Per modificare, elimina e ricrea (Logica unificata).", variant: "default" });
       } else {
           createExpense.mutate();
       }
@@ -229,7 +224,6 @@ export default function Expenses() {
 
   return (
     <div className="space-y-6">
-      {/* DIALOG ANTEPRIMA (MANTENUTO) */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
         <DialogContent className="max-w-4xl w-full h-[80vh] flex flex-col p-0">
             <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
@@ -256,7 +250,7 @@ export default function Expenses() {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
            <h1 className="text-3xl font-bold text-gray-900">Spese & Uscite</h1>
-           <p className="text-gray-500 text-sm">Gestione contabile proprietà</p>
+           <p className="text-gray-500 text-sm">Gestione contabile unificata</p>
         </div>
         <div className="flex items-center gap-4">
             <div className="bg-white px-4 py-2 rounded-lg border shadow-sm">
@@ -269,7 +263,6 @@ export default function Expenses() {
         </div>
       </div>
 
-       {/* CARD FILTRI (MANTENUTA INTEGRALE) */}
        <Card className="bg-slate-50 border-slate-200">
         <CardHeader className="pb-2 pt-4">
             <CardTitle className="text-sm uppercase text-slate-500 flex items-center gap-2"><Filter className="w-4 h-4" /> Filtri</CardTitle>
@@ -318,7 +311,7 @@ export default function Expenses() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
             <DialogHeader>
-                <DialogTitle>{editingId ? 'Modifica Spesa' : 'Nuova Spesa'}</DialogTitle>
+                <DialogTitle>{editingId ? 'Dettaglio Spesa' : 'Nuova Spesa'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div className="grid gap-2">
@@ -358,14 +351,14 @@ export default function Expenses() {
               
               <div className="grid gap-2 border p-3 rounded-md bg-slate-50 border-dashed border-slate-300">
                 <Label className="flex items-center gap-2 cursor-pointer">
-                    <Paperclip className="w-4 h-4 text-blue-600" /> {editingId ? 'Nuovo allegato' : 'Allegato'}
+                    <Paperclip className="w-4 h-4 text-blue-600" /> {editingId ? 'Sostituisci allegato' : 'Allegato'}
                 </Label>
                 <Input type="file" className="bg-white" onChange={(e) => setAttachment(e.target.files?.[0] || null)} />
                 {attachment && <p className="text-xs text-green-600 font-medium">File: {attachment.name}</p>}
               </div>
 
               <Button className="w-full bg-blue-600" onClick={handleSubmit} disabled={!formData.property_id || !formData.amount || uploading}>
-                  {uploading ? "Salvataggio..." : (editingId ? "Aggiorna Spesa" : "Salva Spesa")}
+                  {uploading ? "Salvataggio..." : "Salva Spesa"}
               </Button>
             </div>
           </DialogContent>
@@ -401,7 +394,7 @@ export default function Expenses() {
                         <span className="text-xs text-gray-400 italic">Nessuna</span>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">{ex.properties_real?.nome}</TableCell>
+                  <TableCell className="font-medium">{ex.properties_real?.nome || (ex.property_mobile_id ? 'Mezzo Aziendale' : 'Generale')}</TableCell>
                   <TableCell className="capitalize">
                       <span className={`px-2 py-1 rounded text-xs block w-fit mb-1 ${
                           ex.categoria === 'manutenzione' ? 'bg-orange-100 text-orange-800' : 'bg-slate-100'
