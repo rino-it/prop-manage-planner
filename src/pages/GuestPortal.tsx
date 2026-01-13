@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Wifi, MapPin, FileText, Upload, Send, CheckCircle, XCircle, Clock, Key, Star, Ticket, CreditCard, UserCog, Phone, Mail, LogIn, ShieldCheck } from 'lucide-react';
+import { Home, Wifi, MapPin, FileText, Upload, Send, CheckCircle, XCircle, Clock, Key, Star, Ticket, CreditCard, UserCog, Phone, Mail, LogIn, ShieldCheck, Lock } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { jsPDF } from "jspdf";
@@ -26,14 +26,15 @@ export default function GuestPortal() {
   const [isVerified, setIsVerified] = useState(false);
   const [guestData, setGuestData] = useState({ email: '', phone: '' });
 
-  // 1. DATI PRENOTAZIONE
+  // 1. DATI PRENOTAZIONE (Polling per aggiornamento automatico stato)
   const { data: booking, isLoading } = useQuery({
     queryKey: ['guest-booking', id],
     queryFn: async () => {
       const { data } = await supabase.from('bookings').select('*, properties_real(*)').eq('id', id).single();
       return data;
     },
-    enabled: !!id
+    enabled: !!id,
+    refetchInterval: 5000 // Controlla ogni 5 secondi se lo staff ha approvato
   });
 
   // EFFETTO: Controlla se i dati esistono già
@@ -53,17 +54,15 @@ export default function GuestPortal() {
             email_ospite: guestData.email,
             telefono_ospite: guestData.phone
         }).eq('id', booking.id);
-        
         if (error) throw error;
     },
     onSuccess: () => {
         setIsVerified(true);
-        toast({ title: "Benvenuto!", description: "Accesso effettuato con successo." });
+        toast({ title: "Benvenuto!", description: "Procedi con il caricamento documenti." });
     },
     onError: () => toast({ title: "Errore", description: "Impossibile salvare i dati.", variant: "destructive" })
   });
 
-  // 2. EXTRA / PAGAMENTI
   const { data: payments } = useQuery({
     queryKey: ['guest-payments', id],
     queryFn: async () => {
@@ -73,7 +72,6 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
-  // 3. SERVIZI
   const { data: services } = useQuery({
     queryKey: ['guest-services', booking?.property_id],
     queryFn: async () => {
@@ -85,7 +83,6 @@ export default function GuestPortal() {
     enabled: !!booking?.property_id
   });
 
-  // 4. DOCUMENTI
   const { data: documents } = useQuery({
     queryKey: ['guest-docs', id],
     queryFn: async () => {
@@ -95,7 +92,6 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
-  // 5. TICKET
   const { data: myTickets } = useQuery({
       queryKey: ['guest-tickets', id],
       queryFn: async () => {
@@ -105,7 +101,6 @@ export default function GuestPortal() {
       enabled: !!id
   });
 
-  // UPLOAD LOGIC
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       const file = event.target.files?.[0];
@@ -119,7 +114,7 @@ export default function GuestPortal() {
         booking_id: booking.id, filename: file.name, file_url: fileName, status: 'in_revisione'
       });
       if (dbError) throw dbError;
-      toast({ title: "Documento inviato", description: "Grazie! Lo verificheremo a breve." });
+      toast({ title: "Documento inviato", description: "In attesa di approvazione." });
       queryClient.invalidateQueries({ queryKey: ['guest-docs'] });
     } catch (error: any) {
       toast({ title: "Errore", description: error.message, variant: "destructive" });
@@ -159,72 +154,80 @@ export default function GuestPortal() {
     toast({ title: "Voucher Scaricato" });
   };
 
-  if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale ospite...</div>;
-
-  // --- VISTA 1: GUEST GATE (REGISTRAZIONE) ---
-  if (!isVerified) {
-    return (
-        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-            <Card className="w-full max-w-md shadow-lg border-t-4 border-t-blue-600">
-                <CardHeader className="text-center">
-                    <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4">
-                        <Home className="w-8 h-8 text-blue-600" />
-                    </div>
-                    <CardTitle className="text-2xl font-bold text-slate-900">Benvenuto, {booking.nome_ospite?.split(' ')[0]}!</CardTitle>
-                    <CardDescription>
-                        Stai per accedere alla tua area riservata per <strong>{booking.properties_real?.nome}</strong>.
-                        <br/>Per favore, conferma i tuoi contatti per proseguire.
-                    </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="email">Email Personale</Label>
-                        <div className="relative">
-                            <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                            <Input 
-                                id="email" 
-                                placeholder="nome@esempio.com" 
-                                className="pl-10" 
-                                value={guestData.email} 
-                                onChange={(e) => setGuestData({...guestData, email: e.target.value})}
-                            />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="phone">Numero di Telefono</Label>
-                        <div className="relative">
-                            <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                            <Input 
-                                id="phone" 
-                                placeholder="+39 333 1234567" 
-                                className="pl-10" 
-                                value={guestData.phone}
-                                onChange={(e) => setGuestData({...guestData, phone: e.target.value})}
-                            />
-                        </div>
-                    </div>
-                </CardContent>
-                <CardFooter>
-                    <Button 
-                        className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-lg" 
-                        onClick={() => updateGuestContact.mutate()}
-                        disabled={!guestData.email || !guestData.phone}
-                    >
-                        <LogIn className="w-5 h-5 mr-2" /> Accedi al Portale
-                    </Button>
-                </CardFooter>
-            </Card>
-        </div>
-    );
-  }
-
-  // --- VISTA 2: PORTALE OSPITE (ACCESSO EFFETTUATO) ---
   const getStatusBadge = (status: string) => {
       if (status === 'approvato') return <Badge className="bg-green-100 text-green-700 hover:bg-green-100"><CheckCircle className="w-3 h-3 mr-1"/> OK</Badge>;
       if (status === 'rifiutato') return <Badge className="bg-red-100 text-red-700 hover:bg-red-100"><XCircle className="w-3 h-3 mr-1"/> No</Badge>;
       return <Badge className="bg-yellow-100 text-yellow-700 hover:bg-yellow-100"><Clock className="w-3 h-3 mr-1"/> In Verifica</Badge>;
   };
 
+  if (isLoading || !booking) return <div className="p-8 text-center">Caricamento portale ospite...</div>;
+
+  // --- VISTA 1: GUEST GATE (Login/Registrazione) ---
+  if (!isVerified) {
+    return (
+        <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
+            <Card className="w-full max-w-md shadow-lg border-t-4 border-t-blue-600">
+                <CardHeader className="text-center">
+                    <div className="mx-auto w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mb-4"><Home className="w-8 h-8 text-blue-600" /></div>
+                    <CardTitle className="text-2xl font-bold text-slate-900">Benvenuto, {booking.nome_ospite?.split(' ')[0]}!</CardTitle>
+                    <CardDescription>Inserisci i contatti per accedere al check-in online di <strong>{booking.properties_real?.nome}</strong>.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <div className="space-y-2"><Label>Email</Label><div className="relative"><Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><Input placeholder="email@esempio.com" className="pl-10" value={guestData.email} onChange={(e) => setGuestData({...guestData, email: e.target.value})}/></div></div>
+                    <div className="space-y-2"><Label>Telefono</Label><div className="relative"><Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><Input placeholder="+39 333..." className="pl-10" value={guestData.phone} onChange={(e) => setGuestData({...guestData, phone: e.target.value})}/></div></div>
+                </CardContent>
+                <CardFooter><Button className="w-full bg-blue-600 hover:bg-blue-700 h-12 text-lg" onClick={() => updateGuestContact.mutate()} disabled={!guestData.email || !guestData.phone}><LogIn className="w-5 h-5 mr-2" /> Avanti</Button></CardFooter>
+            </Card>
+        </div>
+    );
+  }
+
+  // --- VISTA 2: BLOCCO DOCUMENTI (Se non approvato) ---
+  // QUESTA È LA PARTE NUOVA CHE RISOLVE IL PROBLEMA
+  if (!booking.documents_approved) {
+      return (
+        <div className="min-h-screen bg-slate-50 p-4 md:p-8 max-w-2xl mx-auto flex flex-col items-center">
+            <div className="text-center mb-8 mt-4">
+                <div className="inline-flex p-4 bg-orange-100 rounded-full mb-4 ring-8 ring-orange-50"><Lock className="w-8 h-8 text-orange-600" /></div>
+                <h1 className="text-2xl font-bold text-slate-900">Check-in Richiesto</h1>
+                <p className="text-slate-600 mt-2">Per accedere alla guida della casa e ai codici WiFi, carica la foto dei documenti.</p>
+            </div>
+
+            <Card className="w-full shadow-md border-orange-200 border-t-4 border-t-orange-500 mb-6">
+                <CardHeader><CardTitle>Carica Documenti</CardTitle><CardDescription>Carta d'identità o Passaporto di tutti gli ospiti.</CardDescription></CardHeader>
+                <CardContent>
+                    <label className={`cursor-pointer w-full flex flex-col items-center justify-center h-32 border-2 border-dashed border-slate-300 rounded-lg hover:bg-slate-50 transition-colors ${uploading ? 'opacity-50' : ''}`}>
+                        <Upload className="w-8 h-8 text-slate-400 mb-2" />
+                        <span className="text-sm font-medium text-slate-600">{uploading ? "Caricamento in corso..." : "Tocca qui per caricare foto/PDF"}</span>
+                        <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                    </label>
+                    
+                    <div className="mt-6 space-y-2">
+                        {documents?.map(doc => (
+                            <div key={doc.id} className="flex justify-between items-center p-3 bg-white border rounded shadow-sm">
+                                <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-blue-500" /><span className="text-sm font-medium truncate max-w-[200px]">{doc.filename}</span></div>
+                                <Badge variant="secondary">In Attesa</Badge>
+                            </div>
+                        ))}
+                    </div>
+                </CardContent>
+                <CardFooter className="bg-orange-50 border-t border-orange-100 p-4">
+                    <p className="text-xs text-orange-800 flex items-center"><Clock className="w-3 h-3 mr-2"/> Appena caricati i documenti, attendi che l'host sblocchi l'accesso. La pagina si aggiornerà automaticamente.</p>
+                </CardFooter>
+            </Card>
+
+            <Card className="w-full">
+                <CardHeader className="pb-3"><CardTitle className="text-base">Hai problemi?</CardTitle></CardHeader>
+                <CardContent className="flex gap-2">
+                    <Input placeholder="Scrivi un messaggio all'host..." value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
+                    <Button onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4" /></Button>
+                </CardContent>
+            </Card>
+        </div>
+      );
+  }
+
+  // --- VISTA 3: PORTALE COMPLETO (Se approvato) ---
   return (
     <div className="min-h-screen bg-slate-50 p-4 md:p-8 max-w-4xl mx-auto animate-in fade-in duration-500">
       
@@ -339,39 +342,14 @@ export default function GuestPortal() {
             </div>
         </TabsContent>
 
-        {/* --- MODIFICA QUI SOTTO (TAB DOCS) --- */}
         <TabsContent value="docs">
-           {/* FEEDBACK DI STATO AGGIUNTO */}
-           {booking.documents_approved ? (
-               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 animate-in fade-in">
-                   <ShieldCheck className="w-8 h-8 text-green-600" />
-                   <div>
-                       <h3 className="font-bold text-green-900">Check-in Confermato!</h3>
-                       <p className="text-sm text-green-800">I tuoi documenti sono stati verificati.</p>
-                   </div>
+           <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+               <ShieldCheck className="w-8 h-8 text-green-600" />
+               <div>
+                   <h3 className="font-bold text-green-900">Check-in Confermato!</h3>
+                   <p className="text-sm text-green-800">I tuoi documenti sono stati verificati.</p>
                </div>
-           ) : (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center gap-3">
-                   <Upload className="w-8 h-8 text-blue-600" />
-                   <div>
-                       <h3 className="font-bold text-blue-900">Check-in Online</h3>
-                       <p className="text-sm text-blue-800">Carica qui la foto dei documenti per velocizzare l'ingresso.</p>
-                   </div>
-               </div>
-           )}
-
-           {/* NASCONDE L'UPLOAD SE GIA' APPROVATO */}
-           {!booking.documents_approved && (
-               <Card className="border-dashed border-2 mb-6 border-blue-200 bg-blue-50/50">
-                <CardContent className="py-8 flex flex-col items-center text-center">
-                    <label className={`cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium bg-white hover:bg-gray-100 text-blue-700 h-10 px-6 py-2 shadow-sm border ${uploading ? 'opacity-50' : ''}`}>
-                        {uploading ? "Caricamento..." : "Seleziona Foto/PDF"}
-                        <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
-                    </label>
-                </CardContent>
-               </Card>
-           )}
-
+           </div>
            <div className="space-y-3">
                 {documents?.map(doc => (
                     <div key={doc.id} className="bg-white p-4 rounded-lg border flex justify-between items-center shadow-sm">
