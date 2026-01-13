@@ -9,31 +9,44 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, Pencil, User, Forward, Eye, Paperclip, Filter, X } from 'lucide-react';
+import { Plus, Trash2, Pencil, User, Forward, Eye, Paperclip, Filter, X, Car, Home } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Expenses() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  
+  // Fetch Immobili
   const { data: properties } = usePropertiesReal();
+  
+  // Fetch Veicoli (Nuova Funzionalità)
+  const { data: vehicles } = useQuery({
+    queryKey: ['mobile_properties'],
+    queryFn: async () => {
+      const { data } = await supabase.from('properties_mobile').select('id, veicolo, targa, nome');
+      return data || [];
+    }
+  });
+
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // --- STATI FILTRI ---
-  const [filterProperty, setFilterProperty] = useState("all");
+  // --- FILTRI ---
+  const [filterType, setFilterType] = useState("all"); // 'real' | 'mobile' | 'all'
   const [filterCategory, setFilterCategory] = useState("all");
   const [filterStart, setFilterStart] = useState("");
   const [filterEnd, setFilterEnd] = useState("");
 
-  // --- STATI GESTIONE ---
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewType, setPreviewType] = useState<'image' | 'pdf' | null>(null);
 
+  // --- FORM DATA ---
   const [formData, setFormData] = useState({
-    property_id: '',
+    target_type: 'real', // 'real' (Immobile) o 'mobile' (Veicolo)
+    target_id: '',       // ID dell'immobile o del veicolo
     category: 'manutenzione',
     amount: '',
     description: '',
@@ -44,24 +57,28 @@ export default function Expenses() {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
-  // --- QUERY UNIFICATA (Tabella 'payments') ---
+  // --- QUERY SPESE (Tabella Unificata 'payments') ---
   const { data: expenses = [], isLoading } = useQuery({
-    queryKey: ['expenses', filterProperty, filterCategory, filterStart, filterEnd],
+    queryKey: ['expenses', filterType, filterCategory, filterStart, filterEnd],
     queryFn: async () => {
       let query = supabase
         .from('payments')
         .select(`
           *,
-          properties_real(nome),
-          documents(id, url, nome, formato)
+          properties_real (nome),
+          properties_mobile (veicolo, targa, nome),
+          documents (id, url, nome, formato)
         `)
-        .order('scadenza', { ascending: false }); // 'scadenza' è la data contabile
+        .order('scadenza', { ascending: false });
       
-      // Filtri lato DB
-      if (filterProperty !== "all") query = query.eq('property_real_id', filterProperty);
+      // Filtri
       if (filterCategory !== "all") query = query.eq('categoria', filterCategory);
       if (filterStart) query = query.gte('scadenza', filterStart);
       if (filterEnd) query = query.lte('scadenza', filterEnd);
+      
+      // Filtro Tipo (Immobile vs Veicolo)
+      if (filterType === 'real') query = query.not('property_real_id', 'is', null);
+      if (filterType === 'mobile') query = query.not('property_mobile_id', 'is', null);
         
       const { data, error } = await query;
 
@@ -76,7 +93,7 @@ export default function Expenses() {
   const totalAmount = expenses.reduce((sum, item) => sum + Number(item.importo || 0), 0);
 
   const resetFilters = () => {
-      setFilterProperty("all");
+      setFilterType("all");
       setFilterCategory("all");
       setFilterStart("");
       setFilterEnd("");
@@ -85,7 +102,8 @@ export default function Expenses() {
   const openNewExpense = () => {
     setEditingId(null);
     setFormData({ 
-        property_id: '', 
+        target_type: 'real',
+        target_id: '', 
         category: 'manutenzione', 
         amount: '', 
         description: '', 
@@ -98,12 +116,14 @@ export default function Expenses() {
 
   const openEditExpense = (expense: any) => {
     setEditingId(expense.id);
+    const isMobile = !!expense.property_mobile_id;
     setFormData({
-        property_id: expense.property_real_id || '',
-        category: expense.categoria,
+        target_type: isMobile ? 'mobile' : 'real',
+        target_id: isMobile ? expense.property_mobile_id : expense.property_real_id,
+        category: expense.categoria || 'altro',
         amount: expense.importo.toString(),
         description: expense.descrizione || '',
-        date: format(new Date(expense.scadenza), 'yyyy-MM-dd')
+        date: expense.scadenza ? format(new Date(expense.scadenza), 'yyyy-MM-dd') : ''
     });
     setChargeTenant(false); 
     setAttachment(null);
@@ -128,38 +148,47 @@ export default function Expenses() {
       }
   };
 
-  // --- MUTATION CREATE ---
-  const createExpense = useMutation({
+  // --- SALVATAGGIO SPESA (Create / Update) ---
+  const saveExpense = useMutation({
     mutationFn: async () => {
       setUploading(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         
-        // 1. Inserimento in PAYMENTS
-        const { data: expenseData, error: expenseError } = await supabase
-          .from('payments')
-          .insert({
+        // Prepara il payload unificato
+        const payload = {
             user_id: user?.id,
-            property_real_id: formData.property_id || null,
-            categoria: formData.category as any,
+            property_real_id: formData.target_type === 'real' ? formData.target_id : null,
+            property_mobile_id: formData.target_type === 'mobile' ? formData.target_id : null,
+            categoria: formData.category, // Ora è testo libero, accetta tutto
             importo: parseFloat(formData.amount),
             importo_originale: parseFloat(formData.amount),
             descrizione: formData.description,
             scadenza: formData.date,
             stato: 'pagato',
             ricorrenza_tipo: 'mensile'
-          })
-          .select()
-          .single();
+        };
 
-        if (expenseError) throw expenseError;
+        let expenseId;
 
-        // 2. Addebito Inquilino
-        if (chargeTenant && expenseData && formData.property_id) {
+        if (editingId) {
+            // UPDATE
+            const { error } = await supabase.from('payments').update(payload).eq('id', editingId);
+            if (error) throw error;
+            expenseId = editingId;
+        } else {
+            // CREATE
+            const { data, error } = await supabase.from('payments').insert(payload).select().single();
+            if (error) throw error;
+            expenseId = data.id;
+        }
+
+        // 2. Addebito Inquilino (Solo per Immobili)
+        if (chargeTenant && formData.target_type === 'real' && formData.target_id) {
             const { data: bookings } = await supabase
                 .from('bookings')
                 .select('id, nome_ospite')
-                .eq('property_id', formData.property_id)
+                .eq('property_id', formData.target_id)
                 .lte('data_inizio', formData.date)
                 .gte('data_fine', formData.date)
                 .limit(1);
@@ -175,22 +204,23 @@ export default function Expenses() {
                     tipo: 'altro', 
                     description: `Addebito: ${formData.description}`
                 });
-                toast({ title: "Addebito creato", description: `Spesa assegnata a ${activeBooking.nome_ospite}` });
+                toast({ title: "Addebito creato", description: `A carico di ${activeBooking.nome_ospite}` });
             }
         }
 
         // 3. Upload Documento
-        if (attachment && expenseData) {
+        if (attachment && expenseId) {
             const fileExt = attachment.name.split('.').pop();
-            const fileName = `expense_${expenseData.id}_${Date.now()}.${fileExt}`;
+            const fileName = `expense_${expenseId}_${Date.now()}.${fileExt}`;
             const { error: upError } = await supabase.storage.from('documents').upload(fileName, attachment);
             if (upError) throw upError;
 
             await supabase.from('documents').insert({
                 user_id: user?.id,
-                property_real_id: formData.property_id || null,
-                payment_id: expenseData.id,
-                nome: `Ricevuta: ${formData.description || 'Spesa'}`,
+                property_real_id: formData.target_type === 'real' ? formData.target_id : null,
+                property_mobile_id: formData.target_type === 'mobile' ? formData.target_id : null,
+                payment_id: expenseId,
+                nome: `Ricevuta: ${formData.description}`,
                 tipo: 'fattura',
                 url: fileName
             });
@@ -201,12 +231,11 @@ export default function Expenses() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['expenses'] });
       setIsDialogOpen(false);
-      toast({ title: "Operazione completata" });
+      toast({ title: editingId ? "Spesa aggiornata" : "Spesa salvata" });
     },
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // --- MUTATION DELETE ---
   const deleteExpense = useMutation({
     mutationFn: async (id: string) => {
       await supabase.from('payments').delete().eq('id', id);
@@ -217,72 +246,36 @@ export default function Expenses() {
     }
   });
 
-  const handleSubmit = () => {
-      if (editingId) {
-          toast({ title: "Info", description: "Per modificare, elimina e ricrea la spesa.", variant: "default" });
-      } else {
-          createExpense.mutate();
-      }
-  };
-
   return (
     <div className="space-y-6">
       {/* DIALOG ANTEPRIMA */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-4xl w-full h-[80vh] flex flex-col p-0">
-            <div className="p-4 border-b flex justify-between items-center bg-slate-50 rounded-t-lg">
-                <h3 className="font-bold text-lg text-slate-800">Anteprima Ricevuta</h3>
-            </div>
-            <div className="flex-1 bg-slate-100 flex items-center justify-center p-4 overflow-hidden relative">
-                {!previewUrl && <p>Caricamento...</p>}
-                {previewUrl && previewType === 'pdf' && (
-                    <iframe src={previewUrl} className="w-full h-full rounded shadow-sm bg-white" title="Anteprima PDF" />
-                )}
-                {previewUrl && previewType === 'image' && (
-                    <img src={previewUrl} alt="Ricevuta" className="max-w-full max-h-full object-contain shadow-lg rounded" />
-                )}
-            </div>
-            <div className="p-4 border-t bg-white flex justify-end gap-2">
-                <Button variant="outline" onClick={() => window.open(previewUrl!, '_blank')}>
-                    <Forward className="w-4 h-4 mr-2" /> Apri in nuova scheda
-                </Button>
-                <Button onClick={() => setIsPreviewOpen(false)}>Chiudi</Button>
+        <DialogContent className="max-w-4xl h-[80vh] flex flex-col p-0">
+            <div className="p-4 border-b bg-slate-50"><h3 className="font-bold">Anteprima</h3></div>
+            <div className="flex-1 bg-slate-100 flex items-center justify-center p-4">
+                {previewUrl && previewType === 'pdf' ? <iframe src={previewUrl} className="w-full h-full bg-white" /> : <img src={previewUrl || ''} className="max-h-full shadow-lg" />}
             </div>
         </DialogContent>
       </Dialog>
 
       {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-           <h1 className="text-3xl font-bold text-gray-900">Spese & Uscite</h1>
-           <p className="text-gray-500 text-sm">Gestione contabile unificata</p>
-        </div>
+      <div className="flex flex-col md:flex-row justify-between gap-4">
+        <div><h1 className="text-3xl font-bold text-gray-900">Spese Unificate</h1><p className="text-gray-500 text-sm">Gestione uscite Immobili e Veicoli</p></div>
         <div className="flex items-center gap-4">
-            <div className="bg-white px-4 py-2 rounded-lg border shadow-sm">
-                <span className="text-sm text-gray-500 mr-2">Totale Visualizzato:</span>
-                <span className="text-xl font-bold text-emerald-600">€ {totalAmount.toFixed(2)}</span>
-            </div>
-            <Button className="bg-blue-600" onClick={openNewExpense}>
-                <Plus className="w-4 h-4 mr-2" /> Registra Spesa
-            </Button>
+            <div className="bg-white px-4 py-2 rounded-lg border shadow-sm"><span className="text-sm text-gray-500 mr-2">Totale:</span><span className="text-xl font-bold text-red-600">- € {totalAmount.toFixed(2)}</span></div>
+            <Button className="bg-blue-600" onClick={openNewExpense}><Plus className="w-4 h-4 mr-2" /> Nuova Spesa</Button>
         </div>
       </div>
 
        {/* FILTRI */}
        <Card className="bg-slate-50 border-slate-200">
-        <CardHeader className="pb-2 pt-4">
-            <CardTitle className="text-sm uppercase text-slate-500 flex items-center gap-2"><Filter className="w-4 h-4" /> Filtri</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-3 items-end">
                 <div className="space-y-1">
-                    <Label className="text-xs">Proprietà</Label>
-                    <Select value={filterProperty} onValueChange={setFilterProperty}>
-                        <SelectTrigger className="bg-white"><SelectValue placeholder="Tutte" /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">🏠 Tutte</SelectItem>
-                            {properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
-                        </SelectContent>
+                    <Label className="text-xs">Tipo</Label>
+                    <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger className="bg-white"><SelectValue placeholder="Tutti" /></SelectTrigger>
+                        <SelectContent><SelectItem value="all">Tutti</SelectItem><SelectItem value="real">🏠 Immobili</SelectItem><SelectItem value="mobile">🚛 Veicoli</SelectItem></SelectContent>
                     </Select>
                 </div>
                 <div className="space-y-1">
@@ -293,41 +286,54 @@ export default function Expenses() {
                             <SelectItem value="all">Tutte</SelectItem>
                             <SelectItem value="manutenzione">Manutenzione</SelectItem>
                             <SelectItem value="bollette">Bollette</SelectItem>
+                            <SelectItem value="carburante">Carburante</SelectItem>
                             <SelectItem value="tasse">Tasse</SelectItem>
-                            <SelectItem value="condominio">Condominio</SelectItem>
                             <SelectItem value="altro">Altro</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
-                <div className="space-y-1">
-                    <Label className="text-xs">Da Data</Label>
-                    <Input type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} className="bg-white" />
-                </div>
-                <div className="space-y-1">
-                    <Label className="text-xs">A Data</Label>
-                    <Input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} className="bg-white" />
-                </div>
-                <Button variant="outline" onClick={resetFilters} className="text-slate-500 hover:text-red-600 border-slate-300">
-                    <X className="w-4 h-4 mr-2" /> Reset
-                </Button>
+                <div className="space-y-1"><Label className="text-xs">Da Data</Label><Input type="date" value={filterStart} onChange={e => setFilterStart(e.target.value)} className="bg-white" /></div>
+                <div className="space-y-1"><Label className="text-xs">A Data</Label><Input type="date" value={filterEnd} onChange={e => setFilterEnd(e.target.value)} className="bg-white" /></div>
+                <Button variant="outline" onClick={resetFilters}><X className="w-4 h-4 mr-2" /> Reset</Button>
             </div>
         </CardContent>
       </Card>
 
-      {/* DIALOG NUOVA SPESA */}
+      {/* DIALOG EDIT / NEW */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogContent>
-            <DialogHeader>
-                <DialogTitle>{editingId ? 'Dettaglio Spesa' : 'Nuova Spesa'}</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>{editingId ? 'Modifica Spesa' : 'Registra Nuova Spesa'}</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
+              
+              {/* SELETTORE TIPO OGGETTO */}
+              <div className="grid grid-cols-2 gap-4">
+                  <div 
+                    className={`border rounded-lg p-3 cursor-pointer flex items-center justify-center gap-2 ${formData.target_type === 'real' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-slate-50'}`}
+                    onClick={() => setFormData({...formData, target_type: 'real', target_id: ''})}
+                  >
+                    <Home className="w-5 h-5"/> Immobile
+                  </div>
+                  <div 
+                    className={`border rounded-lg p-3 cursor-pointer flex items-center justify-center gap-2 ${formData.target_type === 'mobile' ? 'bg-blue-50 border-blue-500 text-blue-700' : 'hover:bg-slate-50'}`}
+                    onClick={() => setFormData({...formData, target_type: 'mobile', target_id: ''})}
+                  >
+                    <Car className="w-5 h-5"/> Veicolo
+                  </div>
+              </div>
+
               <div className="grid gap-2">
-                <Label>Proprietà</Label>
-                <Select value={formData.property_id} onValueChange={(v) => setFormData({...formData, property_id: v})}>
+                <Label>Seleziona {formData.target_type === 'real' ? 'Immobile' : 'Mezzo'}</Label>
+                <Select value={formData.target_id} onValueChange={(v) => setFormData({...formData, target_id: v})}>
                   <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                  <SelectContent>{properties?.map((p) => (<SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>))}</SelectContent>
+                  <SelectContent>
+                    {formData.target_type === 'real' 
+                        ? properties?.map((p) => (<SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>))
+                        : vehicles?.map((v) => (<SelectItem key={v.id} value={v.id}>{v.veicolo || v.nome || v.targa}</SelectItem>))
+                    }
+                  </SelectContent>
                 </Select>
               </div>
+
               <div className="grid gap-2">
                 <Label>Categoria</Label>
                 <Select value={formData.category} onValueChange={(v) => setFormData({...formData, category: v})}>
@@ -335,7 +341,8 @@ export default function Expenses() {
                   <SelectContent>
                     <SelectItem value="manutenzione">Manutenzione</SelectItem>
                     <SelectItem value="bollette">Utenze/Bollette</SelectItem>
-                    <SelectItem value="tasse">Tasse (IMU/TARI)</SelectItem>
+                    <SelectItem value="carburante">Carburante</SelectItem>
+                    <SelectItem value="tasse">Tasse/Assicurazione</SelectItem>
                     <SelectItem value="condominio">Condominio</SelectItem>
                     <SelectItem value="altro">Altro</SelectItem>
                   </SelectContent>
@@ -347,25 +354,22 @@ export default function Expenses() {
                 <div className="grid gap-2"><Label>Data</Label><Input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} /></div>
               </div>
 
-              <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
-                  <div className="space-y-0.5">
-                      <Label className="text-blue-900 font-bold flex items-center gap-2"><User className="w-4 h-4"/> A carico dell'inquilino?</Label>
+              {formData.target_type === 'real' && (
+                  <div className="flex items-center justify-between bg-blue-50 p-3 rounded-lg border border-blue-100">
+                      <div className="space-y-0.5"><Label className="text-blue-900 font-bold flex items-center gap-2"><User className="w-4 h-4"/> Addebita a Inquilino?</Label></div>
+                      <Switch checked={chargeTenant} onCheckedChange={setChargeTenant} />
                   </div>
-                  <Switch checked={chargeTenant} onCheckedChange={setChargeTenant} />
-              </div>
+              )}
 
               <div className="grid gap-2"><Label>Descrizione</Label><Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
               
               <div className="grid gap-2 border p-3 rounded-md bg-slate-50 border-dashed border-slate-300">
-                <Label className="flex items-center gap-2 cursor-pointer">
-                    <Paperclip className="w-4 h-4 text-blue-600" /> {editingId ? 'Sostituisci allegato' : 'Allegato'}
-                </Label>
+                <Label className="flex items-center gap-2 cursor-pointer"><Paperclip className="w-4 h-4 text-blue-600" /> Allegato</Label>
                 <Input type="file" className="bg-white" onChange={(e) => setAttachment(e.target.files?.[0] || null)} />
-                {attachment && <p className="text-xs text-green-600 font-medium">File: {attachment.name}</p>}
               </div>
 
-              <Button className="w-full bg-blue-600" onClick={handleSubmit} disabled={!formData.property_id || !formData.amount || uploading}>
-                  {uploading ? "Salvataggio..." : "Salva Spesa"}
+              <Button className="w-full bg-blue-600" onClick={() => saveExpense.mutate()} disabled={!formData.target_id || !formData.amount || uploading}>
+                  {uploading ? "Salvataggio..." : (editingId ? "Aggiorna Spesa" : "Salva Spesa")}
               </Button>
             </div>
           </DialogContent>
@@ -378,46 +382,40 @@ export default function Expenses() {
             <TableHeader className="bg-slate-50">
                 <TableRow>
                     <TableHead>Data</TableHead>
-                    <TableHead>Ricevuta</TableHead>
-                    <TableHead>Proprietà</TableHead>
+                    <TableHead>Oggetto</TableHead>
                     <TableHead>Categoria</TableHead>
                     <TableHead>Descrizione</TableHead>
                     <TableHead>Importo</TableHead>
+                    <TableHead>Doc</TableHead>
                     <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
             </TableHeader>
             <TableBody>
               {expenses.length === 0 ? (
-                <TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessuna spesa con questi filtri.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center p-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
               ) : (
                 expenses.map((ex: any) => (
                 <TableRow key={ex.id}>
-                  <TableCell className="w-[120px]">{ex.scadenza ? format(new Date(ex.scadenza), 'dd/MM/yyyy') : '-'}</TableCell>
+                  <TableCell className="w-[100px]">{ex.scadenza ? format(new Date(ex.scadenza), 'dd/MM/yyyy') : '-'}</TableCell>
+                  <TableCell className="font-medium">
+                      {ex.properties_mobile ? (
+                          <span className="flex items-center gap-2 text-slate-700"><Car className="w-4 h-4 text-blue-500"/> {ex.properties_mobile.veicolo || ex.properties_mobile.nome}</span>
+                      ) : (
+                          <span className="flex items-center gap-2 text-slate-700"><Home className="w-4 h-4 text-orange-500"/> {ex.properties_real?.nome || 'Generale'}</span>
+                      )}
+                  </TableCell>
+                  <TableCell><span className="capitalize bg-slate-100 px-2 py-1 rounded text-xs">{ex.categoria}</span></TableCell>
+                  <TableCell className="max-w-[200px] truncate">{ex.descrizione}</TableCell>
+                  <TableCell className="font-bold text-red-600">- €{parseFloat(ex.importo).toFixed(2)}</TableCell>
                   <TableCell>
-                    {ex.documents && ex.documents.length > 0 ? (
-                        <Button variant="outline" size="sm" className="h-8 gap-2 text-blue-600 border-blue-200 hover:bg-blue-50" onClick={() => handlePreview(ex.documents[0])}>
-                            <Eye className="w-4 h-4" /> <span className="hidden sm:inline">Vedi</span>
-                        </Button>
-                    ) : (
-                        <span className="text-xs text-gray-400 italic">Nessuna</span>
+                    {ex.documents && ex.documents.length > 0 && (
+                        <Button variant="ghost" size="sm" onClick={() => handlePreview(ex.documents[0])}><Eye className="w-4 h-4 text-blue-600" /></Button>
                     )}
                   </TableCell>
-                  <TableCell className="font-medium">
-                      {ex.properties_real?.nome || (ex.property_mobile_id ? 'Mezzo Aziendale' : 'Generale')}
-                  </TableCell>
-                  <TableCell className="capitalize">
-                      <span className={`px-2 py-1 rounded text-xs block w-fit mb-1 ${
-                          ex.categoria === 'manutenzione' ? 'bg-orange-100 text-orange-800' : 'bg-slate-100'
-                      }`}>
-                          {ex.categoria}
-                      </span>
-                  </TableCell>
-                  <TableCell>{ex.descrizione}</TableCell>
-                  <TableCell className="font-bold text-red-600">- €{parseFloat(ex.importo).toFixed(2)}</TableCell>
                   <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => openEditExpense(ex)} className="hover:text-blue-600"><Pencil className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => { if(confirm("Eliminare questa spesa?")) deleteExpense.mutate(ex.id) }} className="hover:text-red-600"><Trash2 className="w-4 h-4" /></Button>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditExpense(ex)}><Pencil className="w-4 h-4 text-slate-500" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => { if(confirm("Eliminare?")) deleteExpense.mutate(ex.id) }}><Trash2 className="w-4 h-4 text-red-500" /></Button>
                       </div>
                   </TableCell>
                 </TableRow>
