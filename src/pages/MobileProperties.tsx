@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Truck, Plus, Trash2 } from 'lucide-react'; // REMOVED: RefreshCw, AlertTriangle
+import { Truck, Plus, Trash2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -52,14 +52,16 @@ export default function MobileProperties() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return alert("Sessione scaduta.");
 
+      // MODIFICA CRITICA: Gestione sicura dei numeri per evitare errore 400
       const payload = {
-        nome: formData.veicolo,
-        categoria: 'Veicolo',
+        nome: formData.veicolo, // Usa il nome veicolo anche come 'nome'
+        categoria: 'Veicolo',   // Ora accettato come testo grazie all'SQL
         status: 'active',
         veicolo: formData.veicolo,
         targa: formData.targa ? formData.targa.toUpperCase() : null,
-        anno: formData.anno ? parseInt(formData.anno) : null,
-        km: formData.km ? parseInt(formData.km) : 0,
+        // Se stringa vuota, manda null invece di NaN o errore
+        anno: formData.anno && !isNaN(parseInt(formData.anno)) ? parseInt(formData.anno) : null,
+        km: formData.km && !isNaN(parseInt(formData.km)) ? parseInt(formData.km) : 0,
         data_revisione: formData.data_revisione || null,
         scadenza_assicurazione: formData.scadenza_assicurazione || null,
         note: formData.note,
@@ -75,7 +77,8 @@ export default function MobileProperties() {
       fetchVehicles();
 
     } catch (err: any) {
-      toast({ title: "Errore salvataggio", description: err.message, variant: "destructive" });
+      console.error("Errore salvataggio:", err); // Log in console per debug
+      toast({ title: "Errore salvataggio", description: err.message || "Verifica i dati inseriti", variant: "destructive" });
     }
   };
 
