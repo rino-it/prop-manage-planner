@@ -7,9 +7,9 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Importante
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Home, Wifi, MapPin, FileText, Upload, Send, CheckCircle, XCircle, Clock, Key, Star, Ticket, CreditCard, UserCog, User, Phone, Mail, LogIn } from 'lucide-react';
+import { Home, Wifi, MapPin, FileText, Upload, Send, CheckCircle, XCircle, Clock, Key, Star, Ticket, CreditCard, UserCog, Phone, Mail, LogIn, ShieldCheck } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { jsPDF } from "jspdf";
@@ -39,9 +39,7 @@ export default function GuestPortal() {
   // EFFETTO: Controlla se i dati esistono già
   useEffect(() => {
     if (booking) {
-      // Se ha già email E telefono, consideralo verificato (opzionale, rimuovi l'if se vuoi forzare sempre)
       if (booking.email_ospite && booking.telefono_ospite) {
-         // setIsVerified(true); // Decommenta questa riga se vuoi saltare il login se i dati ci sono già
          setGuestData({ email: booking.email_ospite, phone: booking.telefono_ospite });
       }
     }
@@ -64,7 +62,6 @@ export default function GuestPortal() {
     },
     onError: () => toast({ title: "Errore", description: "Impossibile salvare i dati.", variant: "destructive" })
   });
-
 
   // 2. EXTRA / PAGAMENTI
   const { data: payments } = useQuery({
@@ -342,18 +339,39 @@ export default function GuestPortal() {
             </div>
         </TabsContent>
 
+        {/* --- MODIFICA QUI SOTTO (TAB DOCS) --- */}
         <TabsContent value="docs">
-           <Card className="border-dashed border-2 mb-6 border-blue-200 bg-blue-50/50">
-            <CardContent className="py-8 flex flex-col items-center text-center">
-                <div className="p-3 bg-white rounded-full mb-3"><Upload className="w-6 h-6 text-blue-600" /></div>
-                <h3 className="font-bold text-gray-900">Check-in Online</h3>
-                <p className="text-sm text-gray-500 mb-4 max-w-xs">Carica qui la foto dei documenti.</p>
-                <label className={`cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium bg-white hover:bg-gray-100 text-blue-700 h-10 px-6 py-2 shadow-sm border ${uploading ? 'opacity-50' : ''}`}>
-                    {uploading ? "Caricamento..." : "Seleziona Foto/PDF"}
-                    <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
-                </label>
-            </CardContent>
-           </Card>
+           {/* FEEDBACK DI STATO AGGIUNTO */}
+           {booking.documents_approved ? (
+               <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4 flex items-center gap-3 animate-in fade-in">
+                   <ShieldCheck className="w-8 h-8 text-green-600" />
+                   <div>
+                       <h3 className="font-bold text-green-900">Check-in Confermato!</h3>
+                       <p className="text-sm text-green-800">I tuoi documenti sono stati verificati.</p>
+                   </div>
+               </div>
+           ) : (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center gap-3">
+                   <Upload className="w-8 h-8 text-blue-600" />
+                   <div>
+                       <h3 className="font-bold text-blue-900">Check-in Online</h3>
+                       <p className="text-sm text-blue-800">Carica qui la foto dei documenti per velocizzare l'ingresso.</p>
+                   </div>
+               </div>
+           )}
+
+           {/* NASCONDE L'UPLOAD SE GIA' APPROVATO */}
+           {!booking.documents_approved && (
+               <Card className="border-dashed border-2 mb-6 border-blue-200 bg-blue-50/50">
+                <CardContent className="py-8 flex flex-col items-center text-center">
+                    <label className={`cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium bg-white hover:bg-gray-100 text-blue-700 h-10 px-6 py-2 shadow-sm border ${uploading ? 'opacity-50' : ''}`}>
+                        {uploading ? "Caricamento..." : "Seleziona Foto/PDF"}
+                        <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploading} />
+                    </label>
+                </CardContent>
+               </Card>
+           )}
+
            <div className="space-y-3">
                 {documents?.map(doc => (
                     <div key={doc.id} className="bg-white p-4 rounded-lg border flex justify-between items-center shadow-sm">

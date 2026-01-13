@@ -6,18 +6,16 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, Save, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog } from 'lucide-react';
+import { Switch } from '@/components/ui/switch'; // Importante
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck, Lock, Unlock } from 'lucide-react';
 import { format, isBefore, addDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
-// IMPORTIAMO IL GESTORE TICKET
 import TicketManager from '@/components/TicketManager';
 
 interface BookingsProps {
@@ -33,9 +31,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [customerSheetOpen, setCustomerSheetOpen] = useState<any | null>(null);
   const [editingBooking, setEditingBooking] = useState<any>(null);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
-
-  // NUOVO STATO: TICKET MANAGER DALLA SCHEDA CLIENTE
   const [managingTicket, setManagingTicket] = useState<any>(null);
 
   const [formData, setFormData] = useState({
@@ -45,8 +40,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   });
 
   // --- QUERY DATI ---
-
-  // 1. Prenotazioni
   const { data: bookings } = useQuery({
     queryKey: ['bookings'],
     queryFn: async () => {
@@ -55,7 +48,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     }
   });
 
-  // 2. Documenti
   const { data: activeDocs } = useQuery({
     queryKey: ['booking-docs', customerSheetOpen?.id],
     queryFn: async () => {
@@ -66,7 +58,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     enabled: !!customerSheetOpen
   });
 
-  // 3. Ticket Cliente
   const { data: activeTickets } = useQuery({
       queryKey: ['booking-tickets', customerSheetOpen?.id],
       queryFn: async () => {
@@ -77,7 +68,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       enabled: !!customerSheetOpen
   });
 
-  // 4. Pagamenti Cliente
   const { data: activePayments } = useQuery({
       queryKey: ['booking-payments', customerSheetOpen?.id],
       queryFn: async () => {
@@ -88,7 +78,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       enabled: !!customerSheetOpen
   });
 
-  // --- LOGICA AUTOMATICA ---
   React.useEffect(() => {
     if (initialBookingId && bookings && bookings.length > 0) {
       const targetBooking = bookings.find(b => b.id === initialBookingId);
@@ -99,9 +88,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     }
   }, [initialBookingId, bookings, onConsumeId]);
 
-
   // --- MUTATIONS ---
-
   const createBooking = useMutation({
     mutationFn: async (newBooking: any) => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -120,17 +107,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  const reviewDoc = useMutation({
-    mutationFn: async ({ id, status }: { id: string, status: string }) => {
-      const { error } = await supabase.from('booking_documents').update({ status }).eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['booking-docs'] });
-      toast({ title: "Stato Documento Aggiornato" });
-    }
-  });
-
   const deleteBooking = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('bookings').delete().eq('id', id);
@@ -138,10 +114,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
-      setDeleteId(null);
       toast({ title: 'Prenotazione eliminata', variant: "destructive" });
-    },
-    onError: (err: any) => toast({ title: "Errore eliminazione", description: err.message, variant: "destructive" })
+    }
   });
 
   const updateBooking = useMutation({
@@ -159,6 +133,35 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
       setEditingBooking(null);
       toast({ title: 'Aggiornato' });
+    }
+  });
+
+  // NUOVA MUTATION: SBLOCCO/BLOCCO CHECK-IN
+  const toggleCheckinApproval = useMutation({
+    mutationFn: async ({ id, approved }: { id: string, approved: boolean }) => {
+        const { error } = await supabase.from('bookings').update({ documents_approved: approved }).eq('id', id);
+        if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+        queryClient.invalidateQueries({ queryKey: ['bookings'] });
+        // Aggiorna anche lo stato locale per vedere subito il cambiamento nel dialog
+        setCustomerSheetOpen((prev: any) => ({ ...prev, documents_approved: variables.approved }));
+        toast({ 
+            title: variables.approved ? "Accesso Sbloccato" : "Accesso Bloccato", 
+            description: variables.approved ? "Il cliente può ora vedere i codici di accesso." : "Il cliente deve attendere la verifica."
+        });
+    },
+    onError: (err: any) => toast({ title: "Errore aggiornamento", description: err.message, variant: "destructive" })
+  });
+
+  const reviewDoc = useMutation({
+    mutationFn: async ({ id, status }: { id: string, status: string }) => {
+      const { error } = await supabase.from('booking_documents').update({ status }).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booking-docs'] });
+      toast({ title: "Stato Documento Aggiornato" });
     }
   });
 
@@ -188,7 +191,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         </Button>
       </div>
 
-      {/* DIALOG NUOVA PRENOTAZIONE */}
       <Dialog open={newBookingOpen} onOpenChange={setNewBookingOpen}>
         <DialogContent className="sm:max-w-[600px]">
             <DialogHeader><DialogTitle>Nuova Prenotazione</DialogTitle></DialogHeader>
@@ -257,9 +259,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         </p>
                     </div>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200">
-                    <Copy className="w-4 h-4 mr-2" /> Link Portale
-                </Button>
+                <div className="flex flex-col items-end gap-2">
+                    <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200">
+                        <Copy className="w-4 h-4 mr-2" /> Link Portale
+                    </Button>
+                    <Badge className={customerSheetOpen?.documents_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
+                        {customerSheetOpen?.documents_approved ? '✅ Accesso Sbloccato' : '🔒 Accesso Bloccato'}
+                    </Badge>
+                </div>
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col">
@@ -320,6 +327,28 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         </TabsContent>
 
                         <TabsContent value="docs" className="mt-0">
+                            {/* --- NUOVA SEZIONE DI CONTROLLO ACCESSO --- */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <ShieldCheck className={`w-8 h-8 ${customerSheetOpen?.documents_approved ? 'text-green-600' : 'text-orange-500'}`} />
+                                    <div>
+                                        <h4 className="font-bold text-blue-900">Controllo Accessi</h4>
+                                        <p className="text-sm text-blue-700">
+                                            {customerSheetOpen?.documents_approved 
+                                                ? "L'inquilino ha accesso completo al portale (chiavi e servizi)." 
+                                                : "L'inquilino vede solo la schermata di verifica."}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border">
+                                    <Label className="cursor-pointer font-bold mr-2 text-slate-700">Accesso Sbloccato</Label>
+                                    <Switch 
+                                        checked={customerSheetOpen?.documents_approved || false}
+                                        onCheckedChange={(val) => toggleCheckinApproval.mutate({ id: customerSheetOpen.id, approved: val })}
+                                    />
+                                </div>
+                            </div>
+
                             <div className="space-y-3">
                                 {activeDocs?.map(doc => (
                                     <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
@@ -347,7 +376,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             </div>
                         </TabsContent>
 
-                        {/* TICKET CON TASTO GESTISCI */}
                         <TabsContent value="tickets" className="mt-0">
                             <div className="space-y-3">
                                 {activeTickets?.map(ticket => (
@@ -357,7 +385,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                                 {ticket.priorita === 'alta' && <AlertCircle className="w-4 h-4 text-red-500" />}
                                                 {ticket.titolo}
                                             </h4>
-                                            {/* AGGIUNTO BOTTONE GESTISCI */}
                                             <div className="flex items-center gap-2">
                                                 <Badge variant={ticket.stato === 'risolto' ? 'secondary' : 'destructive'} className="uppercase text-[10px] tracking-wider">{ticket.stato}</Badge>
                                                 <Button size="sm" variant="ghost" className="h-6 text-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={() => setManagingTicket(ticket)}>
@@ -409,21 +436,19 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         </DialogContent>
       </Dialog>
 
-      {/* GESTORE TICKET MODALE */}
       {managingTicket && (
         <TicketManager 
             ticket={managingTicket} 
             isOpen={!!managingTicket} 
             onClose={() => setManagingTicket(null)}
             onUpdate={() => {
-                queryClient.invalidateQueries({ queryKey: ['booking-tickets'] }); // Ricarica la lista nella scheda cliente
-                queryClient.invalidateQueries({ queryKey: ['tickets'] }); // Ricarica anche la lista generale Attività
+                queryClient.invalidateQueries({ queryKey: ['booking-tickets'] });
+                queryClient.invalidateQueries({ queryKey: ['tickets'] });
             }}
             isReadOnly={managingTicket.stato === 'risolto'} 
         />
       )}
 
-      {/* DIALOG MODIFICA RAPIDA */}
       {editingBooking && (
         <Dialog open={!!editingBooking} onOpenChange={(open) => !open && setEditingBooking(null)}>
             <DialogContent className="sm:max-w-[400px]">
