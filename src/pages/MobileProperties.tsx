@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Truck, Plus, Trash2 } from 'lucide-react';
+import { Truck, Plus, Trash2, Pencil } from 'lucide-react'; // Aggiunto Pencil
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 
@@ -15,6 +15,9 @@ export default function MobileProperties() {
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
+  // STATO PER LA MODIFICA (Se null = Nuovo, Se valorizzato = Modifica)
+  const [editingId, setEditingId] = useState<string | null>(null);
+
   const { toast } = useToast();
   const [formData, setFormData] = useState({
     veicolo: '', targa: '', anno: '', km: '', 
@@ -33,11 +36,7 @@ export default function MobileProperties() {
       setVehicles(data || []);
     } catch (err: any) {
       console.error("Errore fetch:", err);
-      toast({ 
-        title: "Errore caricamento", 
-        description: err.message, 
-        variant: "destructive" 
-      });
+      toast({ title: "Errore caricamento", description: err.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -47,19 +46,44 @@ export default function MobileProperties() {
     fetchVehicles();
   }, []);
 
+  // Funzione per resettare il form
+  const resetForm = () => {
+    setFormData({ veicolo: '', targa: '', anno: '', km: '', data_revisione: '', scadenza_assicurazione: '', note: '' });
+    setEditingId(null);
+  };
+
+  // APRIRE DIALOG PER NUOVO
+  const openNew = () => {
+    resetForm();
+    setIsDialogOpen(true);
+  };
+
+  // APRIRE DIALOG PER MODIFICA
+  const openEdit = (v: any) => {
+    setEditingId(v.id);
+    setFormData({
+      veicolo: v.veicolo || v.nome || '',
+      targa: v.targa || '',
+      anno: v.anno ? v.anno.toString() : '',
+      km: v.km ? v.km.toString() : '',
+      data_revisione: v.data_revisione || '',
+      scadenza_assicurazione: v.scadenza_assicurazione || '',
+      note: v.note || ''
+    });
+    setIsDialogOpen(true);
+  };
+
   const handleSave = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return alert("Sessione scaduta.");
 
-      // MODIFICA CRITICA: Gestione sicura dei numeri per evitare errore 400
       const payload = {
-        nome: formData.veicolo, // Usa il nome veicolo anche come 'nome'
-        categoria: 'Veicolo',   // Ora accettato come testo grazie all'SQL
+        nome: formData.veicolo,
+        categoria: 'Veicolo',
         status: 'active',
         veicolo: formData.veicolo,
         targa: formData.targa ? formData.targa.toUpperCase() : null,
-        // Se stringa vuota, manda null invece di NaN o errore
         anno: formData.anno && !isNaN(parseInt(formData.anno)) ? parseInt(formData.anno) : null,
         km: formData.km && !isNaN(parseInt(formData.km)) ? parseInt(formData.km) : 0,
         data_revisione: formData.data_revisione || null,
@@ -68,17 +92,32 @@ export default function MobileProperties() {
         user_id: user.id
       };
 
-      const { error } = await supabase.from('properties_mobile').insert(payload);
-      if (error) throw error;
+      if (editingId) {
+        // --- LOGICA AGGIORNAMENTO (UPDATE) ---
+        const { error } = await supabase
+          .from('properties_mobile')
+          .update(payload)
+          .eq('id', editingId);
+        
+        if (error) throw error;
+        toast({ title: "Veicolo aggiornato!" });
+      } else {
+        // --- LOGICA CREAZIONE (INSERT) ---
+        const { error } = await supabase
+          .from('properties_mobile')
+          .insert(payload);
+        
+        if (error) throw error;
+        toast({ title: "Veicolo creato!" });
+      }
 
-      toast({ title: "Veicolo salvato con successo!" });
       setIsDialogOpen(false);
-      setFormData({ veicolo: '', targa: '', anno: '', km: '', data_revisione: '', scadenza_assicurazione: '', note: '' });
+      resetForm();
       fetchVehicles();
 
     } catch (err: any) {
-      console.error("Errore salvataggio:", err); // Log in console per debug
-      toast({ title: "Errore salvataggio", description: err.message || "Verifica i dati inseriti", variant: "destructive" });
+      console.error("Errore salvataggio:", err);
+      toast({ title: "Errore salvataggio", description: err.message, variant: "destructive" });
     }
   };
 
@@ -105,7 +144,8 @@ export default function MobileProperties() {
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
           <Truck className="h-8 w-8 text-blue-600"/> Parco Mezzi
         </h1>
-        <Button className="bg-blue-600" onClick={() => setIsDialogOpen(true)}>
+        {/* FIX: Ora chiama openNew invece di setIsDialogOpen direttamente */}
+        <Button className="bg-blue-600" onClick={openNew}>
           <Plus className="mr-2 h-4 w-4"/> Aggiungi Veicolo
         </Button>
       </div>
@@ -138,9 +178,16 @@ export default function MobileProperties() {
                         <div className={v.scadenza_assicurazione ? "" : "opacity-50"}>Ass: {formatDate(v.scadenza_assicurazione)}</div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => handleDelete(v.id)}>
-                        <Trash2 className="text-red-500 w-4 h-4"/>
-                      </Button>
+                      <div className="flex justify-end gap-2">
+                        {/* BOTTONE MODIFICA */}
+                        <Button variant="ghost" size="sm" onClick={() => openEdit(v)} className="hover:text-blue-600">
+                          <Pencil className="h-4 w-4"/>
+                        </Button>
+                        {/* BOTTONE ELIMINA */}
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(v.id)} className="hover:text-red-600">
+                          <Trash2 className="h-4 w-4"/>
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -152,7 +199,9 @@ export default function MobileProperties() {
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
-          <DialogHeader><DialogTitle>Nuovo Veicolo</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editingId ? 'Modifica Veicolo' : 'Nuovo Veicolo'}</DialogTitle>
+          </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div><Label>Veicolo</Label><Input value={formData.veicolo} onChange={e => setFormData({...formData, veicolo: e.target.value})} placeholder="Es. Fiat Ducato" /></div>
@@ -168,7 +217,9 @@ export default function MobileProperties() {
             </div>
             <div className="space-y-1"><Label>Note</Label><Input value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} /></div>
             
-            <Button onClick={handleSave} className="w-full bg-blue-600 font-bold hover:bg-blue-700">Salva Veicolo</Button>
+            <Button onClick={handleSave} className="w-full bg-blue-600 font-bold hover:bg-blue-700">
+              {editingId ? 'Aggiorna Veicolo' : 'Salva Veicolo'}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
