@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Lock, LogOut, Ban, Clock } from 'lucide-react'; // Aggiungi icone
+import { Menu, Lock, LogOut, Ban, Clock } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { useAuth } from '@/hooks/useAuth';
@@ -13,7 +13,8 @@ import Sidebar from '@/components/Sidebar';
 import Dashboard from '@/components/Dashboard';
 import Properties from '@/components/Properties';
 import Revenue from '@/components/Revenue';
-import Expenses from '@/components/Expenses';
+// FIX: Import corretto da 'pages' invece di 'components'
+import Expenses from '@/pages/Expenses'; 
 import Activities from '@/components/Activities';
 import TenantManager from '@/components/TenantManager';
 import SuggestedPlan from '@/components/SuggestedPlan';
@@ -23,13 +24,12 @@ const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const { user, signOut } = useAuth();
-  const [userStatus, setUserStatus] = useState<string | null>(null); // 'active', 'pending', 'rejected'
+  const [userStatus, setUserStatus] = useState<string | null>(null); 
 
   useEffect(() => {
     const checkStatus = async () => {
       if (!user) return;
       const { data } = await supabase.from('profiles').select('status').eq('id', user.id).single();
-      // Fallback: se status non esiste, usa 'pending'
       setUserStatus(data?.status || 'pending');
     };
     checkStatus();
