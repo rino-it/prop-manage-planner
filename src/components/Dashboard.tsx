@@ -20,7 +20,8 @@ import {
   Wrench,
   Wallet,
   LogOut,
-  Bell
+  Bell,
+  Truck // NUOVA ICONA PER I VEICOLI
 } from 'lucide-react';
 import { format, isSameDay, startOfMonth, endOfMonth, isBefore, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -29,14 +30,13 @@ interface DashboardProps {
   onNavigate: (tab: string) => void;
 }
 
-// Tipi estesi per includere anche le spese e i ticket nel calendario
 type DashboardEvent = {
   id: string;
   date: Date;
-  type: 'checkin' | 'checkout' | 'payment' | 'expense' | 'maintenance';
+  type: 'checkin' | 'checkout' | 'payment' | 'expense' | 'maintenance' | 'deadline'; // Aggiunto 'deadline'
   title: string;
   subtitle: string;
-  amount?: number; // Opzionale, per mostrare cifre
+  amount?: number;
   priority: 'alta' | 'media' | 'bassa';
   status: string;
   targetTab: string;
@@ -60,7 +60,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
   });
 
-  // 2. QUERY FINANZE (Entrate e Uscite)
+  // 2. QUERY FINANZE (FIX: Ora punta a 'payments' invece di 'property_expenses')
   const { data: finances } = useQuery({
     queryKey: ['dashboard-finances'],
     queryFn: async () => {
@@ -71,14 +71,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         .gte('data_scadenza', startMonth)
         .lte('data_scadenza', endMonth);
 
-      // Uscite (Spese)
+      // Uscite (Spese Unificate)
       const { data: expenses } = await supabase
-        .from('property_expenses')
-        .select('*, properties_real(nome)') // Prendiamo anche il nome casa
-        .gte('date', startMonth)
-        .lte('date', endMonth);
+        .from('payments') // TABELLA CORRETTA
+        .select('*, properties_real(nome), properties_mobile(veicolo, targa)') 
+        .gte('scadenza', startMonth)
+        .lte('scadenza', endMonth);
 
-      // Scaduti (Urgenze)
+      // Scaduti
       const { data: overdue } = await supabase
         .from('tenant_payments')
         .select('*')
@@ -89,7 +89,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
   });
 
-  // 3. QUERY TICKET (Manutenzioni)
+  // 3. QUERY TICKET
   const { data: tickets } = useQuery({
     queryKey: ['dashboard-tickets'],
     queryFn: async () => {
@@ -101,13 +101,23 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
   });
 
-  // --- IL CERVELLO: UNIFICAZIONE EVENTI ---
+  // 4. QUERY PARCO MEZZI (NUOVA)
+  const { data: fleet } = useQuery({
+    queryKey: ['dashboard-fleet'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('properties_mobile')
+        .select('*'); 
+      return data || [];
+    }
+  });
+
+  // --- UNIFICAZIONE EVENTI ---
   const dashboardData = useMemo(() => {
     const events: DashboardEvent[] = [];
     
-    // A. Logistica (Check-in / Check-out)
+    // A. Logistica
     bookings?.forEach(b => {
-      // Check-in
       events.push({
         id: `in-${b.id}`,
         date: new Date(b.data_inizio),
@@ -118,7 +128,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         status: 'pending',
         targetTab: 'bookings'
       });
-      // Check-out
       events.push({
         id: `out-${b.id}`,
         date: new Date(b.data_fine),
@@ -131,14 +140,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       });
     });
 
-    // B. Entrate (Scadenze pagamenti inquilini)
+    // B. Entrate
     finances?.income.forEach(inc => {
       events.push({
         id: `pay-${inc.id}`,
         date: new Date(inc.data_scadenza),
         type: 'payment',
-        title: `Incasso atteso: €${inc.importo}`,
-        subtitle: inc.description || 'Rata affitto',
+        title: `Incasso: €${inc.importo}`,
+        subtitle: inc.description || 'Affitto',
         amount: Number(inc.importo),
         priority: 'media',
         status: inc.stato || 'da_pagare',
@@ -146,26 +155,31 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       });
     });
 
-    // C. Uscite (Spese registrate) - NUOVO!
+    // C. Uscite (Spese Reali)
     finances?.expenses.forEach(exp => {
+        // Logica per mostrare il nome corretto (Casa o Veicolo)
+        const targetName = exp.properties_real?.nome 
+            ? `🏠 ${exp.properties_real.nome}` 
+            : (exp.properties_mobile?.veicolo ? `🚛 ${exp.properties_mobile.veicolo}` : 'Generale');
+
         events.push({
           id: `exp-${exp.id}`,
-          date: new Date(exp.date),
+          date: new Date(exp.scadenza),
           type: 'expense',
-          title: `Uscita: €${exp.amount}`,
-          subtitle: `${exp.properties_real?.nome || 'Generale'} - ${exp.category}`,
-          amount: Number(exp.amount),
+          title: `Uscita: €${exp.importo}`,
+          subtitle: `${targetName} - ${exp.categoria}`,
+          amount: Number(exp.importo),
           priority: 'media',
           status: 'paid',
           targetTab: 'expenses'
         });
     });
 
-    // D. Ticket (Manutenzioni attive) - NUOVO!
+    // D. Ticket
     tickets?.forEach(t => {
         events.push({
             id: `tick-${t.id}`,
-            date: new Date(t.created_at), // Usiamo la data creazione come riferimento
+            date: new Date(t.created_at),
             type: 'maintenance',
             title: `Ticket: ${t.titolo}`,
             subtitle: t.properties_real?.nome || 'Generale',
@@ -175,64 +189,73 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         });
     });
 
-    // E. Calcolo KPI
+    // E. Scadenze Veicoli (NUOVO)
+    fleet?.forEach(vehicle => {
+        // Revisione
+        if (vehicle.data_revisione) {
+            const revDate = new Date(vehicle.data_revisione);
+            events.push({
+                id: `rev-${vehicle.id}`,
+                date: revDate,
+                type: 'deadline',
+                title: `Scad. Revisione`,
+                subtitle: `${vehicle.veicolo} (${vehicle.targa})`,
+                priority: 'alta',
+                status: 'pending',
+                targetTab: 'mobile-properties'
+            });
+        }
+        // Assicurazione
+        if (vehicle.scadenza_assicurazione) {
+            const assDate = new Date(vehicle.scadenza_assicurazione);
+            events.push({
+                id: `ass-${vehicle.id}`,
+                date: assDate,
+                type: 'deadline',
+                title: `Scad. Assicurazione`,
+                subtitle: `${vehicle.veicolo} (${vehicle.targa})`,
+                priority: 'alta',
+                status: 'pending',
+                targetTab: 'mobile-properties'
+            });
+        }
+    });
+
+    // F. KPI
     const kpi = {
       incassato: finances?.income.filter(i => i.stato === 'pagato').reduce((acc, c) => acc + Number(c.importo), 0) || 0,
-      atteso: finances?.income.filter(i => i.stato === 'da_pagare' || i.stato === 'in_verifica').reduce((acc, c) => acc + Number(c.importo), 0) || 0,
-      uscite: finances?.expenses.reduce((acc, c) => acc + Number(c.amount), 0) || 0
+      atteso: finances?.income.filter(i => i.stato === 'da_pagare').reduce((acc, c) => acc + Number(c.importo), 0) || 0,
+      uscite: finances?.expenses.reduce((acc, c) => acc + Number(c.importo), 0) || 0
     };
 
-    // F. Lista Urgenze (Box Rosso)
+    // G. Urgenze (Inclusi Veicoli)
     const urgencies = [
-      ...(tickets?.filter(t => t.priorita === 'alta' || t.priorita === 'critica').map(t => ({
-        type: 'ticket', text: `GUASTO CRITICO: ${t.titolo} (${t.properties_real?.nome})`, id: t.id, targetTab: 'activities'
+      ...(tickets?.filter(t => t.priorita === 'alta').map(t => ({
+        type: 'ticket', text: `GUASTO: ${t.titolo}`, id: t.id, targetTab: 'activities'
       })) || []),
       ...(finances?.overdue.map(o => ({
-        type: 'payment', text: `SCADUTO: €${o.importo} - ${o.description}`, id: o.id, targetTab: 'revenue'
+        type: 'payment', text: `SCADUTO: €${o.importo}`, id: o.id, targetTab: 'revenue'
+      })) || []),
+      ...(fleet?.filter(v => v.scadenza_assicurazione && isBefore(new Date(v.scadenza_assicurazione), new Date())).map(v => ({
+          type: 'deadline', text: `ASSICURAZIONE SCADUTA: ${v.veicolo}`, id: v.id, targetTab: 'mobile-properties'
       })) || [])
     ];
 
     return { events, kpi, urgencies };
-  }, [bookings, finances, tickets]);
+  }, [bookings, finances, tickets, fleet]);
 
-  // Filtra eventi per il giorno selezionato
   const dailyEvents = dashboardData.events.filter(e => 
     selectedDate && isSameDay(e.date, selectedDate)
   );
 
-  // Modifiers per i pallini colorati nel calendario
   const modifiers = {
     hasEvent: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date)),
-    hasCheckin: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'checkin'),
-    hasExpense: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'expense'),
-    hasUrgency: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.priority === 'alta' || e.type === 'maintenance')),
+    hasDeadline: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'deadline'),
   };
 
-const modifiersStyles = {
-    hasEvent: { 
-      textDecoration: 'underline', 
-      textDecorationColor: 'rgba(255, 255, 255, 0.5)',
-      textUnderlineOffset: '2px'
-    },
-    
-    // NEW COLOR: Lime-300 (#bef264)
-    // This is much punchier and easier to read on blue than mint.
-    hasCheckin: { 
-      color: '#bef264', 
-      fontWeight: '700' 
-    }, 
-
-    // Kept the Rose-300
-    hasExpense: { 
-      color: '#fda4af', 
-      fontWeight: '700' 
-    }, 
-
-    // Kept the Amber border
-    hasUrgency: { 
-      border: '2px solid #fcd34d', 
-      borderRadius: '50%' 
-    } 
+  const modifiersStyles = {
+    hasEvent: { textDecoration: 'underline', textDecorationColor: '#94a3b8' },
+    hasDeadline: { color: '#dc2626', fontWeight: 'bold', border: '1px solid #dc2626', borderRadius: '50%' }
   };
 
   return (
@@ -242,48 +265,45 @@ const modifiersStyles = {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Torre di Controllo</h1>
-          <p className="text-gray-500">Panoramica operativa del {format(new Date(), 'MMMM yyyy', { locale: it })}</p>
+          <p className="text-gray-500">Panoramica operativa</p>
         </div>
         <div className="text-right hidden md:block">
             <p className="text-sm font-medium text-gray-900">{format(new Date(), 'EEEE d MMMM', { locale: it })}</p>
         </div>
       </div>
 
-      {/* KPI CLICCABILI */}
+      {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-green-50 border-green-200 shadow-sm cursor-pointer hover:bg-green-100 transition-colors" onClick={() => onNavigate('revenue')}>
-          <CardContent className="p-6 flex items-center justify-between">
-            <div><p className="text-sm font-medium text-green-700 uppercase tracking-wider">Incassato</p><h2 className="text-3xl font-bold text-green-900 mt-1">€ {dashboardData.kpi.incassato.toLocaleString()}</h2></div>
-            <div className="p-3 bg-green-100 rounded-full text-green-700"><CheckCircle className="w-6 h-6" /></div>
+        <Card className="bg-green-50 border-green-200 cursor-pointer hover:bg-green-100" onClick={() => onNavigate('revenue')}>
+          <CardContent className="p-6 flex justify-between">
+            <div><p className="text-sm font-bold text-green-700">INCASSATO</p><h2 className="text-2xl font-bold text-green-900">€ {dashboardData.kpi.incassato.toLocaleString()}</h2></div>
+            <CheckCircle className="text-green-600 w-8 h-8" />
           </CardContent>
         </Card>
-        
-        <Card className="bg-blue-50 border-blue-200 shadow-sm cursor-pointer hover:bg-blue-100 transition-colors" onClick={() => onNavigate('revenue')}>
-          <CardContent className="p-6 flex items-center justify-between">
-            <div><p className="text-sm font-medium text-blue-700 uppercase tracking-wider">In Attesa</p><h2 className="text-3xl font-bold text-blue-900 mt-1">€ {dashboardData.kpi.atteso.toLocaleString()}</h2></div>
-            <div className="p-3 bg-blue-100 rounded-full text-blue-700"><Clock className="w-6 h-6" /></div>
+        <Card className="bg-blue-50 border-blue-200 cursor-pointer hover:bg-blue-100" onClick={() => onNavigate('revenue')}>
+          <CardContent className="p-6 flex justify-between">
+            <div><p className="text-sm font-bold text-blue-700">IN ARRIVO</p><h2 className="text-2xl font-bold text-blue-900">€ {dashboardData.kpi.atteso.toLocaleString()}</h2></div>
+            <Clock className="text-blue-600 w-8 h-8" />
           </CardContent>
         </Card>
-        
-        <Card className="bg-red-50 border-red-200 shadow-sm cursor-pointer hover:bg-red-100 transition-colors" onClick={() => onNavigate('expenses')}>
-          <CardContent className="p-6 flex items-center justify-between">
-            <div><p className="text-sm font-medium text-red-700 uppercase tracking-wider">Uscite</p><h2 className="text-3xl font-bold text-red-900 mt-1">€ {dashboardData.kpi.uscite.toLocaleString()}</h2></div>
-            <div className="p-3 bg-red-100 rounded-full text-red-700"><TrendingDown className="w-6 h-6" /></div>
+        <Card className="bg-red-50 border-red-200 cursor-pointer hover:bg-red-100" onClick={() => onNavigate('expenses')}>
+          <CardContent className="p-6 flex justify-between">
+            <div><p className="text-sm font-bold text-red-700">USCITE MENSILI</p><h2 className="text-2xl font-bold text-red-900">€ {dashboardData.kpi.uscite.toLocaleString()}</h2></div>
+            <TrendingDown className="text-red-600 w-8 h-8" />
           </CardContent>
         </Card>
       </div>
 
       {/* URGENZE */}
       {dashboardData.urgencies.length > 0 && (
-        <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900 shadow-sm">
+        <Alert variant="destructive" className="bg-red-50 border-red-200">
           <AlertTriangle className="h-5 w-5" />
-          <AlertTitle className="font-bold text-lg ml-2">Attenzione Richiesta ({dashboardData.urgencies.length})</AlertTitle>
-          <AlertDescription className="mt-2">
-            <ul className="list-disc list-inside space-y-1 ml-1">
+          <AlertTitle className="font-bold">Attenzione Richiesta</AlertTitle>
+          <AlertDescription>
+            <ul className="mt-2 space-y-1">
               {dashboardData.urgencies.map((u, idx) => (
-                <li key={idx} className="flex items-center justify-between hover:bg-red-100 p-1 rounded cursor-pointer" onClick={() => onNavigate(u.targetTab)}>
-                  <span className="text-sm font-medium">{u.text}</span>
-                  <ArrowRight className="w-4 h-4 opacity-50" />
+                <li key={idx} className="flex justify-between cursor-pointer hover:underline" onClick={() => onNavigate(u.targetTab)}>
+                  <span>{u.text}</span> <ArrowRight className="w-4 h-4" />
                 </li>
               ))}
             </ul>
@@ -291,92 +311,62 @@ const modifiersStyles = {
         </Alert>
       )}
 
-      {/* SEZIONE CALENDARIO E AGENDA */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-        
-        {/* CALENDARIO */}
-        <Card className="lg:col-span-1 shadow-md border-slate-200">
-            <CardHeader><CardTitle>Calendario Attività</CardTitle></CardHeader>
+      {/* CALENDARIO & AGENDA */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <Card className="lg:col-span-1 border-slate-200 shadow-sm">
+            <CardHeader><CardTitle>Calendario</CardTitle></CardHeader>
             <CardContent className="flex justify-center">
                 <Calendar
                     mode="single"
                     selected={selectedDate}
                     onSelect={setSelectedDate}
                     locale={it}
-                    className="rounded-md border"
                     modifiers={modifiers}
                     modifiersStyles={modifiersStyles}
+                    className="rounded-md border"
                 />
-                <div className="mt-4 flex flex-wrap gap-2 justify-center text-[10px] text-gray-500">
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-green-500 mr-1"></span> Check-in</span>
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full bg-red-500 mr-1"></span> Uscita/Spesa</span>
-                    <span className="flex items-center"><span className="w-2 h-2 rounded-full border border-red-500 mr-1"></span> Urgenza</span>
-                </div>
             </CardContent>
         </Card>
 
-        {/* AGENDA DETTAGLIATA */}
-        <Card className="lg:col-span-2 shadow-md border-slate-200 flex flex-col min-h-[400px]">
-            <CardHeader className="border-b bg-slate-50/50 pb-4">
-                <div className="flex justify-between items-center">
-                    <CardTitle className="flex items-center gap-2">
-                        <CalendarIcon className="w-5 h-5 text-blue-600"/>
-                        Agenda del {selectedDate ? format(selectedDate, 'd MMMM', { locale: it }) : 'Giorno'}
-                    </CardTitle>
-                    <Badge variant="secondary" className="text-sm">{dailyEvents.length} Attività</Badge>
-                </div>
+        <Card className="lg:col-span-2 border-slate-200 shadow-sm flex flex-col h-[400px]">
+            <CardHeader className="bg-slate-50 border-b pb-3">
+                <CardTitle className="flex items-center gap-2">
+                    <CalendarIcon className="w-5 h-5 text-blue-600"/>
+                    Agenda del {selectedDate ? format(selectedDate, 'd MMMM', { locale: it }) : 'Giorno'}
+                </CardTitle>
             </CardHeader>
-            
-            <ScrollArea className="flex-1 p-0 h-[400px]">
-                {dailyEvents.length > 0 ? (
-                    <div className="divide-y divide-slate-100">
-                        {dailyEvents.map((evt) => (
-                            <div key={evt.id} className="p-4 hover:bg-slate-50 transition-colors flex items-start gap-4 group cursor-pointer" onClick={() => onNavigate(evt.targetTab)}>
-                                {/* ICONA TIPO EVENTO */}
-                                <div className={`mt-1 p-2 rounded-full ${
-                                    evt.type === 'checkin' ? 'bg-green-100 text-green-700' :
-                                    evt.type === 'checkout' ? 'bg-orange-100 text-orange-700' :
-                                    evt.type === 'payment' ? 'bg-blue-100 text-blue-700' :
-                                    evt.type === 'expense' ? 'bg-red-100 text-red-700' :
-                                    'bg-yellow-100 text-yellow-700' // Maintenance
-                                }`}>
-                                    {evt.type === 'checkin' && <User className="w-5 h-5" />}
-                                    {evt.type === 'checkout' && <LogOut className="w-5 h-5" />}
-                                    {evt.type === 'payment' && <Wallet className="w-5 h-5" />}
-                                    {evt.type === 'expense' && <TrendingDown className="w-5 h-5" />}
-                                    {evt.type === 'maintenance' && <Wrench className="w-5 h-5" />}
-                                </div>
-
-                                {/* CONTENUTO */}
-                                <div className="flex-1">
-                                    <div className="flex justify-between items-start">
-                                        <h4 className="text-sm font-bold text-gray-900">{evt.title}</h4>
-                                        {evt.amount && (
-                                            <span className={`text-xs font-bold ${evt.type === 'expense' ? 'text-red-600' : 'text-green-600'}`}>
-                                                {evt.type === 'expense' ? '-' : '+'}€{evt.amount}
-                                            </span>
-                                        )}
-                                    </div>
-                                    <p className="text-xs text-gray-500 flex items-center mt-1">
-                                        <MapPin className="w-3 h-3 mr-1" /> {evt.subtitle}
-                                    </p>
-                                    <div className="mt-2 flex gap-2">
-                                        <Badge variant="outline" className="text-[10px] uppercase">{evt.type}</Badge>
-                                        {evt.priority === 'alta' && <Badge variant="destructive" className="text-[10px]">Alta Priorità</Badge>}
-                                    </div>
-                                </div>
-
-                                <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 self-center" />
+            <ScrollArea className="flex-1">
+                <div className="divide-y">
+                    {dailyEvents.length > 0 ? dailyEvents.map(evt => (
+                        <div key={evt.id} className="p-4 hover:bg-slate-50 cursor-pointer flex gap-4 items-center group" onClick={() => onNavigate(evt.targetTab)}>
+                            <div className={`p-2 rounded-full ${
+                                evt.type === 'checkin' ? 'bg-green-100 text-green-600' :
+                                evt.type === 'deadline' ? 'bg-red-100 text-red-600' : 
+                                evt.type === 'expense' ? 'bg-orange-100 text-orange-600' : 'bg-slate-100'
+                            }`}>
+                                {evt.type === 'checkin' && <User className="w-5 h-5" />}
+                                {evt.type === 'deadline' && <Truck className="w-5 h-5" />}
+                                {evt.type === 'expense' && <TrendingDown className="w-5 h-5" />}
+                                {evt.type === 'payment' && <Wallet className="w-5 h-5" />}
+                                {evt.type === 'maintenance' && <Wrench className="w-5 h-5" />}
+                                {evt.type === 'checkout' && <LogOut className="w-5 h-5" />}
                             </div>
-                        ))}
-                    </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-400 py-12">
-                        <Bell className="w-12 h-12 mb-3 opacity-20" />
-                        <p>Nessuna notifica per questa data.</p>
-                        <Button variant="link" onClick={() => setSelectedDate(new Date())}>Torna a Oggi</Button>
-                    </div>
-                )}
+                            <div className="flex-1">
+                                <div className="flex justify-between">
+                                    <h4 className="font-bold text-gray-900">{evt.title}</h4>
+                                    {evt.amount && <span className="font-mono text-sm">€{evt.amount}</span>}
+                                </div>
+                                <p className="text-sm text-gray-500">{evt.subtitle}</p>
+                            </div>
+                            <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-600" />
+                        </div>
+                    )) : (
+                        <div className="text-center py-12 text-gray-400">
+                            <Bell className="w-10 h-10 mx-auto mb-2 opacity-20" />
+                            <p>Nessun evento per questa data.</p>
+                        </div>
+                    )}
+                </div>
             </ScrollArea>
         </Card>
       </div>
