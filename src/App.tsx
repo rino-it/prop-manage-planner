@@ -3,17 +3,20 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/hooks/useAuth";
+import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
+import Auth from "./pages/Auth";
+import NotFound from "./pages/NotFound";
+import Sidebar from "./components/Sidebar";
+
+// Pagine e Componenti
 import Properties from "./components/Properties";
 import Tenants from "./components/TenantManager";
 import Expenses from "./pages/Expenses";
-import Auth from "./pages/Auth";
-import NotFound from "./pages/NotFound";
-import ProtectedRoute from "./components/ProtectedRoute";
-import Sidebar from "./components/Sidebar";
 import MobileProperties from "./pages/MobileProperties";
 
-// Import Portali Esterni
+// Portali
 import GuestPortal from "./pages/GuestPortal";
 import TenantPortal from "./pages/TenantPortal";
 
@@ -22,95 +25,93 @@ const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/auth" element={<Auth />} />
-          
-          {/* Portali Pubblici */}
-          <Route path="/guest/:id" element={<GuestPortal />} />
-          <Route path="/tenant/:id" element={<TenantPortal />} />
+      <AuthProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/auth" element={<Auth />} />
+            
+            {/* Portali Pubblici */}
+            <Route path="/guest/:id" element={<GuestPortal />} />
+            <Route path="/tenant/:id" element={<TenantPortal />} />
 
-          {/* DASHBOARD */}
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <div className="flex min-h-screen w-full bg-muted/40">
-                  {/* FIX: Aggiunte props obbligatorie */}
-                  <Sidebar activeTab="dashboard" setActiveTab={() => {}} />
-                  <main className="flex-1 overflow-y-auto">
-                    <Index />
-                  </main>
-                </div>
-              </ProtectedRoute>
-            }
-          />
+            {/* --- ROTTE PROTETTE --- */}
 
-          {/* PROPERTIES */}
-          <Route
-            path="/properties"
-            element={
-              <ProtectedRoute>
-                <div className="flex min-h-screen w-full bg-muted/40">
-                  <Sidebar activeTab="properties" setActiveTab={() => {}} />
-                  <main className="flex-1 overflow-y-auto">
-                    <Properties />
-                  </main>
-                </div>
-              </ProtectedRoute>
-            }
-          />
+            {/* 1. DASHBOARD: Nessun layout esterno, Index gestisce tutto */}
+            <Route 
+              path="/" 
+              element={
+                <ProtectedRoute>
+                  <Index />
+                </ProtectedRoute>
+              } 
+            />
 
-          {/* TENANTS */}
-          <Route
-            path="/tenants"
-            element={
-              <ProtectedRoute>
-                <div className="flex min-h-screen w-full bg-muted/40">
-                  <Sidebar activeTab="tenants" setActiveTab={() => {}} />
-                  <main className="flex-1 overflow-y-auto">
-                    <Tenants />
-                  </main>
-                </div>
-              </ProtectedRoute>
-            }
-          />
+            {/* 2. PROPRIETÀ: Layout con Sidebar funzionante */}
+            <Route
+              path="/properties"
+              element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen w-full bg-slate-50">
+                    <Sidebar activeTab="properties" setActiveTab={() => {}} />
+                    <main className="flex-1 overflow-y-auto">
+                      <Properties />
+                    </main>
+                  </div>
+                </ProtectedRoute>
+              }
+            />
 
-          {/* EXPENSES */}
-          <Route
-            path="/expenses"
-            element={
-              <ProtectedRoute>
-                <div className="flex min-h-screen w-full bg-muted/40">
-                  <Sidebar activeTab="expenses" setActiveTab={() => {}} />
-                  <main className="flex-1 overflow-y-auto">
-                    <Expenses />
-                  </main>
-                </div>
-              </ProtectedRoute>
-            }
-          />
+            {/* 3. INQUILINI */}
+            <Route
+              path="/tenants"
+              element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen w-full bg-slate-50">
+                    <Sidebar activeTab="tenants" setActiveTab={() => {}} />
+                    <main className="flex-1 overflow-y-auto">
+                      <Tenants />
+                    </main>
+                  </div>
+                </ProtectedRoute>
+              }
+            />
 
-          {/* MOBILE PROPERTIES (PARCO MEZZI) */}
-          <Route
-            path="/mobile-properties"
-            element={
-              <ProtectedRoute>
-                <div className="flex min-h-screen w-full bg-muted/40">
-                  <Sidebar activeTab="mobile-properties" setActiveTab={() => {}} />
-                  <main className="flex-1 overflow-y-auto p-4 md:p-6">
-                    <MobileProperties />
-                  </main>
-                </div>
-              </ProtectedRoute>
-            }
-          />
+            {/* 4. SPESE */}
+            <Route
+              path="/expenses"
+              element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen w-full bg-slate-50">
+                    <Sidebar activeTab="expenses" setActiveTab={() => {}} />
+                    <main className="flex-1 overflow-y-auto">
+                      <Expenses />
+                    </main>
+                  </div>
+                </ProtectedRoute>
+              }
+            />
 
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
+            {/* 5. PARCO MEZZI */}
+            <Route
+              path="/mobile-properties"
+              element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen w-full bg-slate-50">
+                    <Sidebar activeTab="mobile-properties" setActiveTab={() => {}} />
+                    <main className="flex-1 overflow-y-auto p-4 md:p-6">
+                      <MobileProperties />
+                    </main>
+                  </div>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>
 );
