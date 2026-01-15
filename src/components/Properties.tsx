@@ -24,23 +24,18 @@ const Properties = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'real' | 'mobile'>('all');
   
-  // --- STATI GESTIONE ---
-  const [detailsOpen, setDetailsOpen] = useState<any>(null); // SIDEBAR ANALYTICS & STORICO
-  const [docsOpen, setDocsOpen] = useState<any>(null); // ARCHIVIO DOCUMENTI IMMOBILE
-  const [editOpen, setEditOpen] = useState<any>(null); // MODIFICA PROPRIETÀ
+  const [detailsOpen, setDetailsOpen] = useState<any>(null);
+  const [docsOpen, setDocsOpen] = useState<any>(null);
+  const [editOpen, setEditOpen] = useState<any>(null);
   
-  // --- STATI ELIMINAZIONE SICURA ---
   const [deleteOpen, setDeleteOpen] = useState<any>(null); 
   const [deleteConfirmText, setDeleteConfirmText] = useState(''); 
 
-  // --- STATI FORM MODIFICA ---
   const [editFormData, setEditFormData] = useState({ nome: '', indirizzo: '', citta: '' });
   
-  // --- STATI SCHEDA CLIENTE ---
   const [selectedTenant, setSelectedTenant] = useState<any>(null); 
   const [managingTicket, setManagingTicket] = useState<any>(null); 
 
-  // --- NUOVI STATI PER SMART UPLOAD ---
   const [smartFile, setSmartFile] = useState<File | null>(null);
   const [isExpense, setIsExpense] = useState(false);
   const [smartData, setSmartData] = useState({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
@@ -91,7 +86,6 @@ const Properties = () => {
     onError: (err:any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // 1. QUERY STORICO INQUILINI
   const { data: propertyHistory } = useQuery({
     queryKey: ['property-history', detailsOpen?.id],
     queryFn: async () => {
@@ -102,23 +96,22 @@ const Properties = () => {
     enabled: !!detailsOpen
   });
 
-  // 2. QUERY DOCUMENTI ARCHIVIO (FIX RELAZIONE)
+  // QUERY DOCUMENTI
   const { data: allDocs } = useQuery({
     queryKey: ['property-docs-full', docsOpen?.id],
     queryFn: async () => {
       if (!docsOpen) return { struct: [], tenant: [], expense: [] };
       
-      // Documenti Strutturali (Senza Spesa collegata)
+      // 1. Documenti Strutturali (Senza Spesa)
       const { data: structDocs } = await supabase.from('documents')
         .select('*')
         .eq('property_real_id', docsOpen.id)
         .is('payment_id', null) 
         .order('uploaded_at', { ascending: false });
 
-      // Documenti Inquilini (Dai Booking)
+      // 2. Documenti Inquilini
       const { data: bookings } = await supabase.from('bookings').select('id').eq('property_id', docsOpen.id);
       const bookingIds = bookings?.map(b => b.id) || [];
-      
       let tenantDocs: any[] = [];
       if (bookingIds.length > 0) {
           const { data: tDocs } = await supabase.from('booking_documents')
@@ -126,23 +119,26 @@ const Properties = () => {
           tenantDocs = tDocs || [];
       }
 
-      // Documenti Spese (Con pagamento collegato)
-      // FIX: Query semplificata per evitare errori di nome foreign key
-      const { data: expenseDocs, error: expError } = await supabase.from('documents')
-        .select(`
-            *,
-            payments (*)
-        `)
+      // 3. Documenti Spese (Con pagamento)
+      const { data: expenseDocs } = await supabase.from('documents')
+        .select(`*, payments (*)`)
         .eq('property_real_id', docsOpen.id)
         .not('payment_id', 'is', null)
         .order('uploaded_at', { ascending: false });
-
-      if (expError) console.error("Err expense docs", expError);
 
       return { struct: structDocs || [], tenant: tenantDocs || [], expense: expenseDocs || [] };
     },
     enabled: !!docsOpen
   });
+
+  // Funzione helper per unire e ordinare tutto nella vista "Tutti"
+  const getCombinedDocs = () => {
+      if (!allDocs) return [];
+      // Unisce strutturali e spese
+      const combined = [...(allDocs.struct || []), ...(allDocs.expense || [])];
+      // Ordina dal più recente
+      return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  };
 
   const { data: tenantDetails } = useQuery({
     queryKey: ['tenant-details-full', selectedTenant?.id],
@@ -198,7 +194,7 @@ const Properties = () => {
               formato: fileExt,
               importo: isExpense ? parseFloat(smartData.amount) : null,
               data_riferimento: smartData.date,
-              payment_id: generatedExpenseId // FIX: Ora punta alla colonna corretta
+              payment_id: generatedExpenseId
           });
 
           if (docError) throw docError;
@@ -403,12 +399,23 @@ const Properties = () => {
                             <TabsTrigger value="all">Tutti</TabsTrigger>
                             <TabsTrigger value="spese">Spese</TabsTrigger>
                         </TabsList>
+                        
+                        {/* TAB TUTTI - ORA COMBINA I DOCUMENTI */}
                         <TabsContent value="all" className="space-y-2 mt-2">
-                            {allDocs?.struct.map((doc: any) => (
+                            {getCombinedDocs().map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50">
                                     <div className="flex items-center gap-3">
-                                        <FileText className="w-4 h-4 text-gray-400"/> 
-                                        <span className="text-sm font-medium truncate max-w-[200px]">{doc.nome}</span>
+                                        {/* Icona Diversa se Spesa o Doc */}
+                                        {doc.payment_id ? <Euro className="w-4 h-4 text-green-600"/> : <FileText className="w-4 h-4 text-gray-400"/>}
+                                        <div>
+                                            <span className="text-sm font-medium truncate max-w-[200px] block">{doc.nome}</span>
+                                            {/* Se è spesa, mostra importo */}
+                                            {doc.payments && (
+                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">
+                                                    € {doc.payments.importo} - {doc.payments.categoria}
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
                                     <div className="flex gap-1">
                                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-3 h-3"/></Button>
@@ -416,8 +423,10 @@ const Properties = () => {
                                     </div>
                                 </div>
                             ))}
-                            {allDocs?.struct.length === 0 && allDocs?.expense.length === 0 && <p className="text-gray-400 text-center text-sm mt-4">Nessun documento.</p>}
+                            {getCombinedDocs().length === 0 && <p className="text-gray-400 text-center text-sm mt-4">Nessun documento.</p>}
                         </TabsContent>
+
+                        {/* TAB SOLO SPESE */}
                         <TabsContent value="spese" className="space-y-2 mt-2">
                             {allDocs?.expense.map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50 border-l-4 border-l-green-500">
@@ -425,7 +434,10 @@ const Properties = () => {
                                         <div className="flex items-center gap-2"><Euro className="w-4 h-4 text-green-600"/><span className="text-sm font-bold">{doc.nome}</span></div>
                                         {doc.payments && <p className="text-xs text-gray-500 ml-6">€ {doc.payments.importo} ({doc.payments.categoria})</p>}
                                     </div>
-                                    <Button size="icon" variant="ghost" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Download className="w-4 h-4"/></Button>
+                                    <div className="flex gap-1">
+                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-3 h-3"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => deleteDoc.mutate(doc.id)}><Trash2 className="w-3 h-3"/></Button>
+                                    </div>
                                 </div>
                             ))}
                         </TabsContent>
