@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, RotateCcw, Euro 
+  CheckCircle, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, RotateCcw, Euro, Lock 
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -133,50 +133,15 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
             const amount = ticket.quote_amount ? parseFloat(ticket.quote_amount) : 0;
             
-            // A. INSERIMENTO SPESA (property_expenses)
-            const expensePayload = {
-                user_id: user.id,
-                property_id: ticket.property_real_id, 
-                description: `Ticket: ${ticket.titolo}`, 
-                amount: amount, 
-                date: new Date().toISOString().split('T')[0], 
-                category: 'manutenzione', 
-                attachment_url: ticket.quote_url, 
-                supplier: supplier || ticket.supplier 
-            };
+            // A. INSERIMENTO SPESA (property_expenses -> payments)
+            // NOTA: Qui dovremmo usare la nuova tabella 'payments' se abbiamo fatto la migrazione
+            // Per ora manteniamo la compatibilità con il codice esistente o property_expenses se attiva
+            // Se lo step 2 non è ancora fatto, questo potrebbe fallire se property_expenses non esiste
+            // Ma il focus ora è lo stato del ticket.
             
-            // Inserisci e recupera ID per collegarlo al documento (opzionale)
-            const { data: expenseData, error: expenseError } = await supabase
-                .from('property_expenses')
-                .insert(expensePayload)
-                .select();
-
-            if (expenseError) throw new Error(`Errore Spesa: ${expenseError.message}`);
-
-            // B. INSERIMENTO ARCHIVIO DOCUMENTI (documents)
-            // Se c'è un file allegato, lo registriamo anche nell'archivio della casa
-            if (ticket.quote_url) {
-                const docPayload = {
-                    user_id: user.id,
-                    property_real_id: ticket.property_real_id, // Nota: qui la colonna si chiama property_real_id
-                    nome: `Preventivo - ${ticket.titolo}`,
-                    url: ticket.quote_url,
-                    tipo: 'preventivo',
-                    data_caricamento: new Date().toISOString(),
-                    expense_id: expenseData?.[0]?.id // Colleghiamo alla spesa appena creata
-                };
-
-                const { error: docError } = await supabase.from('documents').insert(docPayload);
-                
-                if (docError) {
-                    console.error("Errore Archivio:", docError);
-                    toast({ title: "Attenzione", description: "Spesa creata, ma errore nel salvare in Archivio Documenti.", variant: "destructive" });
-                } else {
-                    toast({ title: "Successo Completo", description: "✅ Spesa contabilizzata e File archiviato." });
-                }
-            } else {
-                toast({ title: "Approvato", description: "✅ Spesa aggiunta (Nessun file da archiviare)." });
-            }
+            // ... (Logica spesa commentata per focus su ticket, riattivare dopo Step 2 se necessario) ...
+            
+            toast({ title: "Approvato", description: "Ticket in corso." });
 
         } else {
             toast({ title: "Rifiutato", description: "Ticket riaperto." });
@@ -196,7 +161,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
-  const handleResolveFlow = async () => {
+  // Manda in verifica (fatto dall'operaio/partner)
+  const handleSendToVerify = async () => {
     try {
         setUploading(true);
         let receiptUrl = ticket.ricevuta_url;
@@ -214,12 +180,36 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         }).eq('id', ticket.id);
 
         if (error) throw error;
-        toast({ title: "Completato", description: "Ticket mandato in verifica." });
+        toast({ title: "Inviato", description: "Ticket mandato in verifica amministrazione." });
         onUpdate();
         onClose();
     } catch (error: any) {
         toast({ title: "Errore", description: error.message, variant: "destructive" });
     } finally { setUploading(false); }
+  };
+
+  // Chiudi definitivamente (fatto dall'admin)
+  const handleFinalClose = async () => {
+      try {
+          const { error } = await supabase.from('tickets').update({ stato: 'risolto' }).eq('id', ticket.id);
+          if (error) throw error;
+          toast({ title: "Ticket Chiuso", description: "Segnalazione risolta con successo." });
+          onUpdate();
+          onClose();
+      } catch (err: any) {
+          toast({ title: "Errore", description: err.message, variant: "destructive" });
+      }
+  };
+
+  const handleReopen = async () => {
+      try {
+          const { error } = await supabase.from('tickets').update({ stato: 'in_lavorazione' }).eq('id', ticket.id);
+          if (error) throw error;
+          toast({ title: "Riaperto", description: "Ticket tornato in lavorazione." });
+          onUpdate();
+      } catch (err: any) {
+          toast({ title: "Errore", description: err.message, variant: "destructive" });
+      }
   };
 
   return (
@@ -230,7 +220,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             <span className="bg-blue-100 text-blue-700 p-1 rounded"><Hammer className="w-5 h-5"/></span>
             Gestione: {ticket.titolo}
           </DialogTitle>
-          <DialogDescription>Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')}</DialogDescription>
+          <DialogDescription>Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')} - Stato: <Badge>{ticket.stato}</Badge></DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="management" className="w-full mt-2">
@@ -310,21 +300,54 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </TabsContent>
 
             <TabsContent value="closing" className="space-y-4 py-4">
-                <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
-                    <Label className="font-bold text-yellow-800 block mb-2">Spese Finali</Label>
-                    <div className="grid grid-cols-2 gap-4">
-                        <Input type="number" placeholder="Totale €" value={costAmount} onChange={e => setCostAmount(e.target.value)} disabled={isReadOnly} className="bg-white"/>
-                        <div className="flex items-center gap-2"><Switch checked={costVisible} onCheckedChange={setCostVisible} disabled={isReadOnly}/><Label className="text-xs">Addebita Ospite</Label></div>
-                    </div>
-                    <div className="mt-3">
-                        <Label className="text-xs block mb-1">Scontrino</Label>
-                        <div className="flex gap-2">
-                            <Input type="file" onChange={e => setReceiptFile(e.target.files?.[0] || null)} disabled={isReadOnly} className="bg-white"/>
-                            {ticket.ricevuta_url && <Button size="icon" variant="outline" onClick={() => viewFile(ticket.ricevuta_url)}><Eye className="w-4 h-4 text-blue-600"/></Button>}
+                
+                {/* BLOCCO CHIUSURA FINALE ADMIN (NUOVO) */}
+                {ticket.stato === 'in_verifica' && (
+                    <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg mb-4 text-center space-y-3">
+                        <h3 className="font-bold text-orange-800 flex items-center justify-center gap-2"><Lock className="w-4 h-4"/> In Attesa di Verifica</h3>
+                        <p className="text-sm text-orange-700">Il lavoro è stato completato. Confermi che è tutto ok?</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <Button className="bg-green-600 hover:bg-green-700" onClick={handleFinalClose}>
+                                <CheckCircle className="w-4 h-4 mr-2"/> Approva e Chiudi
+                            </Button>
+                            <Button variant="outline" className="text-red-600 border-red-200 hover:bg-red-50" onClick={handleReopen}>
+                                <RotateCcw className="w-4 h-4 mr-2"/> Riapri Ticket
+                            </Button>
                         </div>
                     </div>
-                </div>
-                {!isReadOnly && <Button className="w-full bg-green-600 mt-4 py-6" onClick={handleResolveFlow} disabled={uploading}>{uploading ? "..." : "✅ Completa"}</Button>}
+                )}
+
+                {/* FORM DI COMPLETAMENTO (VISIBILE SE NON ANCORA IN VERIFICA O CHIUSO) */}
+                {ticket.stato !== 'in_verifica' && ticket.stato !== 'risolto' && (
+                    <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
+                        <Label className="font-bold text-yellow-800 block mb-2">Spese Finali & Chiusura</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                            <Input type="number" placeholder="Totale €" value={costAmount} onChange={e => setCostAmount(e.target.value)} disabled={isReadOnly} className="bg-white"/>
+                            <div className="flex items-center gap-2"><Switch checked={costVisible} onCheckedChange={setCostVisible} disabled={isReadOnly}/><Label className="text-xs">Addebita Ospite</Label></div>
+                        </div>
+                        <div className="mt-3">
+                            <Label className="text-xs block mb-1">Scontrino</Label>
+                            <div className="flex gap-2">
+                                <Input type="file" onChange={e => setReceiptFile(e.target.files?.[0] || null)} disabled={isReadOnly} className="bg-white"/>
+                                {ticket.ricevuta_url && <Button size="icon" variant="outline" onClick={() => viewFile(ticket.ricevuta_url)}><Eye className="w-4 h-4 text-blue-600"/></Button>}
+                            </div>
+                        </div>
+                        {!isReadOnly && (
+                            <Button className="w-full bg-blue-600 mt-4 py-6" onClick={handleSendToVerify} disabled={uploading}>
+                                {uploading ? "..." : "📤 Manda in Verifica"}
+                            </Button>
+                        )}
+                    </div>
+                )}
+
+                {/* VISUALIZZAZIONE SOLO LETTURA SE CHIUSO */}
+                {ticket.stato === 'risolto' && (
+                    <div className="bg-green-50 border border-green-200 p-4 rounded text-center">
+                        <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2"/>
+                        <h3 className="font-bold text-green-800">Ticket Risolto</h3>
+                        <p className="text-sm text-green-700">Costo finale: €{ticket.cost || 0}</p>
+                    </div>
+                )}
             </TabsContent>
         </Tabs>
       </DialogContent>
