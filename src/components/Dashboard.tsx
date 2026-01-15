@@ -20,7 +20,6 @@ interface DashboardProps {
   onNavigate: (tab: string) => void;
 }
 
-// Aggiunto 'activity' ai tipi
 type EventType = 'checkin' | 'checkout' | 'payment' | 'expense' | 'maintenance' | 'deadline' | 'activity';
 
 interface DashboardEvent {
@@ -57,8 +56,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         supabase.from('tickets').select('*, properties_real(nome)')
           .neq('stato', 'risolto'),
         supabase.from('properties_mobile').select('*').eq('status', 'active'),
-        
-        // NUOVO: Fetch Attività Generiche
         supabase.from('activities').select('*, properties_real(nome), properties_mobile(veicolo, targa)')
           .gte('data', rangeStart).lte('data', rangeEnd)
       ]);
@@ -69,7 +66,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         income: income.data || [],
         tickets: tickets.data || [],
         vehicles: vehicles.data || [],
-        activities: activities.data || [] // NUOVO
+        activities: activities.data || []
       };
     }
   });
@@ -121,10 +118,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       });
     });
 
-    // D. Ticket
+    // D. Ticket (FIX: USA DATA SCADENZA SE PRESENTE)
     rawData.tickets.forEach(t => {
+      const ticketDate = t.data_scadenza ? new Date(t.data_scadenza) : new Date(t.created_at);
+      
       events.push({
-        id: `tick-${t.id}`, date: new Date(t.created_at), type: 'maintenance',
+        id: `tick-${t.id}`, date: ticketDate, type: 'maintenance',
         title: `Ticket: ${t.titolo}`, subtitle: t.properties_real?.nome || 'Generale',
         priority: t.priorita === 'alta' ? 'alta' : 'media', status: t.stato, targetTab: 'activities',
         isCompleted: t.stato === 'risolto'
@@ -147,14 +146,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       });
     });
 
-    // F. Attività Generiche (NUOVO)
+    // F. Attività
     rawData.activities.forEach(a => {
         const target = a.properties_mobile ? `🚛 ${a.properties_mobile.veicolo}` : (a.properties_real?.nome ? `🏠 ${a.properties_real.nome}` : 'Generale');
         const actDate = new Date(a.data || a.created_at);
         events.push({
             id: `act-${a.id}`, date: actDate, type: 'activity',
             title: a.titolo || 'Attività', subtitle: `${target} - ${a.descrizione || ''}`,
-            priority: 'media', status: a.stato, targetTab: 'activities', // Assumiamo che ci sia una tab/pagina activities
+            priority: 'media', status: a.stato, targetTab: 'activities',
             isCompleted: a.stato === 'completato' || a.stato === 'svolto'
         });
     });
@@ -171,13 +170,12 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       (e.priority === 'alta' && isBefore(e.date, new Date()) && !e.isCompleted) ||
       (e.type === 'maintenance' && !e.isCompleted) ||
       (e.type === 'payment' && !e.isCompleted && isBefore(e.date, new Date())) ||
-      (e.type === 'activity' && !e.isCompleted && isBefore(e.date, new Date())) // Include attività scadute
+      (e.type === 'activity' && !e.isCompleted && isBefore(e.date, new Date()))
     );
 
     return { events, kpi, urgencies };
   }, [rawData]);
 
-  // FILTRI VISTE
   const dailyEvents = dashboardData.events
     .filter(e => selectedDate && isSameDay(e.date, selectedDate))
     .sort((a, b) => (a.priority === 'alta' ? -1 : 1));
@@ -186,17 +184,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     .filter(e => selectedDate && isSameMonth(e.date, selectedDate))
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
-  // Stili Calendario
   const modifiers = {
     hasCheckin: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'checkin' || e.type === 'payment')),
     hasExpense: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'expense' || e.type === 'checkout')),
-    hasActivity: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'activity'), // NUOVO COLORE
+    hasActivity: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'activity'),
     hasWarning: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'deadline' || e.type === 'maintenance')),
   };
   const modifiersStyles = {
     hasCheckin: { color: '#16a34a', fontWeight: 'bold' },
     hasExpense: { color: '#dc2626', fontWeight: 'bold' },
-    hasActivity: { color: '#6366f1', fontWeight: 'bold' }, // Viola per attività
+    hasActivity: { color: '#6366f1', fontWeight: 'bold' },
     hasWarning: { textDecoration: 'underline', textDecorationColor: '#f59e0b' }
   };
 

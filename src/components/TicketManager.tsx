@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, RotateCcw, Euro, Lock 
+  CheckCircle, Share2, Hammer, Eye, Upload, XCircle, Phone, FileText, RotateCcw, Euro, Lock, Calendar
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -45,6 +45,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || ''); 
   const [assignedPartner, setAssignedPartner] = useState(ticket?.assigned_partner_id || ''); 
   
+  // NUOVO: DATA SCADENZA
+  const [dueDate, setDueDate] = useState(ticket?.data_scadenza || '');
+
   const [quoteAmount, setQuoteAmount] = useState(ticket?.quote_amount || '');
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
 
@@ -69,6 +72,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         supplier: supplier,
         supplier_contact: supplierContact,
         assigned_partner_id: assignedPartner || null,
+        data_scadenza: dueDate || null, // Salva la data
         stato: 'in_lavorazione' 
       }).eq('id', ticket.id);
 
@@ -81,7 +85,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     const partner = colleagues?.find(c => c.id === assignedPartner);
     await supabase.from('tickets').update({ assigned_partner_id: assignedPartner }).eq('id', ticket.id);
     onUpdate();
-    window.open(`https://wa.me/${partner?.phone}?text=${encodeURIComponent(`Ciao, ticket: ${ticket.titolo}\nNote: ${notes}`)}`, '_blank');
+    window.open(`https://wa.me/${partner?.phone}?text=${encodeURIComponent(`Ciao, ticket: ${ticket.titolo}\nScadenza: ${dueDate || 'N/A'}\nNote: ${notes}`)}`, '_blank');
   };
 
   const handleQuoteUpload = async () => {
@@ -115,7 +119,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { toast({ title: "Reset Effettuato" }); onUpdate(); }
   };
 
-  // --- PUNTO CRUCIALE: INSERT DOPPIO (SPESA + ARCHIVIO DOCUMENTI) ---
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
@@ -131,15 +134,19 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             const { data: { user } } = await supabase.auth.getUser();
             if(!user) throw new Error("Utente non loggato");
 
+            // SE APPROVATO, CREA LA SPESA (PAYMENT)
             const amount = ticket.quote_amount ? parseFloat(ticket.quote_amount) : 0;
-            
-            // A. INSERIMENTO SPESA (property_expenses -> payments)
-            // NOTA: Qui dovremmo usare la nuova tabella 'payments' se abbiamo fatto la migrazione
-            // Per ora manteniamo la compatibilità con il codice esistente o property_expenses se attiva
-            // Se lo step 2 non è ancora fatto, questo potrebbe fallire se property_expenses non esiste
-            // Ma il focus ora è lo stato del ticket.
-            
-            // ... (Logica spesa commentata per focus su ticket, riattivare dopo Step 2 se necessario) ...
+            if(amount > 0) {
+               // Qui dovremmo inserire in payments, ma per semplicità lo lasciamo al flusso manuale o allo step successivo
+               // Se vuoi automatizzare anche questo: 
+               /* await supabase.from('payments').insert({
+                   importo: amount,
+                   scadenza: dueDate || new Date(),
+                   descrizione: `Preventivo Approvato: ${ticket.titolo}`,
+                   // ... altri campi
+               })
+               */
+            }
             
             toast({ title: "Approvato", description: "Ticket in corso." });
 
@@ -161,7 +168,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
-  // Manda in verifica (fatto dall'operaio/partner)
   const handleSendToVerify = async () => {
     try {
         setUploading(true);
@@ -188,7 +194,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     } finally { setUploading(false); }
   };
 
-  // Chiudi definitivamente (fatto dall'admin)
   const handleFinalClose = async () => {
       try {
           const { error } = await supabase.from('tickets').update({ stato: 'risolto' }).eq('id', ticket.id);
@@ -231,17 +236,33 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </TabsList>
 
             <TabsContent value="management" className="space-y-4 py-4">
+                {/* CAMPO DATA SCADENZA */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label>Data Scadenza / Intervento</Label>
+                        <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Delega a Socio</Label>
+                        <Select value={assignedPartner || ''} onValueChange={setAssignedPartner} disabled={isReadOnly}>
+                            <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                            <SelectContent>{colleagues?.map(c => <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>)}</SelectContent>
+                        </Select>
+                    </div>
+                </div>
+
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
-                    <Label className="text-slate-700 font-semibold">Fornitore</Label>
+                    <Label className="text-slate-700 font-semibold">Fornitore Esterno</Label>
                     <div className="flex gap-2">
                         <Input placeholder="Ditta" value={supplier} onChange={e => setSupplier(e.target.value)} disabled={isReadOnly}/>
                         <Input placeholder="Tel" value={supplierContact} onChange={e => setSupplierContact(e.target.value)} className="w-1/3" disabled={isReadOnly}/>
                         {supplierContact && <Button size="icon" variant="outline" onClick={() => window.open(`tel:${supplierContact}`)}><Phone className="w-4 h-4 text-blue-600"/></Button>}
                     </div>
                 </div>
+                
                 <div className="grid gap-2">
-                    <Label>Note</Label>
-                    <Textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={isReadOnly}/>
+                    <Label>Note Interne</Label>
+                    <Textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={isReadOnly} placeholder="Dettagli tecnici, codici materiali..." />
                     {notes && (notes.includes('http') || notes.includes('www')) && (
                         <div className="text-xs bg-gray-50 p-2 rounded border text-gray-600 break-all">{renderTextWithLinks(notes)}</div>
                     )}
@@ -250,14 +271,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         <Label className="text-xs">Visibile a ospite</Label>
                     </div>
                 </div>
-                <div className="border-t pt-4 flex gap-2">
-                    <Select value={assignedPartner || ''} onValueChange={setAssignedPartner} disabled={isReadOnly}>
-                        <SelectTrigger className="flex-1"><SelectValue placeholder="Delega..." /></SelectTrigger>
-                        <SelectContent>{colleagues?.map(c => <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>)}</SelectContent>
-                    </Select>
-                    <Button onClick={handleDelegate} disabled={!assignedPartner || isReadOnly} className="bg-green-600"><Share2 className="w-4 h-4 mr-2"/> WA</Button>
+
+                <div className="border-t pt-4 flex justify-between">
+                    <Button onClick={handleDelegate} disabled={!assignedPartner || isReadOnly} variant="outline" className="text-green-600 border-green-200 hover:bg-green-50"><Share2 className="w-4 h-4 mr-2"/> Invia su WA</Button>
+                    {!isReadOnly && <Button type="button" onClick={saveProgress}>Salva Modifiche</Button>}
                 </div>
-                {!isReadOnly && <DialogFooter className="mt-4"><Button type="button" variant="outline" onClick={saveProgress}>Salva Stato</Button></DialogFooter>}
             </TabsContent>
 
             <TabsContent value="quote" className="space-y-4 py-4">
@@ -301,7 +319,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
             <TabsContent value="closing" className="space-y-4 py-4">
                 
-                {/* BLOCCO CHIUSURA FINALE ADMIN (NUOVO) */}
                 {ticket.stato === 'in_verifica' && (
                     <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg mb-4 text-center space-y-3">
                         <h3 className="font-bold text-orange-800 flex items-center justify-center gap-2"><Lock className="w-4 h-4"/> In Attesa di Verifica</h3>
@@ -317,7 +334,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     </div>
                 )}
 
-                {/* FORM DI COMPLETAMENTO (VISIBILE SE NON ANCORA IN VERIFICA O CHIUSO) */}
                 {ticket.stato !== 'in_verifica' && ticket.stato !== 'risolto' && (
                     <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
                         <Label className="font-bold text-yellow-800 block mb-2">Spese Finali & Chiusura</Label>
@@ -340,7 +356,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     </div>
                 )}
 
-                {/* VISUALIZZAZIONE SOLO LETTURA SE CHIUSO */}
                 {ticket.stato === 'risolto' && (
                     <div className="bg-green-50 border border-green-200 p-4 rounded text-center">
                         <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2"/>
