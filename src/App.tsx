@@ -5,9 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
+import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
-import Sidebar from "./components/Sidebar";
 
 // Pagine e Componenti
 import Dashboard from "./components/Dashboard";
@@ -33,114 +33,40 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
-      <BrowserRouter> {/* 1. ROUTER SPOSTATO IN ALTO */}
-        <AuthProvider> {/* 2. AUTH PROVIDER ORA È DENTRO IL ROUTER */}
+      
+      {/* 1. ROUTER È IL CONTENITORE ESTERNO */}
+      <BrowserRouter>
+        
+        {/* 2. AUTH PROVIDER DENTRO IL ROUTER */}
+        <AuthProvider>
           <Routes>
             <Route path="/auth" element={<Auth />} />
             
-            {/* Portali Pubblici */}
             <Route path="/guest/:id" element={<GuestPortal />} />
             <Route path="/tenant/:id" element={<TenantPortal />} />
 
-            {/* --- ROTTE PROTETTE --- */}
-
-            {/* 1. DASHBOARD (Layout standardizzato) */}
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <div className="flex min-h-screen w-full bg-slate-50">
-                    <Sidebar activeTab="dashboard" setActiveTab={() => {}} />
-                    <main className="flex-1 overflow-y-auto p-4 md:p-6">
-                      {/* Passiamo una funzione di navigazione fittizia o reale al Dashboard */}
-                      <DashboardWrapper />
-                    </main>
-                  </div>
-                </ProtectedRoute>
-              } 
-            />
-
-            {/* 2. GESTIONE PROPRIETÀ */}
+            {/* 3. LAYOUT PRINCIPALE GESTITO DA INDEX */}
             <Route
-              path="/properties"
+              path="/"
               element={
                 <ProtectedRoute>
-                  <div className="flex min-h-screen w-full bg-slate-50">
-                    <Sidebar activeTab="properties" setActiveTab={() => {}} />
-                    <main className="flex-1 overflow-y-auto">
-                      <Properties />
-                    </main>
-                  </div>
+                  <Index />
                 </ProtectedRoute>
               }
-            />
-
-            {/* 3. INQUILINI */}
-            <Route
-              path="/tenants"
-              element={
-                <ProtectedRoute>
-                  <div className="flex min-h-screen w-full bg-slate-50">
-                    <Sidebar activeTab="tenants" setActiveTab={() => {}} />
-                    <main className="flex-1 overflow-y-auto">
-                      <Tenants />
-                    </main>
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* 4. TICKET & GUASTI */}
-            <Route
-              path="/tickets"
-              element={
-                <ProtectedRoute>
-                  <div className="flex min-h-screen w-full bg-slate-50">
-                    <Sidebar activeTab="tickets" setActiveTab={() => {}} />
-                    <main className="flex-1 overflow-y-auto">
-                      <Tickets />
-                    </main>
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* 5. SPESE */}
-            <Route
-              path="/expenses"
-              element={
-                <ProtectedRoute>
-                  <div className="flex min-h-screen w-full bg-slate-50">
-                    <Sidebar activeTab="expenses" setActiveTab={() => {}} />
-                    <main className="flex-1 overflow-y-auto">
-                      <Expenses />
-                    </main>
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* 6. PARCO MEZZI */}
-            <Route
-              path="/mobile-properties"
-              element={
-                <ProtectedRoute>
-                  <div className="flex min-h-screen w-full bg-slate-50">
-                    <Sidebar activeTab="mobile-properties" setActiveTab={() => {}} />
-                    <main className="flex-1 overflow-y-auto p-4 md:p-6">
-                      <MobileProperties />
-                    </main>
-                  </div>
-                </ProtectedRoute>
-              }
-            />
-
-            {/* ALTRE PAGINE */}
-            <Route path="/revenue" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="revenue" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Revenue /></main></div></ProtectedRoute>} />
-            <Route path="/activities" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="activities" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Activities /></main></div></ProtectedRoute>} />
-            <Route path="/team" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="team" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Team /></main></div></ProtectedRoute>} />
-            <Route path="/services" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="services" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Services /></main></div></ProtectedRoute>} />
-            <Route path="/bookings" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="bookings" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Bookings /></main></div></ProtectedRoute>} />
+            >
+              {/* 4. LE PAGINE VENGONO CARICATE DENTRO INDEX (OUTLET) */}
+              <Route index element={<DashboardWrapper />} />
+              <Route path="properties" element={<Properties />} />
+              <Route path="mobile-properties" element={<MobileProperties />} />
+              <Route path="tickets" element={<Tickets />} />
+              <Route path="tenants" element={<Tenants />} />
+              <Route path="expenses" element={<Expenses />} />
+              <Route path="revenue" element={<Revenue />} />
+              <Route path="bookings" element={<Bookings />} />
+              <Route path="activities" element={<Activities />} />
+              <Route path="team" element={<Team />} />
+              <Route path="services" element={<Services />} />
+            </Route>
 
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -150,7 +76,7 @@ const App = () => (
   </QueryClientProvider>
 );
 
-// Wrapper helper per collegare la navigazione della Dashboard
+// Helper per passare la navigazione alla Dashboard
 function DashboardWrapper() {
   const navigate = useNavigate();
   return <Dashboard onNavigate={(path) => navigate(`/${path}`)} />;
