@@ -30,17 +30,17 @@ const Properties = () => {
   const [editOpen, setEditOpen] = useState<any>(null); // MODIFICA PROPRIETÀ
   
   // --- STATI ELIMINAZIONE SICURA ---
-  const [deleteOpen, setDeleteOpen] = useState<any>(null); // PROPRIETÀ DA ELIMINARE
-  const [deleteConfirmText, setDeleteConfirmText] = useState(''); // TESTO DI CONFERMA UTENTE
+  const [deleteOpen, setDeleteOpen] = useState<any>(null); 
+  const [deleteConfirmText, setDeleteConfirmText] = useState(''); 
 
   // --- STATI FORM MODIFICA ---
   const [editFormData, setEditFormData] = useState({ nome: '', indirizzo: '', citta: '' });
   
-  // --- STATI SCHEDA CLIENTE (DENTRO ANALYTICS) ---
-  const [selectedTenant, setSelectedTenant] = useState<any>(null); // APRE IL DIALOG CLIENTE
-  const [managingTicket, setManagingTicket] = useState<any>(null); // APRE TICKET MANAGER
+  // --- STATI SCHEDA CLIENTE ---
+  const [selectedTenant, setSelectedTenant] = useState<any>(null); 
+  const [managingTicket, setManagingTicket] = useState<any>(null); 
 
-  // --- NUOVI STATI PER SMART UPLOAD (STEP 4) ---
+  // --- NUOVI STATI PER SMART UPLOAD ---
   const [smartFile, setSmartFile] = useState<File | null>(null);
   const [isExpense, setIsExpense] = useState(false);
   const [smartData, setSmartData] = useState({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
@@ -51,7 +51,6 @@ const Properties = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
-  // POPOLA IL FORM QUANDO SI APRE "MODIFICA"
   useEffect(() => {
     if (editOpen) {
       setEditFormData({
@@ -62,7 +61,6 @@ const Properties = () => {
     }
   }, [editOpen]);
 
-  // --- MUTATIONS PER PROPRIETÀ (Modifica & Elimina) ---
   const updateProperty = useMutation({
     mutationFn: async () => {
       if (!editOpen) return;
@@ -104,15 +102,20 @@ const Properties = () => {
     enabled: !!detailsOpen
   });
 
-  // 2. QUERY DOCUMENTI ARCHIVIO (Divisi in 3 tab)
+  // 2. QUERY DOCUMENTI ARCHIVIO (FIX RELAZIONE)
   const { data: allDocs } = useQuery({
     queryKey: ['property-docs-full', docsOpen?.id],
     queryFn: async () => {
       if (!docsOpen) return { struct: [], tenant: [], expense: [] };
       
+      // Documenti Strutturali (Senza Spesa collegata)
       const { data: structDocs } = await supabase.from('documents')
-        .select('*').eq('property_real_id', docsOpen.id).is('generated_expense_id', null).order('uploaded_at', { ascending: false });
+        .select('*')
+        .eq('property_real_id', docsOpen.id)
+        .is('payment_id', null) 
+        .order('uploaded_at', { ascending: false });
 
+      // Documenti Inquilini (Dai Booking)
       const { data: bookings } = await supabase.from('bookings').select('id').eq('property_id', docsOpen.id);
       const bookingIds = bookings?.map(b => b.id) || [];
       
@@ -123,16 +126,24 @@ const Properties = () => {
           tenantDocs = tDocs || [];
       }
 
-      // Qui usiamo la nuova colonna 'generated_expense_id' o 'payment_id'
-      const { data: expenseDocs } = await supabase.from('documents')
-        .select('*, payments!documents_payment_id_fkey(importo, categoria)').eq('property_real_id', docsOpen.id).not('payment_id', 'is', null).order('uploaded_at', { ascending: false });
+      // Documenti Spese (Con pagamento collegato)
+      // FIX: Query semplificata per evitare errori di nome foreign key
+      const { data: expenseDocs, error: expError } = await supabase.from('documents')
+        .select(`
+            *,
+            payments (*)
+        `)
+        .eq('property_real_id', docsOpen.id)
+        .not('payment_id', 'is', null)
+        .order('uploaded_at', { ascending: false });
+
+      if (expError) console.error("Err expense docs", expError);
 
       return { struct: structDocs || [], tenant: tenantDocs || [], expense: expenseDocs || [] };
     },
     enabled: !!docsOpen
   });
 
-  // 3. QUERY DETTAGLI CLIENTE
   const { data: tenantDetails } = useQuery({
     queryKey: ['tenant-details-full', selectedTenant?.id],
     queryFn: async () => {
@@ -147,27 +158,25 @@ const Properties = () => {
     enabled: !!selectedTenant
   });
 
-  // --- NUOVA MUTATION SMART UPLOAD (STEP 4) ---
   const handleSmartUpload = async () => {
       if (!docsOpen || !smartFile) return;
       setUploading(true);
       try {
           const { data: { user } } = await supabase.auth.getUser();
           
-          // 1. Upload File
           const fileExt = smartFile.name.split('.').pop();
           const fileName = `prop_${docsOpen.id}_${Date.now()}.${fileExt}`;
+          
           const { error: upError } = await supabase.storage.from('documents').upload(fileName, smartFile);
           if (upError) throw upError;
 
           let generatedExpenseId = null;
 
-          // 2. Crea Spesa (Se richiesto)
           if (isExpense && smartData.amount) {
               const { data: expenseData, error: expError } = await supabase.from('payments').insert({
                   user_id: user?.id,
                   property_real_id: docsOpen.id,
-                  categoria: 'manutenzione', // Default modificabile
+                  categoria: 'manutenzione', 
                   importo: parseFloat(smartData.amount),
                   importo_originale: parseFloat(smartData.amount),
                   descrizione: smartData.description || `Spesa da Doc: ${smartFile.name}`,
@@ -180,7 +189,6 @@ const Properties = () => {
               generatedExpenseId = expenseData.id;
           }
 
-          // 3. Crea Documento
           const { error: docError } = await supabase.from('documents').insert({
               user_id: user?.id,
               property_real_id: docsOpen.id,
@@ -190,14 +198,13 @@ const Properties = () => {
               formato: fileExt,
               importo: isExpense ? parseFloat(smartData.amount) : null,
               data_riferimento: smartData.date,
-              payment_id: generatedExpenseId // Collegamento
+              payment_id: generatedExpenseId // FIX: Ora punta alla colonna corretta
           });
 
           if (docError) throw docError;
 
           toast({ title: "Caricamento completato", description: isExpense ? "Spesa registrata!" : "Archiviato." });
           
-          // Reset
           setSmartFile(null);
           setIsExpense(false);
           setSmartData({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
@@ -232,7 +239,6 @@ const Properties = () => {
         <AddPropertyDialog><Button className="bg-blue-600">Aggiungi Proprietà</Button></AddPropertyDialog>
       </div>
 
-      {/* GRID PROPRIETÀ */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPropertiesReal.map(prop => (
             <Card key={prop.id} className="group hover:shadow-lg transition-all relative">
@@ -242,7 +248,6 @@ const Properties = () => {
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-300"><Home className="w-12 h-12"/></div>
                     )}
-                    {/* OVERLAY AZIONI RAPIDE */}
                     <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Button size="icon" variant="secondary" className="h-8 w-8 bg-white/90" onClick={() => setEditOpen(prop)}>
                             <Pencil className="w-4 h-4 text-blue-600" />
@@ -269,7 +274,6 @@ const Properties = () => {
         ))}
       </div>
 
-      {/* --- MODALE MODIFICA --- */}
       <Dialog open={!!editOpen} onOpenChange={() => setEditOpen(null)}>
         <DialogContent>
             <DialogHeader><DialogTitle>Modifica Profilo</DialogTitle></DialogHeader>
@@ -285,7 +289,6 @@ const Properties = () => {
         </DialogContent>
       </Dialog>
 
-      {/* --- ALERT ELIMINAZIONE --- */}
       <AlertDialog open={!!deleteOpen} onOpenChange={() => setDeleteOpen(null)}>
         <AlertDialogContent>
             <AlertDialogHeader>
@@ -302,7 +305,6 @@ const Properties = () => {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* --- SIDEBAR ANALYTICS (Invariato) --- */}
       <Sheet open={!!detailsOpen} onOpenChange={() => setDetailsOpen(null)}>
         <SheetContent className="sm:max-w-md overflow-y-auto">
             <SheetHeader className="mb-6">
@@ -323,7 +325,6 @@ const Properties = () => {
         </SheetContent>
       </Sheet>
 
-      {/* --- DIALOG SCHEDA CLIENTE (Invariato) --- */}
       <Dialog open={!!selectedTenant} onOpenChange={(open) => !open && setSelectedTenant(null)}>
         <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0">
             <div className="p-6 border-b bg-slate-50"><DialogTitle>{selectedTenant?.nome_ospite}</DialogTitle></div>
@@ -352,14 +353,12 @@ const Properties = () => {
         </DialogContent>
       </Dialog>
 
-      {/* --- 3. DIALOG ARCHIVIO DOCUMENTI SMART (MIGLIORATO STEP 4) --- */}
       <Dialog open={!!docsOpen} onOpenChange={() => setDocsOpen(null)}>
         <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><FolderOpen className="w-5 h-5 text-blue-600"/> Archivio: {docsOpen?.nome}</DialogTitle></DialogHeader>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden mt-2">
                 
-                {/* COLONNA SX: UPLOAD SMART */}
                 <div className="bg-slate-50 p-4 rounded-lg border flex flex-col gap-4 overflow-y-auto">
                     <h4 className="font-bold flex items-center gap-2 text-sm uppercase text-slate-500">Carica Nuovo</h4>
                     <div className="space-y-2">
@@ -398,7 +397,6 @@ const Properties = () => {
                     )}
                 </div>
 
-                {/* COLONNA DX: LISTA DOCUMENTI TABBED */}
                 <div className="md:col-span-2 overflow-y-auto">
                     <Tabs defaultValue="all" className="w-full">
                         <TabsList className="w-full justify-start">
@@ -418,6 +416,7 @@ const Properties = () => {
                                     </div>
                                 </div>
                             ))}
+                            {allDocs?.struct.length === 0 && allDocs?.expense.length === 0 && <p className="text-gray-400 text-center text-sm mt-4">Nessun documento.</p>}
                         </TabsContent>
                         <TabsContent value="spese" className="space-y-2 mt-2">
                             {allDocs?.expense.map((doc: any) => (
@@ -436,7 +435,6 @@ const Properties = () => {
         </DialogContent>
       </Dialog>
 
-      {/* --- GESTORE TICKET --- */}
       {managingTicket && (
         <TicketManager 
             ticket={managingTicket} 
