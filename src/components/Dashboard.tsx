@@ -8,11 +8,10 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
 import { 
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, 
   Calendar as CalendarIcon, ArrowRight, MapPin, User, Wrench, 
-  Wallet, LogOut, Bell, Truck, Check, Circle, ExternalLink
+  Wallet, LogOut, Bell, Truck, Circle, ExternalLink, ClipboardList
 } from 'lucide-react';
 import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -21,7 +20,8 @@ interface DashboardProps {
   onNavigate: (tab: string) => void;
 }
 
-type EventType = 'checkin' | 'checkout' | 'payment' | 'expense' | 'maintenance' | 'deadline';
+// Aggiunto 'activity' ai tipi
+type EventType = 'checkin' | 'checkout' | 'payment' | 'expense' | 'maintenance' | 'deadline' | 'activity';
 
 interface DashboardEvent {
   id: string;
@@ -33,12 +33,12 @@ interface DashboardEvent {
   priority: 'alta' | 'media' | 'bassa';
   status: string;
   targetTab: string;
-  isCompleted: boolean; // Nuovo campo per lo stato visivo
+  isCompleted: boolean;
 }
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false); // Stato per il popup notifiche
+  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false);
   
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
@@ -47,7 +47,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const { data: rawData } = useQuery({
     queryKey: ['dashboard-full-data'],
     queryFn: async () => {
-      const [bookings, expenses, income, tickets, vehicles] = await Promise.all([
+      const [bookings, expenses, income, tickets, vehicles, activities] = await Promise.all([
         supabase.from('bookings').select('id, data_inizio, data_fine, nome_ospite, properties_real(nome)')
           .or(`data_inizio.gte.${rangeStart},data_fine.lte.${rangeEnd}`),
         supabase.from('payments').select('*, properties_real(nome), properties_mobile(veicolo, targa)')
@@ -56,7 +56,11 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           .gte('data_scadenza', rangeStart).lte('data_scadenza', rangeEnd),
         supabase.from('tickets').select('*, properties_real(nome)')
           .neq('stato', 'risolto'),
-        supabase.from('properties_mobile').select('*').eq('status', 'active')
+        supabase.from('properties_mobile').select('*').eq('status', 'active'),
+        
+        // NUOVO: Fetch Attività Generiche
+        supabase.from('activities').select('*, properties_real(nome), properties_mobile(veicolo, targa)')
+          .gte('data', rangeStart).lte('data', rangeEnd)
       ]);
 
       return {
@@ -64,7 +68,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         expenses: expenses.data || [],
         income: income.data || [],
         tickets: tickets.data || [],
-        vehicles: vehicles.data || []
+        vehicles: vehicles.data || [],
+        activities: activities.data || [] // NUOVO
       };
     }
   });
@@ -75,8 +80,6 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     const events: DashboardEvent[] = [];
     const today = new Date();
-
-    // Helper per determinare se completato
     const isPast = (date: Date) => isBefore(date, new Date());
 
     // A. Booking
@@ -144,6 +147,18 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       });
     });
 
+    // F. Attività Generiche (NUOVO)
+    rawData.activities.forEach(a => {
+        const target = a.properties_mobile ? `🚛 ${a.properties_mobile.veicolo}` : (a.properties_real?.nome ? `🏠 ${a.properties_real.nome}` : 'Generale');
+        const actDate = new Date(a.data || a.created_at);
+        events.push({
+            id: `act-${a.id}`, date: actDate, type: 'activity',
+            title: a.titolo || 'Attività', subtitle: `${target} - ${a.descrizione || ''}`,
+            priority: 'media', status: a.stato, targetTab: 'activities', // Assumiamo che ci sia una tab/pagina activities
+            isCompleted: a.stato === 'completato' || a.stato === 'svolto'
+        });
+    });
+
     // KPI
     const kpi = {
       incassato: rawData.income.filter(i => i.stato === 'pagato').reduce((acc, c) => acc + Number(c.importo), 0),
@@ -155,7 +170,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     const urgencies = events.filter(e => 
       (e.priority === 'alta' && isBefore(e.date, new Date()) && !e.isCompleted) ||
       (e.type === 'maintenance' && !e.isCompleted) ||
-      (e.type === 'payment' && !e.isCompleted && isBefore(e.date, new Date()))
+      (e.type === 'payment' && !e.isCompleted && isBefore(e.date, new Date())) ||
+      (e.type === 'activity' && !e.isCompleted && isBefore(e.date, new Date())) // Include attività scadute
     );
 
     return { events, kpi, urgencies };
@@ -174,11 +190,13 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const modifiers = {
     hasCheckin: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'checkin' || e.type === 'payment')),
     hasExpense: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'expense' || e.type === 'checkout')),
+    hasActivity: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'activity'), // NUOVO COLORE
     hasWarning: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'deadline' || e.type === 'maintenance')),
   };
   const modifiersStyles = {
     hasCheckin: { color: '#16a34a', fontWeight: 'bold' },
     hasExpense: { color: '#dc2626', fontWeight: 'bold' },
+    hasActivity: { color: '#6366f1', fontWeight: 'bold' }, // Viola per attività
     hasWarning: { textDecoration: 'underline', textDecorationColor: '#f59e0b' }
   };
 
@@ -218,7 +236,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </Card>
       </div>
 
-      {/* ALERT URGENZE (CON PULSANTE VEDI TUTTI) */}
+      {/* ALERT URGENZE */}
       {dashboardData.urgencies.length > 0 && (
         <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900">
           <AlertTriangle className="h-5 w-5" />
@@ -240,10 +258,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </Alert>
       )}
 
-      {/* LAYOUT AGENDA DIVISA: GIORNO vs MESE */}
+      {/* LAYOUT AGENDA */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[600px]">
         
-        {/* COLONNA SX: AGENDA DEL GIORNO */}
+        {/* SX: GIORNO */}
         <Card className="flex flex-col shadow-md border-l-4 border-l-blue-500">
             <CardHeader className="bg-slate-50 border-b py-4">
                 <CardTitle className="flex items-center gap-2 text-xl">
@@ -283,7 +301,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
             </ScrollArea>
         </Card>
 
-        {/* COLONNA DX: AGENDA MESE (CALENDARIO + LISTA) */}
+        {/* DX: MESE */}
         <Card className="flex flex-col shadow-md">
             <div className="p-4 flex justify-center bg-white border-b">
                 <Calendar
@@ -365,6 +383,7 @@ function getIcon(type: EventType) {
         case 'expense': return <TrendingDown className="w-5 h-5" />;
         case 'maintenance': return <Wrench className="w-5 h-5" />;
         case 'deadline': return <Truck className="w-5 h-5" />;
+        case 'activity': return <ClipboardList className="w-5 h-5" />;
         default: return <Bell className="w-5 h-5" />;
     }
 }
