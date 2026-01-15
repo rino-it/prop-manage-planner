@@ -15,10 +15,17 @@ import Properties from "./components/Properties";
 import Tenants from "./components/TenantManager";
 import Expenses from "./pages/Expenses";
 import MobileProperties from "./pages/MobileProperties";
+import Tickets from "./pages/Tickets"; // <--- NUOVO IMPORT
 
 // Portali
 import GuestPortal from "./pages/GuestPortal";
 import TenantPortal from "./pages/TenantPortal";
+import Team from "./components/Team";
+import Services from "./components/Services";
+import Activities from "./components/Activities";
+import Revenue from "./components/Revenue";
+import Bookings from "./components/Bookings";
+import Dashboard from "./components/Dashboard";
 
 const queryClient = new QueryClient();
 
@@ -38,17 +45,13 @@ const App = () => (
 
             {/* --- ROTTE PROTETTE --- */}
 
-            {/* 1. DASHBOARD: Nessun layout esterno, Index gestisce tutto */}
-            <Route 
-              path="/" 
-              element={
-                <ProtectedRoute>
-                  <Index />
-                </ProtectedRoute>
-              } 
-            />
+            {/* 1. DASHBOARD */}
+            <Route path="/" element={<Index />}>
+               <Route index element={<Dashboard onNavigate={(tab) => console.log(tab)} />} />
+               {/* Altre rotte interne a Index se necessario */}
+            </Route>
 
-            {/* 2. PROPRIETÀ: Layout con Sidebar funzionante */}
+            {/* 2. GESTIONE PROPRIETÀ */}
             <Route
               path="/properties"
               element={
@@ -78,7 +81,22 @@ const App = () => (
               }
             />
 
-            {/* 4. SPESE */}
+            {/* 4. NUOVA ROTTA: TICKET & GUASTI */}
+            <Route
+              path="/tickets"
+              element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen w-full bg-slate-50">
+                    <Sidebar activeTab="tickets" setActiveTab={() => {}} />
+                    <main className="flex-1 overflow-y-auto">
+                      <Tickets />
+                    </main>
+                  </div>
+                </ProtectedRoute>
+              }
+            />
+
+            {/* 5. SPESE */}
             <Route
               path="/expenses"
               element={
@@ -93,7 +111,7 @@ const App = () => (
               }
             />
 
-            {/* 5. PARCO MEZZI */}
+            {/* 6. PARCO MEZZI */}
             <Route
               path="/mobile-properties"
               element={
@@ -107,6 +125,13 @@ const App = () => (
                 </ProtectedRoute>
               }
             />
+
+            {/* ALTRE PAGINE (Standardizzate col Layout) */}
+            <Route path="/revenue" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="revenue" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Revenue /></main></div></ProtectedRoute>} />
+            <Route path="/activities" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="activities" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Activities /></main></div></ProtectedRoute>} />
+            <Route path="/team" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="team" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Team /></main></div></ProtectedRoute>} />
+            <Route path="/services" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="services" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Services /></main></div></ProtectedRoute>} />
+            <Route path="/bookings" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="bookings" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Bookings /></main></div></ProtectedRoute>} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>
