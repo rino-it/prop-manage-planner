@@ -1,27 +1,33 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Truck, Plus, Trash2, Pencil } from 'lucide-react'; // Aggiunto Pencil
+import { Truck, Plus, Trash2, Pencil, Calendar, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isBefore, addDays } from 'date-fns';
 
 export default function MobileProperties() {
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   
-  // STATO PER LA MODIFICA (Se null = Nuovo, Se valorizzato = Modifica)
+  // STATO PER LA MODIFICA
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const { toast } = useToast();
   const [formData, setFormData] = useState({
-    veicolo: '', targa: '', anno: '', km: '', 
-    data_revisione: '', scadenza_assicurazione: '', note: ''
+    veicolo: '', 
+    targa: '', 
+    anno: '', 
+    km: '', 
+    data_revisione: '', 
+    scadenza_assicurazione: '', 
+    scadenza_bollo: '',
+    note: ''
   });
 
   const fetchVehicles = async () => {
@@ -46,19 +52,19 @@ export default function MobileProperties() {
     fetchVehicles();
   }, []);
 
-  // Funzione per resettare il form
   const resetForm = () => {
-    setFormData({ veicolo: '', targa: '', anno: '', km: '', data_revisione: '', scadenza_assicurazione: '', note: '' });
+    setFormData({ 
+        veicolo: '', targa: '', anno: '', km: '', 
+        data_revisione: '', scadenza_assicurazione: '', scadenza_bollo: '', note: '' 
+    });
     setEditingId(null);
   };
 
-  // APRIRE DIALOG PER NUOVO
   const openNew = () => {
     resetForm();
     setIsDialogOpen(true);
   };
 
-  // APRIRE DIALOG PER MODIFICA
   const openEdit = (v: any) => {
     setEditingId(v.id);
     setFormData({
@@ -68,6 +74,7 @@ export default function MobileProperties() {
       km: v.km ? v.km.toString() : '',
       data_revisione: v.data_revisione || '',
       scadenza_assicurazione: v.scadenza_assicurazione || '',
+      scadenza_bollo: v.scadenza_bollo || '',
       note: v.note || ''
     });
     setIsDialogOpen(true);
@@ -79,34 +86,29 @@ export default function MobileProperties() {
       if (!user) return alert("Sessione scaduta.");
 
       const payload = {
-        nome: formData.veicolo,
+        nome: formData.veicolo, // Mantieni sync con 'nome' per compatibilità
         categoria: 'Veicolo',
         status: 'active',
         veicolo: formData.veicolo,
         targa: formData.targa ? formData.targa.toUpperCase() : null,
         anno: formData.anno && !isNaN(parseInt(formData.anno)) ? parseInt(formData.anno) : null,
         km: formData.km && !isNaN(parseInt(formData.km)) ? parseInt(formData.km) : 0,
+        
+        // NUOVI CAMPI DATE
         data_revisione: formData.data_revisione || null,
         scadenza_assicurazione: formData.scadenza_assicurazione || null,
+        scadenza_bollo: formData.scadenza_bollo || null,
+        
         note: formData.note,
         user_id: user.id
       };
 
       if (editingId) {
-        // --- LOGICA AGGIORNAMENTO (UPDATE) ---
-        const { error } = await supabase
-          .from('properties_mobile')
-          .update(payload)
-          .eq('id', editingId);
-        
+        const { error } = await supabase.from('properties_mobile').update(payload).eq('id', editingId);
         if (error) throw error;
         toast({ title: "Veicolo aggiornato!" });
       } else {
-        // --- LOGICA CREAZIONE (INSERT) ---
-        const { error } = await supabase
-          .from('properties_mobile')
-          .insert(payload);
-        
+        const { error } = await supabase.from('properties_mobile').insert(payload);
         if (error) throw error;
         toast({ title: "Veicolo creato!" });
       }
@@ -138,14 +140,30 @@ export default function MobileProperties() {
     try { return format(parseISO(dateStr), 'dd/MM/yyyy'); } catch { return dateStr; }
   };
 
+  // Funzione per evidenziare scadenze vicine (es. entro 30 giorni)
+  const isExpiringSoon = (dateStr: string) => {
+      if (!dateStr) return false;
+      const date = parseISO(dateStr);
+      const today = new Date();
+      const warningDate = addDays(today, 30);
+      return isBefore(date, warningDate) && isBefore(today, date); // Tra oggi e 30gg
+  };
+
+  const isExpired = (dateStr: string) => {
+      if (!dateStr) return false;
+      return isBefore(parseISO(dateStr), new Date());
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <Truck className="h-8 w-8 text-blue-600"/> Parco Mezzi
-        </h1>
-        {/* FIX: Ora chiama openNew invece di setIsDialogOpen direttamente */}
-        <Button className="bg-blue-600" onClick={openNew}>
+        <div>
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+            <Truck className="h-8 w-8 text-blue-600"/> Parco Mezzi
+            </h1>
+            <p className="text-gray-500 text-sm">Gestione flotta e scadenze</p>
+        </div>
+        <Button className="bg-blue-600 hover:bg-blue-700" onClick={openNew}>
           <Plus className="mr-2 h-4 w-4"/> Aggiungi Veicolo
         </Button>
       </div>
@@ -153,12 +171,12 @@ export default function MobileProperties() {
       <Card>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
+            <TableHeader className="bg-slate-50">
               <TableRow>
                 <TableHead>Veicolo</TableHead>
                 <TableHead>Targa</TableHead>
                 <TableHead>Km</TableHead>
-                <TableHead>Scadenze</TableHead>
+                <TableHead>Stato Scadenze</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
             </TableHeader>
@@ -170,20 +188,31 @@ export default function MobileProperties() {
               ) : (
                 vehicles.map((v) => (
                   <TableRow key={v.id}>
-                    <TableCell className="font-medium">{v.veicolo || v.nome || "N/A"}</TableCell>
+                    <TableCell className="font-medium">
+                        <div className="text-base text-gray-900">{v.veicolo || v.nome}</div>
+                        <div className="text-xs text-gray-500">{v.anno}</div>
+                    </TableCell>
                     <TableCell><span className="font-mono bg-slate-100 px-2 py-1 rounded text-xs border uppercase">{v.targa || '-'}</span></TableCell>
                     <TableCell>{v.km?.toLocaleString()}</TableCell>
-                    <TableCell className="text-xs text-gray-500">
-                        <div className={v.data_revisione ? "" : "opacity-50"}>Rev: {formatDate(v.data_revisione)}</div>
-                        <div className={v.scadenza_assicurazione ? "" : "opacity-50"}>Ass: {formatDate(v.scadenza_assicurazione)}</div>
+                    <TableCell>
+                        <div className="flex flex-col gap-1 text-xs">
+                            {/* REVISIONE */}
+                            <div className={`flex items-center gap-2 ${isExpired(v.data_revisione) ? 'text-red-600 font-bold' : isExpiringSoon(v.data_revisione) ? 'text-orange-600 font-bold' : 'text-gray-600'}`}>
+                                <Calendar className="w-3 h-3"/> Rev: {formatDate(v.data_revisione)}
+                                {isExpired(v.data_revisione) && <AlertTriangle className="w-3 h-3"/>}
+                            </div>
+                            {/* ASSICURAZIONE */}
+                            <div className={`flex items-center gap-2 ${isExpired(v.scadenza_assicurazione) ? 'text-red-600 font-bold' : isExpiringSoon(v.scadenza_assicurazione) ? 'text-orange-600 font-bold' : 'text-gray-600'}`}>
+                                <Calendar className="w-3 h-3"/> Ass: {formatDate(v.scadenza_assicurazione)}
+                                {isExpired(v.scadenza_assicurazione) && <AlertTriangle className="w-3 h-3"/>}
+                            </div>
+                        </div>
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        {/* BOTTONE MODIFICA */}
                         <Button variant="ghost" size="sm" onClick={() => openEdit(v)} className="hover:text-blue-600">
                           <Pencil className="h-4 w-4"/>
                         </Button>
-                        {/* BOTTONE ELIMINA */}
                         <Button variant="ghost" size="sm" onClick={() => handleDelete(v.id)} className="hover:text-red-600">
                           <Trash2 className="h-4 w-4"/>
                         </Button>
@@ -211,10 +240,17 @@ export default function MobileProperties() {
                <div><Label>Anno</Label><Input type="number" value={formData.anno} onChange={e => setFormData({...formData, anno: e.target.value})}/></div>
                <div><Label>Km</Label><Input type="number" value={formData.km} onChange={e => setFormData({...formData, km: e.target.value})}/></div>
             </div>
-            <div className="grid grid-cols-2 gap-4 bg-slate-50 p-3 rounded border">
-               <div><Label>Scad. Revisione</Label><Input type="date" value={formData.data_revisione} onChange={e => setFormData({...formData, data_revisione: e.target.value})}/></div>
-               <div><Label>Scad. Assicurazione</Label><Input type="date" value={formData.scadenza_assicurazione} onChange={e => setFormData({...formData, scadenza_assicurazione: e.target.value})}/></div>
+            
+            {/* SEZIONE SCADENZE */}
+            <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
+                <Label className="text-slate-700 font-bold flex items-center gap-2"><Calendar className="w-4 h-4"/> Scadenze Legali</Label>
+                <div className="grid grid-cols-2 gap-4">
+                    <div><Label className="text-xs">Scad. Revisione</Label><Input type="date" value={formData.data_revisione} onChange={e => setFormData({...formData, data_revisione: e.target.value})}/></div>
+                    <div><Label className="text-xs">Scad. Assicurazione</Label><Input type="date" value={formData.scadenza_assicurazione} onChange={e => setFormData({...formData, scadenza_assicurazione: e.target.value})}/></div>
+                    <div><Label className="text-xs">Scad. Bollo</Label><Input type="date" value={formData.scadenza_bollo} onChange={e => setFormData({...formData, scadenza_bollo: e.target.value})}/></div>
+                </div>
             </div>
+
             <div className="space-y-1"><Label>Note</Label><Input value={formData.note} onChange={e => setFormData({...formData, note: e.target.value})} /></div>
             
             <Button onClick={handleSave} className="w-full bg-blue-600 font-bold hover:bg-blue-700">
