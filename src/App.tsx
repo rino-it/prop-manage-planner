@@ -2,20 +2,20 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Sidebar from "./components/Sidebar";
 
 // Pagine e Componenti
+import Dashboard from "./components/Dashboard";
 import Properties from "./components/Properties";
 import Tenants from "./components/TenantManager";
 import Expenses from "./pages/Expenses";
 import MobileProperties from "./pages/MobileProperties";
-import Tickets from "./pages/Tickets"; // <--- NUOVO IMPORT
+import Tickets from "./pages/Tickets"; 
 
 // Portali
 import GuestPortal from "./pages/GuestPortal";
@@ -25,17 +25,16 @@ import Services from "./components/Services";
 import Activities from "./components/Activities";
 import Revenue from "./components/Revenue";
 import Bookings from "./components/Bookings";
-import Dashboard from "./components/Dashboard";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
-      <AuthProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
+      <Toaster />
+      <Sonner />
+      <BrowserRouter> {/* 1. ROUTER SPOSTATO IN ALTO */}
+        <AuthProvider> {/* 2. AUTH PROVIDER ORA È DENTRO IL ROUTER */}
           <Routes>
             <Route path="/auth" element={<Auth />} />
             
@@ -45,11 +44,21 @@ const App = () => (
 
             {/* --- ROTTE PROTETTE --- */}
 
-            {/* 1. DASHBOARD */}
-            <Route path="/" element={<Index />}>
-               <Route index element={<Dashboard onNavigate={(tab) => console.log(tab)} />} />
-               {/* Altre rotte interne a Index se necessario */}
-            </Route>
+            {/* 1. DASHBOARD (Layout standardizzato) */}
+            <Route 
+              path="/" 
+              element={
+                <ProtectedRoute>
+                  <div className="flex min-h-screen w-full bg-slate-50">
+                    <Sidebar activeTab="dashboard" setActiveTab={() => {}} />
+                    <main className="flex-1 overflow-y-auto p-4 md:p-6">
+                      {/* Passiamo una funzione di navigazione fittizia o reale al Dashboard */}
+                      <DashboardWrapper />
+                    </main>
+                  </div>
+                </ProtectedRoute>
+              } 
+            />
 
             {/* 2. GESTIONE PROPRIETÀ */}
             <Route
@@ -81,7 +90,7 @@ const App = () => (
               }
             />
 
-            {/* 4. NUOVA ROTTA: TICKET & GUASTI */}
+            {/* 4. TICKET & GUASTI */}
             <Route
               path="/tickets"
               element={
@@ -126,7 +135,7 @@ const App = () => (
               }
             />
 
-            {/* ALTRE PAGINE (Standardizzate col Layout) */}
+            {/* ALTRE PAGINE */}
             <Route path="/revenue" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="revenue" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Revenue /></main></div></ProtectedRoute>} />
             <Route path="/activities" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="activities" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Activities /></main></div></ProtectedRoute>} />
             <Route path="/team" element={<ProtectedRoute><div className="flex min-h-screen w-full bg-slate-50"><Sidebar activeTab="team" setActiveTab={() => {}} /><main className="flex-1 overflow-y-auto"><Team /></main></div></ProtectedRoute>} />
@@ -135,10 +144,16 @@ const App = () => (
 
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </BrowserRouter>
-      </AuthProvider>
+        </AuthProvider>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );
+
+// Wrapper helper per collegare la navigazione della Dashboard
+function DashboardWrapper() {
+  const navigate = useNavigate();
+  return <Dashboard onNavigate={(path) => navigate(`/${path}`)} />;
+}
 
 export default App;
