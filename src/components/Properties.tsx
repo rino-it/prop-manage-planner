@@ -96,47 +96,53 @@ const Properties = () => {
     enabled: !!detailsOpen
   });
 
-  // QUERY DOCUMENTI
+  // --- QUERY DOCUMENTI CORRETTA E ROBUSTA ---
   const { data: allDocs } = useQuery({
     queryKey: ['property-docs-full', docsOpen?.id],
     queryFn: async () => {
       if (!docsOpen) return { struct: [], tenant: [], expense: [] };
       
-      // 1. Documenti Strutturali (Senza Spesa)
-      const { data: structDocs } = await supabase.from('documents')
-        .select('*')
-        .eq('property_real_id', docsOpen.id)
-        .is('payment_id', null) 
-        .order('uploaded_at', { ascending: false });
+      try {
+          // 1. Fetch unico per tutti i documenti della proprietà (usa created_at invece di uploaded_at)
+          const { data: rawDocs, error } = await supabase.from('documents')
+            .select(`*, payments(*)`) // Tenta il join, se fallisce payments sarà null
+            .eq('property_real_id', docsOpen.id)
+            .order('created_at', { ascending: false }); // FIX: Usa created_at standard
 
-      // 2. Documenti Inquilini
-      const { data: bookings } = await supabase.from('bookings').select('id').eq('property_id', docsOpen.id);
-      const bookingIds = bookings?.map(b => b.id) || [];
-      let tenantDocs: any[] = [];
-      if (bookingIds.length > 0) {
-          const { data: tDocs } = await supabase.from('booking_documents')
-            .select('*, bookings(nome_ospite)').in('booking_id', bookingIds).order('uploaded_at', { ascending: false });
-          tenantDocs = tDocs || [];
+          if (error) {
+              console.error("Errore fetch documenti:", error);
+              return { struct: [], tenant: [], expense: [] };
+          }
+
+          // 2. Fetch Documenti Inquilini (resta separato perché tabella diversa)
+          const { data: bookings } = await supabase.from('bookings').select('id').eq('property_id', docsOpen.id);
+          const bookingIds = bookings?.map(b => b.id) || [];
+          let tenantDocs: any[] = [];
+          
+          if (bookingIds.length > 0) {
+              const { data: tDocs } = await supabase.from('booking_documents')
+                .select('*, bookings(nome_ospite)').in('booking_id', bookingIds).order('uploaded_at', { ascending: false });
+              tenantDocs = tDocs || [];
+          }
+
+          // 3. Filtraggio in memoria (più sicuro)
+          const structDocs = rawDocs?.filter(d => !d.payment_id) || [];
+          const expenseDocs = rawDocs?.filter(d => d.payment_id) || [];
+
+          return { struct: structDocs, tenant: tenantDocs, expense: expenseDocs };
+
+      } catch (e) {
+          console.error("Eccezione fetch docs:", e);
+          return { struct: [], tenant: [], expense: [] };
       }
-
-      // 3. Documenti Spese (Con pagamento)
-      const { data: expenseDocs } = await supabase.from('documents')
-        .select(`*, payments (*)`)
-        .eq('property_real_id', docsOpen.id)
-        .not('payment_id', 'is', null)
-        .order('uploaded_at', { ascending: false });
-
-      return { struct: structDocs || [], tenant: tenantDocs || [], expense: expenseDocs || [] };
     },
     enabled: !!docsOpen
   });
 
-  // Funzione helper per unire e ordinare tutto nella vista "Tutti"
   const getCombinedDocs = () => {
       if (!allDocs) return [];
-      // Unisce strutturali e spese
       const combined = [...(allDocs.struct || []), ...(allDocs.expense || [])];
-      // Ordina dal più recente
+      // Ordina per data creazione
       return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   };
 
@@ -204,6 +210,8 @@ const Properties = () => {
           setSmartFile(null);
           setIsExpense(false);
           setSmartData({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
+          
+          // Forza refresh multipli
           queryClient.invalidateQueries({ queryKey: ['property-docs-full'] });
           queryClient.invalidateQueries({ queryKey: ['unified-expenses'] });
 
@@ -400,7 +408,7 @@ const Properties = () => {
                             <TabsTrigger value="spese">Spese</TabsTrigger>
                         </TabsList>
                         
-                        {/* TAB TUTTI - ORA COMBINA I DOCUMENTI */}
+                        {/* TAB TUTTI - ORA COMBINA E VISUALIZZA TUTTO */}
                         <TabsContent value="all" className="space-y-2 mt-2">
                             {getCombinedDocs().map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50">
