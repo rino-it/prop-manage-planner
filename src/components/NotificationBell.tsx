@@ -19,7 +19,7 @@ export default function NotificationBell() {
   useEffect(() => {
     const checkDeadlines = async () => {
       // Chiama la funzione SQL che abbiamo creato
-      await supabase.rpc('generate_deadline_notifications');
+      await supabase.rpc('check_deadlines');
       // Aggiorna la lista notifiche
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     };
