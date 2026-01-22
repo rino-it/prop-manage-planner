@@ -6,25 +6,113 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-import { formatDistanceToNow } from 'date-fns';
+import { formatDistanceToNow, differenceInDays, parseISO, startOfDay } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { Badge } from '@/components/ui/badge';
+import { useAuth } from '@/hooks/useAuth';
 
 export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { user } = useAuth();
 
-  // 1. TRIGGER: Quando l'app si apre, controlla le scadenze nel DB
+  // 1. LOGICA INTELLIGENTE LATO CLIENT (Sostituisce RPC)
   useEffect(() => {
-    const checkDeadlines = async () => {
-      // Chiama la funzione SQL che abbiamo creato
-      await supabase.rpc('check_deadlines');
-      // Aggiorna la lista notifiche
+    if (!user) return;
+
+    const runChecks = async () => {
+      const today = startOfDay(new Date());
+
+      // A. SCARICA TUTTE LE SCADENZE APERTE
+      const [expenses, tickets, revenues] = await Promise.all([
+        supabase.from('payments').select('*').eq('stato', 'da_pagare'),
+        supabase.from('tickets').select('*').neq('stato', 'risolto'),
+        supabase.from('tenant_payments').select('*, bookings(nome_ospite)').eq('stato', 'da_pagare')
+      ]);
+
+      const newNotifications = [];
+
+      // Funzione Helper per verificare se notifica esiste già oggi
+      const checkAndPrepare = async (link: string, keyText: string, title: string, msg: string, days: number) => {
+        // Regola: Multiplo di 4 o Manca 1 giorno
+        if ((days > 0 && days % 4 === 0) || days === 1) {
+          
+          // Verifica se l'abbiamo già notificato OGGI
+          const { data: existing } = await supabase
+            .from('notifications')
+            .select('id')
+            .eq('link', link)
+            .ilike('message', `%${keyText}%`) // Cerca il nome univoco
+            .gte('created_at', today.toISOString()) // Solo notifiche di oggi
+            .eq('user_id', user.id);
+
+          if (!existing || existing.length === 0) {
+            await supabase.from('notifications').insert({
+              user_id: user.id,
+              title: title,
+              message: msg,
+              link: link,
+              type: days === 1 ? 'warning' : 'info'
+            });
+            return true; // Ne abbiamo creata una nuova
+          }
+        }
+        return false;
+      };
+
+      // B. CONTROLLO SPESE
+      if (expenses.data) {
+        for (const ex of expenses.data) {
+          if (!ex.scadenza) continue;
+          const days = differenceInDays(parseISO(ex.scadenza), today);
+          await checkAndPrepare(
+            '/expenses', 
+            ex.descrizione, // Chiave univoca
+            days === 1 ? 'SCADE DOMANI!' : `Scadenza tra ${days} giorni`,
+            `La spesa "${ex.descrizione}" di €${ex.importo} scade il ${ex.scadenza}`,
+            days
+          );
+        }
+      }
+
+      // C. CONTROLLO TICKET
+      if (tickets.data) {
+        for (const t of tickets.data) {
+          if (!t.data_scadenza) continue;
+          const days = differenceInDays(parseISO(t.data_scadenza), today);
+          await checkAndPrepare(
+            '/tickets', 
+            t.titolo,
+            'Manutenzione in Scadenza',
+            `Il ticket "${t.titolo}" è previsto per il ${t.data_scadenza}`,
+            days
+          );
+        }
+      }
+
+      // D. CONTROLLO INCASSI
+      if (revenues.data) {
+        for (const rev of revenues.data) {
+          if (!rev.data_scadenza) continue;
+          const days = differenceInDays(parseISO(rev.data_scadenza), today);
+          const nome = rev.bookings?.nome_ospite || 'Ospite';
+          await checkAndPrepare(
+            '/revenue', 
+            nome,
+            'Incasso Atteso',
+            `L'incasso di €${rev.importo} da ${nome} scade tra ${days} giorni.`,
+            days
+          );
+        }
+      }
+
+      // Aggiorna la UI alla fine
       queryClient.invalidateQueries({ queryKey: ['notifications'] });
     };
-    checkDeadlines();
-  }, []);
+
+    runChecks();
+  }, [user]); // Esegue solo al login/refresh
 
   // 2. SCARICA LE NOTIFICHE (Non lette)
   const { data: notifications = [] } = useQuery({
@@ -37,7 +125,7 @@ export default function NotificationBell() {
         .order('created_at', { ascending: false });
       return data || [];
     },
-    refetchInterval: 30000 // Controlla ogni 30 secondi
+    refetchInterval: 10000 
   });
 
   // 3. SEGNA COME LETTO
@@ -94,8 +182,6 @@ export default function NotificationBell() {
                     </span>
                   </div>
                   <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed pr-6">{n.message}</p>
-                  
-                  {/* Icona spunta hover per segnare come letto */}
                   <div className="absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <Check className="w-4 h-4 text-blue-400" />
                   </div>
