@@ -2,21 +2,23 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
-// Definiamo il tipo esteso per le attività con i preventivi
 export interface Activity {
   id: string;
-  nome: string; // Titolo ticket
+  nome: string;
   descrizione?: string;
   tipo: 'manutenzione' | 'pulizia' | 'ispezione' | 'generale';
   priorita: 'alta' | 'media' | 'bassa';
   stato: 'aperto' | 'in_corso' | 'completato' | 'in_attesa';
   
-  // Nuovi Campi Fase 2
+  // Campi Esistenti (Quote & Link)
   property_real_id?: string | null;
-  booking_id?: string | null; // Link all'inquilino
+  booking_id?: string | null;
   quote_url?: string | null;
   quote_amount?: number | null;
   quote_status?: 'none' | 'pending' | 'approved' | 'rejected';
+  
+  // Nuovo Campo (Step 7)
+  assigned_to?: string[]; // Array di UUID
   
   created_at: string;
   properties_real?: { nome: string };
@@ -27,7 +29,7 @@ export const useActivities = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // 1. FETCH ATTIVITÀ / TICKET
+  // 1. FETCH ATTIVITÀ (Inclusi dati preventivi e inquilini)
   const { data: activities, isLoading } = useQuery({
     queryKey: ['activities-tickets'],
     queryFn: async () => {
@@ -45,7 +47,19 @@ export const useActivities = () => {
     },
   });
 
-  // 2. CREA TICKET (Con controlli orfani)
+  // 2. FETCH TEAM (NUOVO: Per il componente MultiSelect)
+  const { data: teamMembers } = useQuery({
+    queryKey: ['team-members'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, first_name, last_name, email');
+      return data?.map(u => ({
+        id: u.id,
+        label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || 'Utente'
+      })) || [];
+    }
+  });
+
+  // 3. CREA ATTIVITÀ (Aggiornato con assigned_to)
   const createActivity = useMutation({
     mutationFn: async (newTicket: any) => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -54,9 +68,10 @@ export const useActivities = () => {
         .from('activities')
         .insert({
             ...newTicket,
-            user_id: user?.id,
+            user_id: user?.id, // Creatore
+            assigned_to: newTicket.assigned_to || [], // <--- Salva l'array di assegnatari
             stato: 'aperto',
-            quote_status: 'none' // Default
+            quote_status: 'none'
         });
         
       if (error) throw error;
@@ -68,7 +83,7 @@ export const useActivities = () => {
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // 3. AGGIORNA / CARICA PREVENTIVO
+  // 4. AGGIORNA ATTIVITÀ (Ripristinato)
   const updateActivity = useMutation({
     mutationFn: async ({ id, updates }: { id: string; updates: any }) => {
       const { error } = await supabase
@@ -83,7 +98,7 @@ export const useActivities = () => {
     }
   });
 
-  // 4. APPROVAZIONE PREVENTIVO (Workflow)
+  // 5. GESTIONE PREVENTIVI (Ripristinato)
   const handleQuoteDecision = useMutation({
     mutationFn: async ({ id, decision }: { id: string, decision: 'approved' | 'rejected' }) => {
        const { error } = await supabase
@@ -102,7 +117,7 @@ export const useActivities = () => {
     }
   });
 
-  // 5. DELETE
+  // 6. DELETE (Ripristinato)
   const deleteActivity = useMutation({
     mutationFn: async (id: string) => {
        await supabase.from('activities').delete().eq('id', id);
@@ -115,6 +130,7 @@ export const useActivities = () => {
 
   return {
     activities,
+    teamMembers, // Export per la UI
     isLoading,
     createActivity,
     updateActivity,
