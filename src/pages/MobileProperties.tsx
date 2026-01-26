@@ -6,10 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
-import { Car, Plus, Trash2, FileText, Shield, Loader2, Calendar, AlertTriangle } from 'lucide-react';
+import { Car, Plus, Trash2, FileText, Shield, Loader2, Calendar, AlertTriangle, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, isPast, parseISO } from 'date-fns';
-import { it } from 'date-fns/locale';
 
 // Tipo completo
 type MobileProperty = {
@@ -28,8 +27,9 @@ type MobileProperty = {
 export default function MobileProperties() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null); // STATO MODIFICA
   
-  // STATO FORM COMPLETO
+  // STATO FORM
   const [formData, setFormData] = useState({
     veicolo: '',
     targa: '',
@@ -66,35 +66,49 @@ export default function MobileProperties() {
     return data.publicUrl;
   };
 
-  const createVehicle = useMutation({
+  // MUTATION: SAVE (CREATE or UPDATE)
+  const saveVehicle = useMutation({
     mutationFn: async () => {
       setIsUploading(true);
       try {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("No user");
 
-        let librettoUrl = null;
-        let insuranceUrl = null;
-
-        if (formData.libretto) librettoUrl = await uploadFile(formData.libretto, `libretto_${formData.targa}`);
-        if (formData.insurance) insuranceUrl = await uploadFile(formData.insurance, `insurance_${formData.targa}`);
-
-        const { error } = await supabase.from('properties_mobile').insert({
+        // Preparazione Payload base
+        const payload: any = {
           veicolo: formData.veicolo,
           targa: formData.targa,
           proprietario: formData.proprietario,
           user_id: user.id,
           status: 'active',
-          // SALVA LE DATE
           scadenza_bollo: formData.scadenza_bollo || null,
           scadenza_assicurazione: formData.scadenza_assicurazione || null,
           scadenza_revisione: formData.scadenza_revisione || null,
-          // SALVA I FILE
-          libretto_url: librettoUrl,
-          insurance_url: insuranceUrl
-        });
+        };
 
-        if (error) throw error;
+        // Gestione Upload (Solo se c'è un file nuovo)
+        if (formData.libretto) {
+           payload.libretto_url = await uploadFile(formData.libretto, `libretto_${formData.targa}`);
+        }
+        if (formData.insurance) {
+           payload.insurance_url = await uploadFile(formData.insurance, `insurance_${formData.targa}`);
+        }
+
+        if (editingId) {
+          // UPDATE
+          const { error } = await supabase
+            .from('properties_mobile')
+            .update(payload)
+            .eq('id', editingId);
+          if (error) throw error;
+        } else {
+          // CREATE
+          const { error } = await supabase
+            .from('properties_mobile')
+            .insert(payload);
+          if (error) throw error;
+        }
+
       } finally {
         setIsUploading(false);
       }
@@ -103,7 +117,7 @@ export default function MobileProperties() {
       queryClient.invalidateQueries({ queryKey: ['mobile-properties'] });
       setIsDialogOpen(false);
       resetForm();
-      toast({ title: "Veicolo Aggiunto", description: "Dati, scadenze e documenti salvati." });
+      toast({ title: editingId ? "Veicolo Aggiornato" : "Veicolo Creato", description: "Dati salvati con successo." });
     },
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
@@ -119,7 +133,29 @@ export default function MobileProperties() {
     }
   });
 
+  // APRE IL DIALOG IN MODALITÀ MODIFICA
+  const openEdit = (v: MobileProperty) => {
+    setEditingId(v.id);
+    setFormData({
+      veicolo: v.veicolo,
+      targa: v.targa,
+      proprietario: v.proprietario || '',
+      scadenza_bollo: v.scadenza_bollo || '',
+      scadenza_assicurazione: v.scadenza_assicurazione || '',
+      scadenza_revisione: v.scadenza_revisione || '',
+      libretto: null, // Reset file input (l'utente deve ricaricarlo se vuole cambiarlo)
+      insurance: null
+    });
+    setIsDialogOpen(true);
+  };
+
+  const openCreate = () => {
+    resetForm();
+    setIsDialogOpen(true);
+  };
+
   const resetForm = () => {
+    setEditingId(null);
     setFormData({
       veicolo: '', targa: '', proprietario: '',
       scadenza_bollo: '', scadenza_assicurazione: '', scadenza_revisione: '',
@@ -131,7 +167,6 @@ export default function MobileProperties() {
     if (e.target.files?.[0]) setFormData(p => ({ ...p, [f]: e.target.files![0] }));
   };
 
-  // Helper UI per le scadenze nella card
   const DeadlineBadge = ({ label, date }: { label: string, date?: string | null }) => {
     if (!date) return <div className="text-xs text-gray-400 flex justify-between"><span>{label}:</span> <span>-</span></div>;
     const expired = isPast(parseISO(date));
@@ -155,13 +190,11 @@ export default function MobileProperties() {
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={resetForm}>
+          <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={openCreate}>
               <Plus className="w-4 h-4 mr-2" /> Aggiungi Veicolo
-            </Button>
-          </DialogTrigger>
+          </Button>
           <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-            <DialogHeader><DialogTitle>Nuovo Veicolo</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{editingId ? 'Modifica Veicolo' : 'Nuovo Veicolo'}</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
               
               {/* DATI BASE */}
@@ -204,7 +237,7 @@ export default function MobileProperties() {
               {/* SEZIONE DOCUMENTI */}
               <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 space-y-3">
                  <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2">
-                    <FileText className="w-3 h-3"/> Upload Documenti
+                    <FileText className="w-3 h-3"/> {editingId ? 'Aggiorna Documenti (Opzionale)' : 'Upload Documenti'}
                 </h4>
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
@@ -221,8 +254,8 @@ export default function MobileProperties() {
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annulla</Button>
-              <Button onClick={() => createVehicle.mutate()} disabled={!formData.veicolo || !formData.targa || isUploading}>
-                {isUploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin"/> Salvataggio...</> : 'Salva Veicolo'}
+              <Button onClick={() => saveVehicle.mutate()} disabled={!formData.veicolo || !formData.targa || isUploading}>
+                {isUploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin"/> {editingId ? 'Aggiornamento...' : 'Salvataggio...'}</> : (editingId ? 'Salva Modifiche' : 'Crea Veicolo')}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -237,26 +270,30 @@ export default function MobileProperties() {
                 <div className="p-1.5 bg-blue-100 rounded text-blue-600"><Car className="w-5 h-5" /></div>
                 {v.veicolo}
               </CardTitle>
-              <Button variant="ghost" size="icon" className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => { if(confirm("Eliminare?")) deleteVehicle.mutate(v.id) }}>
-                <Trash2 className="w-4 h-4" />
-              </Button>
+              
+              {/* Pulsanti Azione (Edit & Delete) */}
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => openEdit(v)}>
+                    <Pencil className="w-4 h-4" />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-600 hover:bg-red-50" onClick={() => { if(confirm("Eliminare definitivamente?")) deleteVehicle.mutate(v.id) }}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               
-              {/* Info Base */}
               <div className="grid grid-cols-2 gap-2 text-sm border-b pb-3">
                  <div><span className="text-gray-400 text-xs block">Targa</span><span className="font-mono font-bold">{v.targa}</span></div>
                  <div className="text-right"><span className="text-gray-400 text-xs block">Intestatario</span><span className="font-medium">{v.proprietario || '-'}</span></div>
               </div>
 
-              {/* Scadenze */}
               <div className="space-y-1 bg-slate-50 p-2 rounded">
                  <DeadlineBadge label="Assicurazione" date={v.scadenza_assicurazione} />
                  <DeadlineBadge label="Bollo" date={v.scadenza_bollo} />
                  <DeadlineBadge label="Revisione" date={v.scadenza_revisione} />
               </div>
 
-              {/* Pulsanti Documenti */}
               <div className="flex gap-2 pt-1">
                 <Button variant={v.libretto_url ? "outline" : "ghost"} size="sm" className={`flex-1 ${v.libretto_url ? 'text-blue-600 border-blue-200' : 'text-gray-300'}`} disabled={!v.libretto_url} onClick={() => window.open(v.libretto_url || '', '_blank')}>
                     <FileText className="w-3 h-3 mr-2" /> Libretto
