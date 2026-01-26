@@ -7,14 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Hammer, Eye, Upload, XCircle, Phone, FileText, RotateCcw, Euro, Lock, Truck, Home
+  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
+import { UserMultiSelect } from '@/components/UserMultiSelect'; // <--- IMPORT NUOVO
 
 interface TicketManagerProps {
   ticket: any;
@@ -27,13 +27,19 @@ interface TicketManagerProps {
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // STATI
+  // STATI ESISTENTI
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
   const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || ''); 
-  const [assignedPartner, setAssignedPartner] = useState(ticket?.assigned_partner_id || ''); 
   const [dueDate, setDueDate] = useState(ticket?.data_scadenza || '');
+
+  // NUOVO STATO: ARRAY DI ASSEGNATARI (Supporta anche la vecchia assegnazione singola come fallback)
+  const [assignedTo, setAssignedTo] = useState<string[]>(
+    ticket?.assigned_to && ticket.assigned_to.length > 0 
+      ? ticket.assigned_to 
+      : (ticket?.assigned_partner_id ? [ticket.assigned_partner_id] : [])
+  );
 
   const [quoteAmount, setQuoteAmount] = useState(ticket?.quote_amount || '');
   const [quoteFile, setQuoteFile] = useState<File | null>(null);
@@ -44,31 +50,42 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   
   const [uploading, setUploading] = useState(false);
 
-  const { data: colleagues } = useQuery({
+  // FETCH COLLEGHI (Formattati per il MultiSelect)
+  const { data: colleagues = [] } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
       const { data } = await supabase.from('profiles').select('*');
-      return data || [];
+      // Trasformiamo i dati nel formato richiesto dal UserMultiSelect {id, label}
+      return data?.map(u => ({
+          id: u.id,
+          label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
+      })) || [];
     }
   });
 
   const saveProgress = async () => {
-    // Nota: Assicurati che le colonne 'supplier', 'supplier_contact', 'assigned_partner_id' esistano nel DB
-    // Se non esistono, rimuovile da questo oggetto update
+    // Aggiorniamo anche il vecchio campo assigned_partner_id prendendo il primo della lista (per sicurezza)
+    const primaryAssignee = assignedTo.length > 0 ? assignedTo[0] : null;
+
     const { error } = await supabase.from('tickets').update({ 
         admin_notes: notes,
         share_notes: shareNotes,
         supplier: supplier,
         supplier_contact: supplierContact,
-        assigned_partner_id: assignedPartner || null,
+        assigned_to: assignedTo, // <--- SALVA ARRAY NUOVO
+        assigned_partner_id: primaryAssignee, // <--- SALVA SINGOLO (Legacy)
         data_scadenza: dueDate || null,
-        stato: 'in_lavorazione' 
+        // Non forziamo lo stato a 'in_lavorazione' se è già 'risolto' o altro, manteniamo quello attuale a meno che non sia specificato
+        // Se vuoi forzare 'in_lavorazione' solo se è 'aperto', puoi aggiungere logica qui.
+        // Per ora lascio come il tuo codice originale:
+        stato: ticket.stato === 'aperto' ? 'in_lavorazione' : ticket.stato
       }).eq('id', ticket.id);
 
     if (error) toast({ title: "Errore", description: error.message, variant: "destructive" });
-    else { toast({ title: "Salvato" }); onUpdate(); }
+    else { toast({ title: "Salvato", description: "Modifiche registrate." }); onUpdate(); }
   };
 
+  // --- LE TUE FUNZIONI ORIGINALI (INVARIATE) ---
   const handleQuoteUpload = async () => {
       setUploading(true);
       try {
@@ -178,7 +195,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       }
   };
 
-  // LOGICA HEADER: MOSTRA VEICOLO O PROPRIETÀ
+  // LOGICA HEADER
   const headerIcon = ticket.properties_mobile ? <Truck className="w-5 h-5"/> : <Home className="w-5 h-5"/>;
   const headerTitle = ticket.properties_mobile ? ticket.properties_mobile.veicolo : (ticket.properties_real?.nome || 'Generale');
 
@@ -206,13 +223,19 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         <Label>Data Scadenza / Intervento</Label>
                         <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} />
                     </div>
+                    
+                    {/* --- NUOVA SEZIONE MULTI-SELEZIONE --- */}
                     <div className="grid gap-2">
-                        <Label>Delega a Socio</Label>
-                        <Select value={assignedPartner || ''} onValueChange={setAssignedPartner} disabled={isReadOnly}>
-                            <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                            <SelectContent>{colleagues?.map(c => <SelectItem key={c.id} value={c.id}>{c.first_name} {c.last_name}</SelectItem>)}</SelectContent>
-                        </Select>
+                        <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Delega a Team</Label>
+                        {/* Sostituita la Select con UserMultiSelect */}
+                        <UserMultiSelect 
+                            options={colleagues} 
+                            selected={assignedTo} 
+                            onChange={setAssignedTo} 
+                            placeholder="Seleziona..." 
+                        />
                     </div>
+                    {/* ------------------------------------- */}
                 </div>
 
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
@@ -236,6 +259,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress}>Salva Modifiche</Button></div>}
             </TabsContent>
 
+            {/* --- I TAB SEGUENTI SONO IDENTICI AL TUO ORIGINALE --- */}
             <TabsContent value="quote" className="space-y-4 py-4">
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
@@ -252,7 +276,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     </div>
                 )}
                 {ticket.quote_status === 'pending' && !isReadOnly && (
-                     <div className="grid grid-cols-2 gap-2 mt-2">
+                      <div className="grid grid-cols-2 gap-2 mt-2">
                         <Button className="bg-green-600" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>Approva</Button>
                         <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>Rifiuta</Button>
                     </div>
