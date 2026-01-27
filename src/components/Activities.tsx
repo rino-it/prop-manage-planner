@@ -4,16 +4,17 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'; // <--- NUOVO IMPORT
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { 
     Calendar, UserCog, Plus, RotateCcw, 
     Eye, Home, User, AlertCircle, StickyNote, 
-    Phone, FileText, Share2, Users, ChevronDown 
+    Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -36,10 +37,12 @@ const renderTextWithLinks = (text: string) => {
 export default function Activities() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: properties } = usePropertiesReal();
+  const { data: realProperties } = usePropertiesReal();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
+  const [activeTab, setActiveTab] = useState('open'); // 'open' | 'closed'
+  const [filterType, setFilterType] = useState('all'); // 'all' | 'real' | 'mobile'
 
   const [formData, setFormData] = useState({
     titolo: '',
@@ -50,7 +53,10 @@ export default function Activities() {
     assigned_to: [] as string[]
   });
 
-  // 1. FETCH MEMBRI TEAM COMPLETI (con telefono)
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
+
+  // 1. FETCH MEMBRI TEAM
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
     queryFn: async () => {
@@ -58,9 +64,18 @@ export default function Activities() {
       return data?.map(u => ({
         id: u.id,
         label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || 'Utente',
-        phone: u.phone, // Ci serve il telefono per WhatsApp
-        firstName: u.first_name // Per il menu rapido
+        phone: u.phone,
+        firstName: u.first_name
       })) || [];
+    }
+  });
+
+  // 2. FETCH VEICOLI (Per i filtri e creazione)
+  const { data: mobileProperties } = useQuery({
+    queryKey: ['mobile-properties-ticket'],
+    queryFn: async () => {
+      const { data } = await supabase.from('properties_mobile').select('id, veicolo, targa').eq('status', 'active');
+      return data || [];
     }
   });
 
@@ -88,6 +103,7 @@ export default function Activities() {
         .select(`
           *,
           properties_real (nome),
+          properties_mobile (veicolo, targa),
           assigned_partner: profiles!assigned_partner_id(first_name, phone), 
           bookings (
             nome_ospite,
@@ -102,9 +118,29 @@ export default function Activities() {
     }
   });
 
+  // UPLOAD HELPER
+  const handleFileUpload = async (files: File[]) => {
+    const uploadedUrls: string[] = [];
+    for (const file of files) {
+        const fileName = `ticket_doc_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+        const { error } = await supabase.storage.from('ticket-files').upload(fileName, file);
+        if (error) throw error;
+        uploadedUrls.push(fileName);
+    }
+    return uploadedUrls;
+  };
+
   const createTicket = useMutation({
     mutationFn: async (newTicket: typeof formData) => {
+      setIsUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
+      
+      // Upload files first
+      let attachments: string[] = [];
+      if (uploadFiles.length > 0) {
+          attachments = await handleFileUpload(uploadFiles);
+      }
+
       const payload = {
         titolo: newTicket.titolo,
         descrizione: newTicket.descrizione,
@@ -114,7 +150,8 @@ export default function Activities() {
         creato_da: 'manager',
         stato: 'aperto',
         booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id,
-        assigned_to: newTicket.assigned_to
+        assigned_to: newTicket.assigned_to,
+        attachments: attachments // Salva l'array di file
       };
       
       const { error } = await supabase.from('tickets').insert(payload);
@@ -124,9 +161,14 @@ export default function Activities() {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
       setFormData({ titolo: '', descrizione: '', priorita: 'media', property_real_id: '', booking_id: 'none', assigned_to: [] });
-      toast({ title: "Ticket creato", description: "Assegnato al team selezionato." });
+      setUploadFiles([]);
+      setIsUploading(false);
+      toast({ title: "Ticket creato", description: "Assegnato al team e file caricati." });
     },
-    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
+    onError: (err: any) => {
+        setIsUploading(false);
+        toast({ title: "Errore", description: err.message, variant: "destructive" });
+    }
   });
 
   const reopenTicket = useMutation({
@@ -145,7 +187,12 @@ export default function Activities() {
 
   const openFile = async (path: string) => {
       if(!path) return;
-      const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600);
+      // Gestisce sia percorsi completi che nomi file semplici
+      const bucket = path.includes('/') ? '' : 'documents'; // Fallback per vecchi file
+      // Se è un attachment nuovo, usa ticket-files
+      const actualBucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
+      
+      const { data } = await supabase.storage.from(actualBucket).createSignedUrl(path, 3600);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
@@ -168,12 +215,28 @@ export default function Activities() {
     return ids.map(id => teamMembers.find(m => m.id === id)).filter(Boolean);
   };
 
+  // LOGICA FILTRI
+  const filteredTickets = tickets?.filter((t: any) => {
+      // Filtro Stato (Tabs)
+      const isResolved = t.stato === 'risolto';
+      if (activeTab === 'open' && isResolved) return false;
+      if (activeTab === 'closed' && !isResolved) return false;
+
+      // Filtro Tipo (Property/Vehicle)
+      if (filterType === 'real' && !t.property_real_id && !t.bookings?.properties_real) return false;
+      if (filterType === 'mobile' && !t.properties_mobile) return false;
+
+      return true;
+  });
+
   return (
     <div className="space-y-6 animate-in fade-in">
-      <div className="flex items-center justify-between">
+      
+      {/* HEADER */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Ticket & Manutenzioni</h1>
-          <p className="text-gray-500">Gestione centralizzata e assegnazione team.</p>
+          <p className="text-gray-500">Gestione operativa, assegnazioni e report.</p>
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -183,17 +246,25 @@ export default function Activities() {
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader><DialogTitle>Nuovo Ticket di Intervento</DialogTitle></DialogHeader>
-            <div className="space-y-4 mt-4">
+            <DialogHeader>
+                <DialogTitle>Nuovo Ticket di Intervento</DialogTitle>
+                <DialogDescription>Crea un ticket, assegna il team e allega foto.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mt-2">
               
+              {/* PROPERTY SELECTOR */}
               <div className="grid gap-2">
-                <Label className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600"/> Proprietà</Label>
+                <Label className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600"/> Proprietà / Veicolo</Label>
                 <Select value={formData.property_real_id} onValueChange={v => setFormData({...formData, property_real_id: v, booking_id: 'none'})}>
                   <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                  <SelectContent>{properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
+                  <SelectContent>
+                    {realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)}
+                    {/* Nota: Per ora il form supporta solo immobili o veicoli. Se vuoi veicoli, servirebbe un altro select o unificati */}
+                  </SelectContent>
                 </Select>
               </div>
 
+              {/* TEAM ASSIGNMENT */}
               <div className="grid gap-2">
                 <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Assegna al Team</Label>
                 <UserMultiSelect 
@@ -204,6 +275,7 @@ export default function Activities() {
                 />
               </div>
 
+              {/* INQUILINO (Se Immobile) */}
               <div className="grid gap-2">
                 <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
                 <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.property_real_id}>
@@ -215,24 +287,50 @@ export default function Activities() {
                 </Select>
               </div>
 
-              <div className="grid gap-2"><Label>Titolo</Label><Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto Caldaia" /></div>
-              
-              <div className="grid gap-2">
-                <Label>Priorità</Label>
-                <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="bassa">Bassa</SelectItem>
-                    <SelectItem value="media">Media</SelectItem>
-                    <SelectItem value="alta">Alta</SelectItem>
-                    <SelectItem value="critica">Critica</SelectItem>
-                  </SelectContent>
-                </Select>
+              <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-2">
+                      <Label>Titolo</Label>
+                      <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto Caldaia" />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label>Priorità</Label>
+                    <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bassa">Bassa</SelectItem>
+                        <SelectItem value="media">Media</SelectItem>
+                        <SelectItem value="alta">Alta</SelectItem>
+                        <SelectItem value="critica">Critica</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
               </div>
               
               <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli del problema..." /></div>
               
-              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)}>Crea e Assegna</Button>
+              {/* FILE UPLOAD (Nuovo) */}
+              <div className="grid gap-2">
+                  <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
+                  <Input 
+                    type="file" 
+                    multiple 
+                    onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
+                    className="text-xs"
+                  />
+                  {uploadFiles.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1">
+                          {uploadFiles.map((f, i) => (
+                              <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
+                                  {f.name} <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))}/>
+                              </Badge>
+                          ))}
+                      </div>
+                  )}
+              </div>
+
+              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading}>
+                  {isUploading ? 'Caricamento...' : 'Crea Ticket'}
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -240,115 +338,135 @@ export default function Activities() {
 
       {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati: {(error as any)?.message}</div>}
 
-      <div className="grid gap-4">
-        {isLoading ? <p>Caricamento...</p> : tickets?.map((ticket: any) => {
-            const assignees = getAssigneesDetails(ticket.assigned_to);
-            return (
-          <Card key={ticket.id} className={`border-l-4 shadow-sm hover:shadow-md transition-all ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-80 bg-slate-50' : 'border-l-red-500'}`}>
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                <div className="flex-1">
-                  
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
-                    <Badge variant="outline" className={getPriorityColor(ticket.priorita)}>{ticket.priorita}</Badge>
-                    {ticket.creato_da === 'ospite' && <Badge className="bg-blue-100 text-blue-800 border-blue-200">Ospite</Badge>}
-                    {ticket.stato === 'risolto' && <Badge className="bg-green-100 text-green-800 border-green-200">Risolto</Badge>}
-                    {ticket.quote_status === 'pending' && <Badge className="bg-orange-100 text-orange-800 border-orange-200">Preventivo</Badge>}
-                    
-                    {assignees.length > 0 && (
-                        <div className="flex -space-x-2 ml-2">
-                            {assignees.map((u: any, i) => (
-                                <div key={i} className="h-6 w-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-700 title-tip" title={`Assegnato a: ${u.label}`}>
-                                    {u.label.charAt(0)}
+      {/* TABS E FILTRI */}
+      <Tabs defaultValue="open" value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+            <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
+                <TabsTrigger value="open">In Corso / Aperti</TabsTrigger>
+                <TabsTrigger value="closed">Storico / Chiusi</TabsTrigger>
+            </TabsList>
+
+            <div className="flex items-center gap-2 bg-white p-1 rounded-lg border shadow-sm">
+                <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="text-xs gap-1"><Filter className="w-3 h-3"/> Tutti</Button>
+                <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="text-xs gap-1"><Home className="w-3 h-3"/> Immobili</Button>
+                <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs gap-1"><Car className="w-3 h-3"/> Veicoli</Button>
+            </div>
+        </div>
+
+        <TabsContent value={activeTab} className="space-y-4">
+            <div className="grid gap-4">
+                {isLoading ? <p>Caricamento...</p> : filteredTickets?.length === 0 ? (
+                    <div className="text-center py-12 bg-slate-50 border border-dashed rounded-lg text-gray-500">
+                        Nessun ticket in questa sezione.
+                    </div>
+                ) : filteredTickets?.map((ticket: any) => {
+                    const assignees = getAssigneesDetails(ticket.assigned_to);
+                    return (
+                <Card key={ticket.id} className={`border-l-4 shadow-sm hover:shadow-md transition-all ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-90 bg-slate-50' : 'border-l-red-500'}`}>
+                    <CardContent className="p-6">
+                    <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                        <div className="flex-1">
+                        
+                        <div className="flex items-center gap-2 mb-2 flex-wrap">
+                            <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
+                            <Badge variant="outline" className={getPriorityColor(ticket.priorita)}>{ticket.priorita}</Badge>
+                            {ticket.creato_da === 'ospite' && <Badge className="bg-blue-100 text-blue-800 border-blue-200">Ospite</Badge>}
+                            {ticket.stato === 'risolto' && <Badge className="bg-green-100 text-green-800 border-green-200">Risolto</Badge>}
+                            {ticket.quote_status === 'pending' && <Badge className="bg-orange-100 text-orange-800 border-orange-200">Preventivo</Badge>}
+                            
+                            {assignees.length > 0 && (
+                                <div className="flex -space-x-2 ml-2">
+                                    {assignees.map((u: any, i) => (
+                                        <div key={i} className="h-6 w-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-700 title-tip" title={`Assegnato a: ${u.label}`}>
+                                            {u.firstName?.charAt(0)}
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
+                            )}
                         </div>
-                    )}
-                  </div>
-                  
-                  <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
-                  
-                  {ticket.admin_notes && (
-                    <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
-                        <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
-                        <div className="text-xs text-yellow-900 break-all">
-                            <span className="font-bold block mb-1">Note Staff:</span> 
-                            {renderTextWithLinks(ticket.admin_notes)}
+                        
+                        <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
+                        
+                        {/* NOTE STAFF */}
+                        {ticket.admin_notes && (
+                            <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
+                                <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
+                                <div className="text-xs text-yellow-900 break-all">
+                                    <span className="font-bold block mb-1">Note Staff:</span> 
+                                    {renderTextWithLinks(ticket.admin_notes)}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mb-2">
+                            <span className="flex items-center bg-gray-100 px-2 py-1 rounded border"><Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM')}</span>
+                            {ticket.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.properties_real.nome}</span>}
+                            {ticket.properties_mobile && <span className="font-medium text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">🚗 {ticket.properties_mobile.veicolo}</span>}
+                            {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
+                            {/* Indicatore Allegati */}
+                            {ticket.attachments && ticket.attachments.length > 0 && (
+                                <span className="flex items-center text-blue-600"><Paperclip className="w-3 h-3 mr-1"/> {ticket.attachments.length} file</span>
+                            )}
+                        </div>
+
+                        {/* AZIONI RAPIDE */}
+                        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
+                            {ticket.supplier_contact && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
+                                    <Phone className="w-3 h-3" /> Fornitore
+                                </Button>
+                            )}
+                            
+                            {assignees.length === 1 && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50" 
+                                    onClick={() => contactPartner(assignees[0].phone, ticket.titolo)}>
+                                    <Share2 className="w-3 h-3" /> Contatta {assignees[0].firstName}
+                                </Button>
+                            )}
+
+                            {assignees.length > 1 && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50">
+                                            <Share2 className="w-3 h-3" /> Contatta Team <ChevronDown className="w-3 h-3 ml-1"/>
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent>
+                                        {assignees.map((u: any) => (
+                                            <DropdownMenuItem key={u.id} onClick={() => contactPartner(u.phone, ticket.titolo)}>
+                                                <Share2 className="w-3 h-3 mr-2 text-green-600"/> {u.label}
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            )}
+
+                            {(ticket.quote_url || ticket.ricevuta_url) && (
+                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
+                                    onClick={() => openFile(ticket.quote_url || ticket.ricevuta_url)}>
+                                    <FileText className="w-3 h-3" /> {ticket.quote_url ? 'Prev.' : 'Ric.'}
+                                </Button>
+                            )}
+                        </div>
+                        </div>
+                        
+                        <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
+                        {ticket.stato !== 'risolto' ? (
+                            <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={() => setTicketManagerOpen(ticket)}><UserCog className="w-4 h-4 mr-2" /> Gestisci</Button>
+                        ) : (
+                            <div className="flex flex-col gap-2">
+                                <Button size="sm" variant="outline" className="w-full text-gray-600 bg-white hover:bg-gray-50" onClick={() => setTicketManagerOpen(ticket)}><Eye className="w-3 h-3 mr-2" /> Storico</Button>
+                                <Button size="sm" variant="ghost" className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => { if(confirm("Riaprire?")) reopenTicket.mutate(ticket.id); }}><RotateCcw className="w-3 h-3 mr-1" /> Riapri</Button>
+                            </div>
+                        )}
                         </div>
                     </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mb-2">
-                    <span className="flex items-center bg-gray-100 px-2 py-1 rounded border"><Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM')}</span>
-                    {ticket.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.properties_real.nome}</span>}
-                    {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
-                  </div>
-
-                  {/* AZIONI RAPIDE AGGIORNATE */}
-                  <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
-                      {ticket.supplier_contact && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
-                              <Phone className="w-3 h-3" /> Fornitore
-                          </Button>
-                      )}
-                      
-                      {/* LOGICA WHATSAPP DINAMICA */}
-                      {assignees.length === 1 && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50" 
-                              onClick={() => contactPartner(assignees[0].phone, ticket.titolo)}>
-                              <Share2 className="w-3 h-3" /> Contatta {assignees[0].firstName}
-                          </Button>
-                      )}
-
-                      {assignees.length > 1 && (
-                          <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50">
-                                      <Share2 className="w-3 h-3" /> Contatta Team <ChevronDown className="w-3 h-3 ml-1"/>
-                                  </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent>
-                                  {assignees.map((u: any) => (
-                                      <DropdownMenuItem key={u.id} onClick={() => contactPartner(u.phone, ticket.titolo)}>
-                                          <Share2 className="w-3 h-3 mr-2 text-green-600"/> {u.label}
-                                      </DropdownMenuItem>
-                                  ))}
-                              </DropdownMenuContent>
-                          </DropdownMenu>
-                      )}
-
-                      {/* Fallback per vecchi ticket (assigned_partner) */}
-                      {assignees.length === 0 && ticket.assigned_partner && ticket.assigned_partner.phone && (
-                           <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50" onClick={() => contactPartner(ticket.assigned_partner.phone, ticket.titolo)}>
-                              <Share2 className="w-3 h-3" /> Contatta {ticket.assigned_partner.first_name}
-                          </Button>
-                      )}
-
-                      {(ticket.quote_url || ticket.ricevuta_url) && (
-                          <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
-                            onClick={() => openFile(ticket.quote_url || ticket.ricevuta_url)}>
-                              <FileText className="w-3 h-3" /> {ticket.quote_url ? 'Prev.' : 'Ric.'}
-                          </Button>
-                      )}
-                  </div>
-                </div>
-                
-                <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
-                   {ticket.stato !== 'risolto' ? (
-                      <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={() => setTicketManagerOpen(ticket)}><UserCog className="w-4 h-4 mr-2" /> Gestisci</Button>
-                   ) : (
-                      <div className="flex flex-col gap-2">
-                          <Button size="sm" variant="outline" className="w-full text-gray-600 bg-white hover:bg-gray-50" onClick={() => setTicketManagerOpen(ticket)}><Eye className="w-3 h-3 mr-2" /> Storico</Button>
-                          <Button size="sm" variant="ghost" className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => { if(confirm("Riaprire?")) reopenTicket.mutate(ticket.id); }}><RotateCcw className="w-3 h-3 mr-1" /> Riapri</Button>
-                      </div>
-                   )}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )})}
-      </div>
+                    </CardContent>
+                </Card>
+                )})}
+            </div>
+        </TabsContent>
+      </Tabs>
 
       {ticketManagerOpen && (
         <TicketManager 

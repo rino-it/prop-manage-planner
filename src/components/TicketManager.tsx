@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users
+  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users, Paperclip, AlertTriangle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
@@ -27,14 +27,13 @@ interface TicketManagerProps {
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // --- STATI LOCALI PER UI REATTIVA ---
+  // STATI ESISTENTI
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
   const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || ''); 
   const [dueDate, setDueDate] = useState(ticket?.data_scadenza || '');
   
-  // Stato locale per lo status del ticket e del preventivo (FIX UI non aggiornata)
   const [status, setStatus] = useState(ticket?.stato || 'aperto');
   const [quoteStatus, setQuoteStatus] = useState(ticket?.quote_status || 'none');
 
@@ -53,17 +52,19 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   
   const [uploading, setUploading] = useState(false);
 
-  // Sync stati se cambia il ticket prop (es. riapertura modale)
+  // NUOVO: Stato per conferma chiusura
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [confirmText, setConfirmText] = useState('');
+
+  // Sync stati
   useEffect(() => {
     if(isOpen && ticket) {
         setStatus(ticket.stato);
         setQuoteStatus(ticket.quote_status || 'none');
         setNotes(ticket.admin_notes || '');
-        // ... altri reset se necessario
     }
   }, [ticket, isOpen]);
 
-  // FETCH COLLEGHI
   const { data: colleagues = [] } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
@@ -86,7 +87,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         assigned_to: assignedTo, 
         assigned_partner_id: primaryAssignee,
         data_scadenza: dueDate || null,
-        stato: status // Usa lo stato locale che potrebbe essere cambiato
+        stato: status 
       }).eq('id', ticket.id);
 
     if (error) toast({ title: "Errore", description: error.message, variant: "destructive" });
@@ -113,11 +114,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
           }).eq('id', ticket.id);
 
         if (error) throw error;
-        
-        // Aggiornamento UI locale
         setQuoteStatus('pending');
         setStatus('in_attesa');
-        
         toast({ title: "Caricato", description: "Preventivo in attesa." });
         onUpdate();
       } catch (e: any) { 
@@ -141,19 +139,15 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       setUploading(true);
       try {
         const newState = decision === 'approved' ? 'in_corso' : 'aperto';
-        
         const { error: ticketError } = await supabase.from('tickets')
             .update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
-        
         if (ticketError) throw new Error("Errore ticket: " + ticketError.message);
 
         if (decision === 'approved') {
             const expenseDate = ticket.data_scadenza || new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
-            
             const entityData = ticket.property_real_id 
                 ? { property_real_id: ticket.property_real_id } 
                 : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
-
             const importo = ticket.quote_amount || 0;
 
             const { error: expenseError } = await supabase.from('payments').insert({
@@ -168,22 +162,16 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 user_id: ticket.user_id,
                 ...entityData
             });
-
             if (expenseError) throw new Error("Errore creazione spesa: " + expenseError.message);
-            
             toast({ title: "Approvato", description: "Ticket in corso e Spesa registrata." });
         } else {
             toast({ title: "Rifiutato", description: "Ticket riaperto." });
         }
         
-        // --- AGGIORNAMENTO UI LOCALE IMMEDIATO ---
         setQuoteStatus(decision);
         setStatus(newState);
-        
-        onUpdate(); // Aggiorna la lista sotto
-        // onClose(); // RIMOSSO: Così la finestra resta aperta e vedi l'aggiornamento
+        onUpdate();
       } catch (e: any) {
-          console.error(e);
           toast({ title: "Errore", description: e.message, variant: "destructive" });
       } finally {
           setUploading(false);
@@ -192,7 +180,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   const viewFile = async (path: string) => {
       if (!path) return;
-      const { data } = await supabase.storage.from('documents').createSignedUrl(path, 3600);
+      const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
+      const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
@@ -214,22 +203,32 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         }).eq('id', ticket.id);
 
         if (error) throw error;
-        
-        setStatus('in_verifica'); // Update locale
+        setStatus('in_verifica'); 
         toast({ title: "Inviato", description: "Ticket mandato in verifica amministrazione." });
         onUpdate();
-        onClose();
     } catch (error: any) {
         toast({ title: "Errore", description: error.message, variant: "destructive" });
     } finally { setUploading(false); }
   };
 
+  // --- NUOVA LOGICA CHIUSURA CON CONFERMA ---
+  const attemptClose = () => {
+      setShowCloseConfirm(true);
+      setConfirmText('');
+  };
+
   const handleFinalClose = async () => {
+      if (confirmText !== ticket.titolo) {
+          toast({ title: "Errore", description: "Il nome del ticket non corrisponde.", variant: "destructive" });
+          return;
+      }
+
       try {
           const { error } = await supabase.from('tickets').update({ stato: 'risolto' }).eq('id', ticket.id);
           if (error) throw error;
           
-          setStatus('risolto'); // Update locale
+          setStatus('risolto'); 
+          setShowCloseConfirm(false);
           toast({ title: "Ticket Chiuso", description: "Segnalazione risolta con successo." });
           onUpdate();
           onClose();
@@ -242,8 +241,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       try {
           const { error } = await supabase.from('tickets').update({ stato: 'in_lavorazione' }).eq('id', ticket.id);
           if (error) throw error;
-          
-          setStatus('in_lavorazione'); // Update locale
+          setStatus('in_lavorazione');
           toast({ title: "Riaperto", description: "Ticket tornato in lavorazione." });
           onUpdate();
       } catch (err: any) {
@@ -253,6 +251,27 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   const headerIcon = ticket.properties_mobile ? <Truck className="w-5 h-5"/> : <Home className="w-5 h-5"/>;
   const headerTitle = ticket.properties_mobile ? ticket.properties_mobile.veicolo : (ticket.properties_real?.nome || 'Generale');
+
+  if (showCloseConfirm) {
+      return (
+        <Dialog open={true} onOpenChange={() => setShowCloseConfirm(false)}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle className="text-red-600 flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> Conferma Chiusura</DialogTitle>
+                    <DialogDescription>
+                        Questa azione è definitiva. Per confermare, digita esattamente il nome del ticket: <br/>
+                        <span className="font-bold text-black block mt-2 select-all">{ticket.titolo}</span>
+                    </DialogDescription>
+                </DialogHeader>
+                <Input value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="Scrivi qui il nome..." />
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowCloseConfirm(false)}>Annulla</Button>
+                    <Button className="bg-red-600 hover:bg-red-700" onClick={handleFinalClose} disabled={confirmText !== ticket.titolo}>Conferma Chiusura</Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+      );
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
@@ -275,20 +294,28 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </TabsList>
 
             <TabsContent value="management" className="space-y-4 py-4">
+                {/* ALLEGATI INIZIALI */}
+                {ticket.attachments && ticket.attachments.length > 0 && (
+                    <div className="bg-slate-50 p-3 rounded border">
+                        <Label className="text-xs font-bold text-slate-500 mb-2 block">Allegati Iniziali</Label>
+                        <div className="flex flex-wrap gap-2">
+                            {ticket.attachments.map((file: string, idx: number) => (
+                                <Button key={idx} variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={() => viewFile(file)}>
+                                    <Paperclip className="w-3 h-3 mr-1 text-blue-500"/> File {idx + 1}
+                                </Button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
-                        <Label>Data Scadenza / Intervento</Label>
+                        <Label>Data Scadenza</Label>
                         <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} />
                     </div>
-                    
                     <div className="grid gap-2">
-                        <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Delega a Team</Label>
-                        <UserMultiSelect 
-                            options={colleagues} 
-                            selected={assignedTo} 
-                            onChange={setAssignedTo} 
-                            placeholder="Seleziona..." 
-                        />
+                        <Label>Delega a Team</Label>
+                        <UserMultiSelect options={colleagues} selected={assignedTo} onChange={setAssignedTo} placeholder="Seleziona..." />
                     </div>
                 </div>
 
@@ -348,7 +375,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     <div className="bg-orange-50 p-4 rounded text-center space-y-2 border border-orange-200">
                         <h3 className="font-bold text-orange-800">In Attesa di Verifica</h3>
                         <div className="grid grid-cols-2 gap-2">
-                            <Button className="bg-green-600" onClick={handleFinalClose}>Approva e Chiudi</Button>
+                            <Button className="bg-green-600" onClick={attemptClose}>Approva e Chiudi</Button>
                             <Button variant="outline" className="text-red-600" onClick={handleReopen}>Riapri</Button>
                         </div>
                     </div>
