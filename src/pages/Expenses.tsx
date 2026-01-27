@@ -8,8 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge'; // Assicurati di avere questo componente
-import { Plus, Trash2, Pencil, User, Car, Home, Ticket, Euro } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { Plus, Trash2, Pencil, User, Car, Home, Ticket, Euro, CreditCard } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
@@ -18,9 +18,9 @@ export default function Expenses() {
   // STATI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState('all'); // Filtri Tabella: all, real, mobile
+  const [filterType, setFilterType] = useState('all'); 
 
-  // FORM DATA (Aggiornato con 'competence')
+  // FORM DATA (Aggiornato con payment_method)
   const [formData, setFormData] = useState({
     targetType: 'real' as 'real' | 'mobile',
     targetId: '',
@@ -29,14 +29,14 @@ export default function Expenses() {
     categoria: 'manutenzione',
     scadenza: format(new Date(), 'yyyy-MM-dd'),
     stato: 'da_pagare',
-    competence: 'owner' as 'owner' | 'tenant' // <--- NUOVO CAMPO
+    competence: 'owner' as 'owner' | 'tenant',
+    payment_method: 'da definire' // <--- NUOVO CAMPO
   });
 
   const { data: realProperties } = usePropertiesReal();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // 1. FETCH VEICOLI
   const { data: mobileProperties } = useQuery({
     queryKey: ['mobile-properties'],
     queryFn: async () => {
@@ -45,25 +45,18 @@ export default function Expenses() {
     }
   });
 
-  // 2. FETCH SPESE (Unified + Tickets)
   const { data: expenses = [] } = useQuery({
     queryKey: ['unified-expenses'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payments')
-        .select(`
-            *, 
-            properties_real(nome), 
-            properties_mobile(veicolo, targa),
-            tickets(titolo) 
-        `)
+        .select(`*, properties_real(nome), properties_mobile(veicolo, targa), tickets(titolo)`)
         .order('scadenza', { ascending: false });
       if (error) throw error;
       return data || [];
     }
   });
 
-  // 3. MUTATION: SALVA
   const saveExpense = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -75,7 +68,8 @@ export default function Expenses() {
         categoria: formData.categoria,
         scadenza: formData.scadenza,
         stato: formData.stato,
-        competence: formData.competence, // <--- SALVIAMO LA COMPETENZA
+        competence: formData.competence,
+        payment_method: formData.payment_method, // <--- SALVIAMO METODO
         user_id: user?.id,
         property_real_id: formData.targetType === 'real' ? formData.targetId : null,
         property_mobile_id: formData.targetType === 'mobile' ? formData.targetId : null
@@ -98,7 +92,6 @@ export default function Expenses() {
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // 4. MUTATION: ELIMINA
   const deleteExpense = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase.from('payments').delete().eq('id', id);
@@ -110,7 +103,6 @@ export default function Expenses() {
     }
   });
 
-  // HELPER: APRI MODAL
   const openEdit = (expense: any) => {
     setEditingId(expense.id);
     setFormData({
@@ -121,7 +113,8 @@ export default function Expenses() {
         categoria: expense.categoria || 'manutenzione',
         scadenza: expense.scadenza,
         stato: expense.stato || 'da_pagare',
-        competence: expense.competence || 'owner' // <--- CARICA COMPETENZA
+        competence: expense.competence || 'owner',
+        payment_method: expense.payment_method || 'da definire' // <--- LOAD
     });
     setIsDialogOpen(true);
   };
@@ -136,11 +129,10 @@ export default function Expenses() {
     setFormData({
         targetType: 'real', targetId: '', importo: '', descrizione: '',
         categoria: 'manutenzione', scadenza: format(new Date(), 'yyyy-MM-dd'), 
-        stato: 'da_pagare', competence: 'owner'
+        stato: 'da_pagare', competence: 'owner', payment_method: 'da definire'
     });
   };
 
-  // LOGICA FILTRO
   const filteredExpenses = expenses.filter((ex: any) => {
     if (filterType === 'all') return true;
     if (filterType === 'real') return !!ex.property_real_id;
@@ -150,8 +142,6 @@ export default function Expenses() {
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      
-      {/* HEADER + FILTRI */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gestione Spese</h1>
@@ -167,7 +157,6 @@ export default function Expenses() {
         </Button>
       </div>
 
-      {/* TABELLA */}
       <Card className="border-t-4 border-t-blue-500 shadow-md">
         <CardContent className="p-0">
           <Table>
@@ -175,24 +164,21 @@ export default function Expenses() {
               <TableRow>
                 <TableHead>Data</TableHead>
                 <TableHead>Riferimento</TableHead>
-                <TableHead>Dettagli & Competenza</TableHead> {/* Header modificato */}
+                <TableHead>Dettagli</TableHead>
+                <TableHead>Metodo</TableHead> {/* NUOVA COLONNA */}
                 <TableHead className="text-right">Importo</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredExpenses.length === 0 ? (
-                <TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
               ) : (
                 filteredExpenses.map((ex: any) => (
                   <TableRow key={ex.id} className="hover:bg-slate-50 group transition-colors">
-                    
-                    {/* DATA */}
                     <TableCell className="font-mono text-xs text-slate-500">
                         {ex.scadenza ? format(new Date(ex.scadenza), 'dd/MM/yy') : '-'}
                     </TableCell>
-                    
-                    {/* RIFERIMENTO (Casa o Veicolo) */}
                     <TableCell className="font-medium">
                         {ex.properties_mobile ? (
                             <div className="flex items-center gap-2 text-slate-700">
@@ -209,21 +195,17 @@ export default function Expenses() {
                             </div>
                         )}
                     </TableCell>
-                    
-                    {/* DETTAGLI (Categoria, Descrizione, Ticket, Competenza) */}
                     <TableCell>
                         <div className="flex flex-col gap-1">
                             <div className="flex items-center gap-2">
                                 <span className="capitalize bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 border border-slate-200">
                                     {ex.categoria}
                                 </span>
-                                {/* Badge Ticket */}
                                 {ex.ticket_id && (
                                     <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 gap-1 border-blue-200 text-blue-600 bg-blue-50">
                                         <Ticket className="w-3 h-3"/> Ticket
                                     </Badge>
                                 )}
-                                {/* Badge Competenza Inquilino */}
                                 {ex.competence === 'tenant' && (
                                     <Badge className="text-[10px] px-1 py-0 h-5 bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">
                                         <User className="w-3 h-3 mr-1"/> Inquilino
@@ -234,7 +216,11 @@ export default function Expenses() {
                         </div>
                     </TableCell>
                     
-                    {/* IMPORTO E STATO */}
+                    {/* COLONNA METODO PAGAMENTO */}
+                    <TableCell>
+                        <span className="text-xs text-gray-500 capitalize">{ex.payment_method || '-'}</span>
+                    </TableCell>
+
                     <TableCell className="text-right">
                         <div className="flex flex-col items-end">
                             <span className="font-bold text-red-600 font-mono">-€{parseFloat(ex.importo).toFixed(2)}</span>
@@ -243,8 +229,6 @@ export default function Expenses() {
                             </span>
                         </div>
                     </TableCell>
-                    
-                    {/* AZIONI */}
                     <TableCell className="text-right">
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(ex)}>
@@ -263,7 +247,6 @@ export default function Expenses() {
         </CardContent>
       </Card>
 
-      {/* DIALOG UNIFICATO (CREAZIONE / MODIFICA) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -271,7 +254,6 @@ export default function Expenses() {
           </DialogHeader>
           
           <div className="grid gap-4 py-4">
-            {/* SWITCHER TIPO */}
             <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
                 <button 
                     className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${formData.targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
@@ -287,7 +269,6 @@ export default function Expenses() {
                 </button>
             </div>
 
-            {/* SELEZIONE OGGETTO */}
             <div className="grid gap-2">
                 <Label>Seleziona {formData.targetType === 'real' ? 'Proprietà' : 'Mezzo'}</Label>
                 <Select value={formData.targetId} onValueChange={(v) => setFormData({...formData, targetId: v})}>
@@ -301,7 +282,6 @@ export default function Expenses() {
                 </Select>
             </div>
 
-            {/* DATI SPESA */}
             <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label>Importo (€)</Label>
@@ -347,23 +327,36 @@ export default function Expenses() {
                 </div>
             </div>
 
-            {/* NUOVO CAMPO: COMPETENZA */}
-            <div className="space-y-2 pt-2 border-t mt-2">
-                <Label className="flex items-center gap-2"><User className="w-4 h-4 text-purple-600"/> A carico di</Label>
-                <Select value={formData.competence} onValueChange={(v: 'owner'|'tenant') => setFormData({...formData, competence: v})}>
-                    <SelectTrigger className={formData.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
-                        <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="owner">🏠 Proprietario (Costo Mio)</SelectItem>
-                        <SelectItem value="tenant">👤 Inquilino (Da Ribaltare)</SelectItem>
-                    </SelectContent>
-                </Select>
-                <p className="text-[10px] text-gray-500">
-                    {formData.competence === 'tenant' 
-                        ? 'Questa spesa non rientrerà nei tuoi costi, ma verrà addebitata all\'inquilino.' 
-                        : 'Questa spesa è un costo di gestione a tuo carico.'}
-                </p>
+            {/* NUOVO: METODO PAGAMENTO */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-2"><CreditCard className="w-4 h-4"/> Metodo</Label>
+                    <Select value={formData.payment_method} onValueChange={(v) => setFormData({...formData, payment_method: v})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="da definire">Da Definire</SelectItem>
+                            <SelectItem value="bonifico">Bonifico</SelectItem>
+                            <SelectItem value="carta">Carta/Bancomat</SelectItem>
+                            <SelectItem value="contanti">Contanti</SelectItem>
+                            <SelectItem value="rid">RID / Addebito</SelectItem>
+                            <SelectItem value="assegno">Assegno</SelectItem>
+                            <SelectItem value="altro">Altro</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                
+                <div className="space-y-2">
+                    <Label className="flex items-center gap-2"><User className="w-4 h-4 text-purple-600"/> A carico di</Label>
+                    <Select value={formData.competence} onValueChange={(v: 'owner'|'tenant') => setFormData({...formData, competence: v})}>
+                        <SelectTrigger className={formData.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="owner">🏠 Proprietario</SelectItem>
+                            <SelectItem value="tenant">👤 Inquilino</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
           </div>

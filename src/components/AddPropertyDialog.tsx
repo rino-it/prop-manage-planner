@@ -1,205 +1,224 @@
-import React, { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useCreatePropertyReal, useCreatePropertyMobile } from "@/hooks/useProperties";
-import { useToast } from "@/hooks/use-toast";
-import { Building2, Car, Key, CalendarClock } from "lucide-react";
+import React, { useState, useEffect } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { Home, Car, Upload, FileText, Calendar } from 'lucide-react';
 
-export function AddPropertyDialog({ children }: { children: React.ReactNode }) {
-  const [open, setOpen] = useState(false);
+interface AddPropertyDialogProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+  propertyToEdit?: any;
+}
+
+export default function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
   const { toast } = useToast();
-  const createReal = useCreatePropertyReal();
-  const createMobile = useCreatePropertyMobile();
-
-  // Stati per Immobile
-  const [realForm, setRealForm] = useState({
-    nome: "", 
-    via: "", 
-    citta: "", 
-    cap: "", 
-    provincia: "", 
-    tipo: "appartamento" as const,
-    tipo_affitto: "breve" as const // <--- NUOVO CAMPO
+  const [loading, setLoading] = useState(false);
+  const [type, setType] = useState<'real' | 'mobile'>('real');
+  
+  // STATO FORM GENERALE
+  const [formData, setFormData] = useState({
+    nome: '',
+    indirizzo: '', // Solo Real
+    veicolo: '',   // Solo Mobile
+    targa: '',     // Solo Mobile
+    proprietario: '', // Nuovo campo intestatario
+    scadenza_bollo: '', // <--- NUOVO CAMPO BOLLO
+    scadenza_assicurazione: '',
+    scadenza_revisione: ''
   });
 
-  // Stati per Mobile
-  const [mobileForm, setMobileForm] = useState({
-    nome: "", categoria: "veicolo" as const, marca: "", modello: "", targa: ""
-  });
+  // GESTIONE FILE
+  const [librettoFile, setLibrettoFile] = useState<File | null>(null);
+  const [insuranceFile, setInsuranceFile] = useState<File | null>(null);
 
-  const handleSubmitReal = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { supabase } = await import("@/integrations/supabase/client");
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
-        toast({ title: "Errore", description: "Devi essere loggato per salvare.", variant: "destructive" });
-        return;
-      }
-
-      await createReal.mutateAsync({
-        ...realForm,
-        user_id: user.id
+  useEffect(() => {
+    if (propertyToEdit) {
+      setType(propertyToEdit.targa ? 'mobile' : 'real');
+      setFormData({
+        nome: propertyToEdit.nome || '',
+        indirizzo: propertyToEdit.indirizzo || '',
+        veicolo: propertyToEdit.veicolo || '',
+        targa: propertyToEdit.targa || '',
+        proprietario: propertyToEdit.proprietario || '',
+        scadenza_bollo: propertyToEdit.scadenza_bollo || '',
+        scadenza_assicurazione: propertyToEdit.scadenza_assicurazione || '',
+        scadenza_revisione: propertyToEdit.scadenza_revisione || ''
       });
-      
-      setOpen(false);
-      // Reset form
-      setRealForm({ nome: "", via: "", citta: "", cap: "", provincia: "", tipo: "appartamento", tipo_affitto: "breve" });
-      toast({ title: "Successo", description: "Immobile salvato correttamente!" });
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Errore", description: "Impossibile salvare.", variant: "destructive" });
+    } else {
+      setFormData({ nome: '', indirizzo: '', veicolo: '', targa: '', proprietario: '', scadenza_bollo: '', scadenza_assicurazione: '', scadenza_revisione: '' });
+      setLibrettoFile(null);
+      setInsuranceFile(null);
     }
+  }, [propertyToEdit, isOpen]);
+
+  const uploadFile = async (file: File, path: string) => {
+    const fileName = `${path}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+    const { error } = await supabase.storage.from('vehicle-docs').upload(fileName, file);
+    if (error) throw error;
+    return fileName;
   };
 
-  const handleSubmitMobile = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async () => {
+    setLoading(true);
     try {
-      const { supabase } = await import("@/integrations/supabase/client");
       const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Utente non autenticato");
 
-      if (!user) {
-        toast({ title: "Errore", description: "Devi essere loggato.", variant: "destructive" });
-        return;
+      let librettoPath = propertyToEdit?.libretto_url;
+      let insurancePath = propertyToEdit?.insurance_url;
+
+      if (type === 'mobile') {
+        if (librettoFile) librettoPath = await uploadFile(librettoFile, 'libretti');
+        if (insuranceFile) insurancePath = await uploadFile(insuranceFile, 'assicurazioni');
       }
 
-      await createMobile.mutateAsync({
-        ...mobileForm,
-        user_id: user.id
-      });
-      
-      setOpen(false);
-      setMobileForm({ nome: "", categoria: "veicolo", marca: "", modello: "", targa: "" });
-      toast({ title: "Successo", description: "Bene mobile salvato correttamente!" });
-    } catch (error) {
-      console.error(error);
-      toast({ title: "Errore", description: "Impossibile salvare.", variant: "destructive" });
+      if (type === 'real') {
+        const payload = {
+          user_id: user.id,
+          nome: formData.nome,
+          indirizzo: formData.indirizzo,
+          stato: 'sfitto' // Default
+        };
+
+        if (propertyToEdit) {
+          const { error } = await supabase.from('properties_real').update(payload).eq('id', propertyToEdit.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('properties_real').insert(payload);
+          if (error) throw error;
+        }
+      } else {
+        const payload = {
+          user_id: user.id,
+          veicolo: formData.veicolo,
+          targa: formData.targa,
+          proprietario: formData.proprietario,
+          scadenza_bollo: formData.scadenza_bollo || null, // <--- SALVA BOLLO
+          scadenza_assicurazione: formData.scadenza_assicurazione || null,
+          scadenza_revisione: formData.scadenza_revisione || null,
+          libretto_url: librettoPath,
+          insurance_url: insurancePath,
+          status: 'active'
+        };
+
+        if (propertyToEdit) {
+          const { error } = await supabase.from('properties_mobile').update(payload).eq('id', propertyToEdit.id);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('properties_mobile').insert(payload);
+          if (error) throw error;
+        }
+      }
+
+      toast({ title: "Salvato con successo!" });
+      onSuccess();
+      onClose();
+    } catch (error: any) {
+      toast({ title: "Errore", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
-      <DialogContent className="sm:max-w-[500px]">
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Aggiungi Nuova Proprietà</DialogTitle>
-          <DialogDescription>Inserisci i dettagli del bene da gestire.</DialogDescription>
+          <DialogTitle>{propertyToEdit ? 'Modifica Proprietà' : 'Aggiungi Nuova Proprietà'}</DialogTitle>
         </DialogHeader>
-        
-        <Tabs defaultValue="real" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="real" className="flex gap-2"><Building2 className="w-4 h-4"/> Immobile</TabsTrigger>
-            <TabsTrigger value="mobile" className="flex gap-2"><Car className="w-4 h-4"/> Bene Mobile</TabsTrigger>
-          </TabsList>
 
-          {/* FORM IMMOBILE */}
-          <TabsContent value="real">
-            <form onSubmit={handleSubmitReal} className="space-y-4 py-4">
-              
-              {/* SELEZIONE TIPO GESTIONE (Nuova Logica) */}
-              <div className="bg-blue-50 p-3 rounded-lg border border-blue-100">
-                <Label className="text-blue-800 font-semibold mb-2 flex items-center gap-2">
-                  <Key className="w-4 h-4" /> Strategia di Affitto
-                </Label>
-                <Select 
-                  onValueChange={(v: any) => setRealForm({...realForm, tipo_affitto: v})} 
-                  defaultValue="breve"
-                >
-                  <SelectTrigger className="bg-white">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="breve">🏖️ Affitto Breve (Turistico / Airbnb)</SelectItem>
-                    <SelectItem value="lungo">🏠 Lungo Termine (4+4 / Transitorio)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        {!propertyToEdit && (
+          <div className="flex gap-2 mb-4 bg-slate-100 p-1 rounded-lg">
+            <button 
+                className={`flex-1 py-2 rounded-md flex items-center justify-center gap-2 text-sm font-medium transition-all ${type === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                onClick={() => setType('real')}
+            >
+                <Home className="w-4 h-4"/> Immobile
+            </button>
+            <button 
+                className={`flex-1 py-2 rounded-md flex items-center justify-center gap-2 text-sm font-medium transition-all ${type === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                onClick={() => setType('mobile')}
+            >
+                <Car className="w-4 h-4"/> Veicolo
+            </button>
+          </div>
+        )}
 
-              <div className="grid gap-2">
+        <div className="space-y-4">
+          {type === 'real' ? (
+            <>
+              <div className="space-y-2">
                 <Label>Nome Identificativo</Label>
-                <Input required placeholder="Es. Casa Mare" value={realForm.nome} onChange={e => setRealForm({...realForm, nome: e.target.value})} />
+                <Input placeholder="Es. Appartamento Centro" value={formData.nome} onChange={e => setFormData({...formData, nome: e.target.value})} />
               </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Tipo Immobile</Label>
-                  <Select onValueChange={(v: any) => setRealForm({...realForm, tipo: v})} defaultValue="appartamento">
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="appartamento">Appartamento</SelectItem>
-                      <SelectItem value="casa">Casa Indipendente</SelectItem>
-                      <SelectItem value="ufficio">Ufficio</SelectItem>
-                      <SelectItem value="magazzino">Magazzino</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid gap-2">
-                  <Label>Città</Label>
-                  <Input required value={realForm.citta} onChange={e => setRealForm({...realForm, citta: e.target.value})} />
-                </div>
-              </div>
-              
-              <div className="grid gap-2">
+              <div className="space-y-2">
                 <Label>Indirizzo Completo</Label>
-                <Input required value={realForm.via} onChange={e => setRealForm({...realForm, via: e.target.value})} />
+                <Input placeholder="Via Roma 1, Milano" value={formData.indirizzo} onChange={e => setFormData({...formData, indirizzo: e.target.value})} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                    <Label>Modello Veicolo</Label>
+                    <Input placeholder="Es. Fiat Panda" value={formData.veicolo} onChange={e => setFormData({...formData, veicolo: e.target.value})} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Targa</Label>
+                    <Input placeholder="AB 123 CD" value={formData.targa} onChange={e => setFormData({...formData, targa: e.target.value})} />
+                </div>
               </div>
               
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>CAP</Label>
-                  <Input required value={realForm.cap} onChange={e => setRealForm({...realForm, cap: e.target.value})} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Provincia</Label>
-                  <Input required value={realForm.provincia} onChange={e => setRealForm({...realForm, provincia: e.target.value})} />
-                </div>
+              <div className="space-y-2">
+                <Label>Intestatario (Proprietario)</Label>
+                <Input placeholder="Nome Cognome o Azienda" value={formData.proprietario} onChange={e => setFormData({...formData, proprietario: e.target.value})} />
               </div>
 
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">Salva Immobile</Button>
-            </form>
-          </TabsContent>
+              {/* SEZIONE SCADENZE */}
+              <div className="space-y-3 pt-2 border-t">
+                <h4 className="text-sm font-semibold text-gray-700">Scadenze & Documenti</h4>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                        <Label className="text-xs">Scadenza Assicurazione</Label>
+                        <Input type="date" className="h-8 text-xs" value={formData.scadenza_assicurazione} onChange={e => setFormData({...formData, scadenza_assicurazione: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">Scadenza Bollo</Label>
+                        <Input type="date" className="h-8 text-xs" value={formData.scadenza_bollo} onChange={e => setFormData({...formData, scadenza_bollo: e.target.value})} />
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs">Scadenza Revisione</Label>
+                        <Input type="date" className="h-8 text-xs" value={formData.scadenza_revisione} onChange={e => setFormData({...formData, scadenza_revisione: e.target.value})} />
+                    </div>
+                </div>
 
-          {/* FORM MOBILE (Invariato ma incluso per completezza) */}
-          <TabsContent value="mobile">
-            <form onSubmit={handleSubmitMobile} className="space-y-4 py-4">
-              <div className="grid gap-2">
-                <Label>Nome</Label>
-                <Input required placeholder="Es. Auto Aziendale" value={mobileForm.nome} onChange={e => setMobileForm({...mobileForm, nome: e.target.value})} />
-              </div>
-              <div className="grid gap-2">
-                <Label>Categoria</Label>
-                <Select onValueChange={(v: any) => setMobileForm({...mobileForm, categoria: v})} defaultValue="veicolo">
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="veicolo">Veicolo</SelectItem>
-                    <SelectItem value="imbarcazione">Imbarcazione</SelectItem>
-                    <SelectItem value="attrezzatura">Attrezzatura</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2">
-                  <Label>Marca</Label>
-                  <Input value={mobileForm.marca} onChange={e => setMobileForm({...mobileForm, marca: e.target.value})} />
-                </div>
-                <div className="grid gap-2">
-                  <Label>Modello</Label>
-                  <Input value={mobileForm.modello} onChange={e => setMobileForm({...mobileForm, modello: e.target.value})} />
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="space-y-1">
+                        <Label className="text-xs flex items-center gap-1"><FileText className="w-3 h-3"/> Carica Libretto</Label>
+                        <Input type="file" className="h-8 text-xs" onChange={e => setLibrettoFile(e.target.files?.[0] || null)} accept=".pdf,.jpg,.png"/>
+                    </div>
+                    <div className="space-y-1">
+                        <Label className="text-xs flex items-center gap-1"><FileText className="w-3 h-3"/> Carica Assicurazione</Label>
+                        <Input type="file" className="h-8 text-xs" onChange={e => setInsuranceFile(e.target.files?.[0] || null)} accept=".pdf,.jpg,.png"/>
+                    </div>
                 </div>
               </div>
-              <div className="grid gap-2">
-                <Label>Targa / Seriale</Label>
-                <Input value={mobileForm.targa} onChange={e => setMobileForm({...mobileForm, targa: e.target.value})} />
-              </div>
-              <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700">Salva Bene Mobile</Button>
-            </form>
-          </TabsContent>
-        </Tabs>
+            </>
+          )}
+        </div>
+
+        <DialogFooter className="mt-4">
+          <Button variant="outline" onClick={onClose}>Annulla</Button>
+          <Button onClick={handleSave} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+            {loading ? 'Salvataggio...' : 'Salva'}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
