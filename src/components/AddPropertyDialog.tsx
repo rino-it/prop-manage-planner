@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Home, Car, Upload, FileText, Calendar } from 'lucide-react';
+import { Home, Car, FileText } from 'lucide-react';
 
 interface AddPropertyDialogProps {
   isOpen: boolean;
@@ -15,7 +15,8 @@ interface AddPropertyDialogProps {
   propertyToEdit?: any;
 }
 
-export default function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
+// NOTA: Ho rimosso 'default' per correggere l'errore di importazione
+export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'real' | 'mobile'>('real');
@@ -98,7 +99,7 @@ export default function AddPropertyDialog({ isOpen, onClose, onSuccess, property
           veicolo: formData.veicolo,
           targa: formData.targa,
           proprietario: formData.proprietario,
-          scadenza_bollo: formData.scadenza_bollo || null, // <--- SALVA BOLLO
+          scadenza_bollo: formData.scadenza_bollo || null,
           scadenza_assicurazione: formData.scadenza_assicurazione || null,
           scadenza_revisione: formData.scadenza_revisione || null,
           libretto_url: librettoPath,
