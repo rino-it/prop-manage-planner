@@ -131,21 +131,26 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             // Data scadenza: se non definita, default oggi + 30gg
             const expenseDate = ticket.data_scadenza || new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
             
-            // Collega all'entità corretta (Casa o Veicolo)
-            const entityData = ticket.property_real_id // Nel DB è property_real_id
-                ? { property_id: ticket.property_real_id } 
-                : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {}); // Verifica il nome corretto della colonna nel tuo DB, spesso è property_mobile_id
+            // FIX: Usiamo property_real_id come chiave corretta per payments
+            const entityData = ticket.property_real_id 
+                ? { property_real_id: ticket.property_real_id } 
+                : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
+
+            const importo = ticket.quote_amount || 0;
 
             // Nota: uso 'payments' perché è il nome della tabella spese nel tuo schema
             const { error: expenseError } = await supabase.from('payments').insert({
                 descrizione: `Spesa Ticket: ${ticket.titolo}`,
-                importo: ticket.quote_amount || 0,
+                importo: importo,
+                importo_originale: importo, // FIX: Copia importo anche qui
                 scadenza: expenseDate,
                 stato: 'da_pagare', 
                 payment_status: 'pending', // Nuova colonna
                 competence: 'owner', // Default a carico proprietario
                 ticket_id: ticket.id,
                 user_id: ticket.user_id,
+                rate_totali: 1, // Default 1 rata
+                rata_corrente: 1, // Default rata 1
                 ...entityData
             });
 
