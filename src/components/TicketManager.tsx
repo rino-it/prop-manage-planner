@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
-import { UserMultiSelect } from '@/components/UserMultiSelect'; // <--- IMPORT NUOVO
+import { UserMultiSelect } from '@/components/UserMultiSelect';
 
 interface TicketManagerProps {
   ticket: any;
@@ -76,8 +76,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         assigned_partner_id: primaryAssignee, // <--- SALVA SINGOLO (Legacy)
         data_scadenza: dueDate || null,
         // Non forziamo lo stato a 'in_lavorazione' se è già 'risolto' o altro, manteniamo quello attuale a meno che non sia specificato
-        // Se vuoi forzare 'in_lavorazione' solo se è 'aperto', puoi aggiungere logica qui.
-        // Per ora lascio come il tuo codice originale:
         stato: ticket.stato === 'aperto' ? 'in_lavorazione' : ticket.stato
       }).eq('id', ticket.id);
 
@@ -85,7 +83,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { toast({ title: "Salvato", description: "Modifiche registrate." }); onUpdate(); }
   };
 
-  // --- LE TUE FUNZIONI ORIGINALI (INVARIATE) ---
   const handleQuoteUpload = async () => {
       setUploading(true);
       try {
@@ -117,23 +114,52 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { toast({ title: "Reset Effettuato" }); onUpdate(); }
   };
 
+  // --- FUNZIONE CRITICA AGGIORNATA (CREA SPESA AUTOMATICA) ---
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
         const newState = decision === 'approved' ? 'in_corso' : 'aperto';
+        
+        // 1. Aggiorna il Ticket
         const { error: ticketError } = await supabase.from('tickets')
             .update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
         
-        if (ticketError) throw new Error(ticketError.message);
+        if (ticketError) throw new Error("Errore ticket: " + ticketError.message);
 
+        // 2. SE APPROVATO: Crea automaticamente la spesa in 'payments'
         if (decision === 'approved') {
-            toast({ title: "Approvato", description: "Ticket in corso." });
+            // Data scadenza: se non definita, default oggi + 30gg
+            const expenseDate = ticket.data_scadenza || new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
+            
+            // Collega all'entità corretta (Casa o Veicolo)
+            const entityData = ticket.property_real_id // Nel DB è property_real_id
+                ? { property_id: ticket.property_real_id } 
+                : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {}); // Verifica il nome corretto della colonna nel tuo DB, spesso è property_mobile_id
+
+            // Nota: uso 'payments' perché è il nome della tabella spese nel tuo schema
+            const { error: expenseError } = await supabase.from('payments').insert({
+                descrizione: `Spesa Ticket: ${ticket.titolo}`,
+                importo: ticket.quote_amount || 0,
+                scadenza: expenseDate,
+                stato: 'da_pagare', 
+                payment_status: 'pending', // Nuova colonna
+                competence: 'owner', // Default a carico proprietario
+                ticket_id: ticket.id,
+                user_id: ticket.user_id,
+                ...entityData
+            });
+
+            if (expenseError) throw new Error("Errore creazione spesa: " + expenseError.message);
+            
+            toast({ title: "Approvato", description: "Ticket in corso e Spesa registrata." });
         } else {
             toast({ title: "Rifiutato", description: "Ticket riaperto." });
         }
+        
         onUpdate();
         onClose();
       } catch (e: any) {
+          console.error(e);
           toast({ title: "Errore", description: e.message, variant: "destructive" });
       } finally {
           setUploading(false);
@@ -224,10 +250,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} />
                     </div>
                     
-                    {/* --- NUOVA SEZIONE MULTI-SELEZIONE --- */}
+                    {/* --- SEZIONE MULTI-SELEZIONE --- */}
                     <div className="grid gap-2">
                         <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Delega a Team</Label>
-                        {/* Sostituita la Select con UserMultiSelect */}
                         <UserMultiSelect 
                             options={colleagues} 
                             selected={assignedTo} 
@@ -235,7 +260,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                             placeholder="Seleziona..." 
                         />
                     </div>
-                    {/* ------------------------------------- */}
                 </div>
 
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
@@ -259,7 +283,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress}>Salva Modifiche</Button></div>}
             </TabsContent>
 
-            {/* --- I TAB SEGUENTI SONO IDENTICI AL TUO ORIGINALE --- */}
             <TabsContent value="quote" className="space-y-4 py-4">
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
