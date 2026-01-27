@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -27,14 +27,17 @@ interface TicketManagerProps {
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // STATI ESISTENTI
+  // --- STATI LOCALI PER UI REATTIVA ---
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
   const [supplierContact, setSupplierContact] = useState(ticket?.supplier_contact || ''); 
   const [dueDate, setDueDate] = useState(ticket?.data_scadenza || '');
+  
+  // Stato locale per lo status del ticket e del preventivo (FIX UI non aggiornata)
+  const [status, setStatus] = useState(ticket?.stato || 'aperto');
+  const [quoteStatus, setQuoteStatus] = useState(ticket?.quote_status || 'none');
 
-  // NUOVO STATO: ARRAY DI ASSEGNATARI (Supporta anche la vecchia assegnazione singola come fallback)
   const [assignedTo, setAssignedTo] = useState<string[]>(
     ticket?.assigned_to && ticket.assigned_to.length > 0 
       ? ticket.assigned_to 
@@ -50,7 +53,17 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   
   const [uploading, setUploading] = useState(false);
 
-  // FETCH COLLEGHI (Formattati per il MultiSelect)
+  // Sync stati se cambia il ticket prop (es. riapertura modale)
+  useEffect(() => {
+    if(isOpen && ticket) {
+        setStatus(ticket.stato);
+        setQuoteStatus(ticket.quote_status || 'none');
+        setNotes(ticket.admin_notes || '');
+        // ... altri reset se necessario
+    }
+  }, [ticket, isOpen]);
+
+  // FETCH COLLEGHI
   const { data: colleagues = [] } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
@@ -73,11 +86,14 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         assigned_to: assignedTo, 
         assigned_partner_id: primaryAssignee,
         data_scadenza: dueDate || null,
-        stato: ticket.stato === 'aperto' ? 'in_lavorazione' : ticket.stato
+        stato: status // Usa lo stato locale che potrebbe essere cambiato
       }).eq('id', ticket.id);
 
     if (error) toast({ title: "Errore", description: error.message, variant: "destructive" });
-    else { toast({ title: "Salvato", description: "Modifiche registrate." }); onUpdate(); }
+    else { 
+        toast({ title: "Salvato", description: "Modifiche registrate." }); 
+        onUpdate(); 
+    }
   };
 
   const handleQuoteUpload = async () => {
@@ -97,6 +113,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
           }).eq('id', ticket.id);
 
         if (error) throw error;
+        
+        // Aggiornamento UI locale
+        setQuoteStatus('pending');
+        setStatus('in_attesa');
+        
         toast({ title: "Caricato", description: "Preventivo in attesa." });
         onUpdate();
       } catch (e: any) { 
@@ -108,10 +129,14 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     if(!confirm("Confermi il reset? Il ticket tornerà 'In Attesa'.")) return;
     const { error } = await supabase.from('tickets').update({ quote_status: 'pending', stato: 'in_attesa' }).eq('id', ticket.id);
     if(error) toast({ title: "Errore", description: error.message, variant: "destructive" });
-    else { toast({ title: "Reset Effettuato" }); onUpdate(); }
+    else { 
+        setQuoteStatus('pending');
+        setStatus('in_attesa');
+        toast({ title: "Reset Effettuato" }); 
+        onUpdate(); 
+    }
   };
 
-  // --- FUNZIONE CORRETTA: Rimosso rata_corrente e rate_totali ---
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
@@ -141,7 +166,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 competence: 'owner', 
                 ticket_id: ticket.id,
                 user_id: ticket.user_id,
-                // RIMOSSI: rate_totali e rata_corrente perché non esistono nel DB
                 ...entityData
             });
 
@@ -152,8 +176,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             toast({ title: "Rifiutato", description: "Ticket riaperto." });
         }
         
-        onUpdate();
-        onClose();
+        // --- AGGIORNAMENTO UI LOCALE IMMEDIATO ---
+        setQuoteStatus(decision);
+        setStatus(newState);
+        
+        onUpdate(); // Aggiorna la lista sotto
+        // onClose(); // RIMOSSO: Così la finestra resta aperta e vedi l'aggiornamento
       } catch (e: any) {
           console.error(e);
           toast({ title: "Errore", description: e.message, variant: "destructive" });
@@ -186,6 +214,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         }).eq('id', ticket.id);
 
         if (error) throw error;
+        
+        setStatus('in_verifica'); // Update locale
         toast({ title: "Inviato", description: "Ticket mandato in verifica amministrazione." });
         onUpdate();
         onClose();
@@ -198,6 +228,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       try {
           const { error } = await supabase.from('tickets').update({ stato: 'risolto' }).eq('id', ticket.id);
           if (error) throw error;
+          
+          setStatus('risolto'); // Update locale
           toast({ title: "Ticket Chiuso", description: "Segnalazione risolta con successo." });
           onUpdate();
           onClose();
@@ -210,6 +242,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       try {
           const { error } = await supabase.from('tickets').update({ stato: 'in_lavorazione' }).eq('id', ticket.id);
           if (error) throw error;
+          
+          setStatus('in_lavorazione'); // Update locale
           toast({ title: "Riaperto", description: "Ticket tornato in lavorazione." });
           onUpdate();
       } catch (err: any) {
@@ -217,7 +251,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       }
   };
 
-  // LOGICA HEADER
   const headerIcon = ticket.properties_mobile ? <Truck className="w-5 h-5"/> : <Home className="w-5 h-5"/>;
   const headerTitle = ticket.properties_mobile ? ticket.properties_mobile.veicolo : (ticket.properties_real?.nome || 'Generale');
 
@@ -229,7 +262,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             <span className="bg-blue-100 text-blue-700 p-1 rounded">{headerIcon}</span>
             <span className="truncate">{headerTitle}: {ticket.titolo}</span>
           </DialogTitle>
-          <DialogDescription>Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')} - Stato: <Badge>{ticket.stato}</Badge></DialogDescription>
+          <DialogDescription>
+            Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')} - Stato: <Badge className={status === 'risolto' ? 'bg-green-600' : ''}>{status}</Badge>
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="management" className="w-full mt-2">
@@ -285,21 +320,21 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                             <div className="flex items-center gap-2 font-bold"><Euro className="w-5 h-5"/> {ticket.quote_amount}</div>
                             <div className="flex items-center gap-2">
                                 {ticket.quote_url && <Button size="sm" variant="ghost" onClick={() => viewFile(ticket.quote_url)}><FileText className="w-4 h-4 mr-2"/> Vedi</Button>}
-                                <Badge className={ticket.quote_status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{ticket.quote_status}</Badge>
+                                <Badge className={quoteStatus === 'approved' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{quoteStatus}</Badge>
                             </div>
                         </div>
-                        {ticket.quote_status === 'approved' && !isReadOnly && (
+                        {quoteStatus === 'approved' && !isReadOnly && (
                             <Button variant="destructive" size="sm" className="w-full mt-2" onClick={handleResetQuote}><RotateCcw className="w-4 h-4 mr-2" /> Reset</Button>
                         )}
                     </div>
                 )}
-                {ticket.quote_status === 'pending' && !isReadOnly && (
+                {quoteStatus === 'pending' && !isReadOnly && (
                       <div className="grid grid-cols-2 gap-2 mt-2">
                         <Button className="bg-green-600" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>Approva</Button>
                         <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>Rifiuta</Button>
                     </div>
                 )}
-                {ticket.quote_status !== 'approved' && !isReadOnly && (
+                {quoteStatus !== 'approved' && quoteStatus !== 'pending' && !isReadOnly && (
                     <div className="bg-slate-50 p-4 rounded border border-dashed space-y-3">
                         <Input type="number" placeholder="Importo €" value={quoteAmount} onChange={e => setQuoteAmount(e.target.value)} className="bg-white"/>
                         <Input type="file" onChange={e => setQuoteFile(e.target.files?.[0] || null)} className="bg-white"/>
@@ -309,7 +344,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </TabsContent>
 
             <TabsContent value="closing" className="space-y-4 py-4">
-                {ticket.stato === 'in_verifica' && (
+                {status === 'in_verifica' && (
                     <div className="bg-orange-50 p-4 rounded text-center space-y-2 border border-orange-200">
                         <h3 className="font-bold text-orange-800">In Attesa di Verifica</h3>
                         <div className="grid grid-cols-2 gap-2">
@@ -318,7 +353,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         </div>
                     </div>
                 )}
-                {ticket.stato !== 'in_verifica' && ticket.stato !== 'risolto' && (
+                {status !== 'in_verifica' && status !== 'risolto' && (
                     <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
                         <Label className="font-bold text-yellow-800 block mb-2">Chiusura</Label>
                         <div className="grid grid-cols-2 gap-4">
@@ -328,7 +363,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         {!isReadOnly && <Button className="w-full bg-blue-600 mt-4" onClick={handleSendToVerify} disabled={uploading}>📤 Manda in Verifica</Button>}
                     </div>
                 )}
-                {ticket.stato === 'risolto' && (
+                {status === 'risolto' && (
                     <div className="bg-green-50 border border-green-200 p-4 rounded text-center">
                         <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2"/>
                         <h3 className="font-bold text-green-800">Ticket Risolto</h3>
