@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Switch } from '@/components/ui/switch';
-import { Plus, Trash2, Pencil, User, Car, Home, Filter, X, Euro } from 'lucide-react';
+import { Badge } from '@/components/ui/badge'; // Assicurati di avere questo componente
+import { Plus, Trash2, Pencil, User, Car, Home, Ticket, Euro } from 'lucide-react';
 import { format } from 'date-fns';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
@@ -17,10 +17,10 @@ import { useToast } from '@/hooks/use-toast';
 export default function Expenses() {
   // STATI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null); // Se null = Creazione, se string = Modifica
-  const [filterType, setFilterType] = useState('all'); // Filtri Tabella
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [filterType, setFilterType] = useState('all'); // Filtri Tabella: all, real, mobile
 
-  // FORM DATA
+  // FORM DATA (Aggiornato con 'competence')
   const [formData, setFormData] = useState({
     targetType: 'real' as 'real' | 'mobile',
     targetId: '',
@@ -28,14 +28,15 @@ export default function Expenses() {
     descrizione: '',
     categoria: 'manutenzione',
     scadenza: format(new Date(), 'yyyy-MM-dd'),
-    stato: 'da_pagare'
+    stato: 'da_pagare',
+    competence: 'owner' as 'owner' | 'tenant' // <--- NUOVO CAMPO
   });
 
   const { data: realProperties } = usePropertiesReal();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  // 1. FETCH VEICOLI (Inclusa Targa)
+  // 1. FETCH VEICOLI
   const { data: mobileProperties } = useQuery({
     queryKey: ['mobile-properties'],
     queryFn: async () => {
@@ -44,43 +45,46 @@ export default function Expenses() {
     }
   });
 
-  // 2. FETCH SPESE (Unified)
+  // 2. FETCH SPESE (Unified + Tickets)
   const { data: expenses = [] } = useQuery({
     queryKey: ['unified-expenses'],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payments')
-        .select(`*, properties_real(nome), properties_mobile(veicolo, targa)`)
+        .select(`
+            *, 
+            properties_real(nome), 
+            properties_mobile(veicolo, targa),
+            tickets(titolo) 
+        `)
         .order('scadenza', { ascending: false });
       if (error) throw error;
       return data || [];
     }
   });
 
-  // 3. MUTATION: SALVA (Upsert logic: Insert or Update)
+  // 3. MUTATION: SALVA
   const saveExpense = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       
       const payload: any = {
         importo: parseFloat(formData.importo),
-        importo_originale: parseFloat(formData.importo), // Manteniamo consistenza
+        importo_originale: parseFloat(formData.importo),
         descrizione: formData.descrizione,
         categoria: formData.categoria,
         scadenza: formData.scadenza,
         stato: formData.stato,
+        competence: formData.competence, // <--- SALVIAMO LA COMPETENZA
         user_id: user?.id,
-        // Logica condizionale per le foreign key
         property_real_id: formData.targetType === 'real' ? formData.targetId : null,
         property_mobile_id: formData.targetType === 'mobile' ? formData.targetId : null
       };
 
       if (editingId) {
-        // MODALITÀ MODIFICA
         const { error } = await supabase.from('payments').update(payload).eq('id', editingId);
         if (error) throw error;
       } else {
-        // MODALITÀ CREAZIONE
         const { error } = await supabase.from('payments').insert(payload);
         if (error) throw error;
       }
@@ -106,7 +110,7 @@ export default function Expenses() {
     }
   });
 
-  // HELPER: APRI MODAL PER EDIT
+  // HELPER: APRI MODAL
   const openEdit = (expense: any) => {
     setEditingId(expense.id);
     setFormData({
@@ -115,8 +119,9 @@ export default function Expenses() {
         importo: expense.importo.toString(),
         descrizione: expense.descrizione || '',
         categoria: expense.categoria || 'manutenzione',
-        scadenza: expense.scadenza, // formato yyyy-mm-dd dal DB
-        stato: expense.stato || 'da_pagare'
+        scadenza: expense.scadenza,
+        stato: expense.stato || 'da_pagare',
+        competence: expense.competence || 'owner' // <--- CARICA COMPETENZA
     });
     setIsDialogOpen(true);
   };
@@ -130,11 +135,12 @@ export default function Expenses() {
     setEditingId(null);
     setFormData({
         targetType: 'real', targetId: '', importo: '', descrizione: '',
-        categoria: 'manutenzione', scadenza: format(new Date(), 'yyyy-MM-dd'), stato: 'da_pagare'
+        categoria: 'manutenzione', scadenza: format(new Date(), 'yyyy-MM-dd'), 
+        stato: 'da_pagare', competence: 'owner'
     });
   };
 
-  // LOGICA FILTRO (Preservata dalla tua versione)
+  // LOGICA FILTRO
   const filteredExpenses = expenses.filter((ex: any) => {
     if (filterType === 'all') return true;
     if (filterType === 'real') return !!ex.property_real_id;
@@ -169,21 +175,24 @@ export default function Expenses() {
               <TableRow>
                 <TableHead>Data</TableHead>
                 <TableHead>Riferimento</TableHead>
-                <TableHead>Categoria</TableHead>
-                <TableHead>Descrizione</TableHead>
+                <TableHead>Dettagli & Competenza</TableHead> {/* Header modificato */}
                 <TableHead className="text-right">Importo</TableHead>
                 <TableHead className="text-right">Azioni</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredExpenses.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
               ) : (
                 filteredExpenses.map((ex: any) => (
                   <TableRow key={ex.id} className="hover:bg-slate-50 group transition-colors">
+                    
+                    {/* DATA */}
                     <TableCell className="font-mono text-xs text-slate-500">
                         {ex.scadenza ? format(new Date(ex.scadenza), 'dd/MM/yy') : '-'}
                     </TableCell>
+                    
+                    {/* RIFERIMENTO (Casa o Veicolo) */}
                     <TableCell className="font-medium">
                         {ex.properties_mobile ? (
                             <div className="flex items-center gap-2 text-slate-700">
@@ -200,17 +209,42 @@ export default function Expenses() {
                             </div>
                         )}
                     </TableCell>
+                    
+                    {/* DETTAGLI (Categoria, Descrizione, Ticket, Competenza) */}
                     <TableCell>
-                        <span className="capitalize bg-slate-100 px-2 py-1 rounded text-xs text-slate-600 border border-slate-200">
-                            {ex.categoria}
-                        </span>
-                        {/* Indicatore Stato Pagamento */}
-                        <span className={`ml-2 px-1.5 py-0.5 rounded-[2px] text-[10px] font-bold uppercase ${ex.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                            {ex.stato === 'pagato' ? 'PAGATO' : 'DA PAGARE'}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                                <span className="capitalize bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 border border-slate-200">
+                                    {ex.categoria}
+                                </span>
+                                {/* Badge Ticket */}
+                                {ex.ticket_id && (
+                                    <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 gap-1 border-blue-200 text-blue-600 bg-blue-50">
+                                        <Ticket className="w-3 h-3"/> Ticket
+                                    </Badge>
+                                )}
+                                {/* Badge Competenza Inquilino */}
+                                {ex.competence === 'tenant' && (
+                                    <Badge className="text-[10px] px-1 py-0 h-5 bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">
+                                        <User className="w-3 h-3 mr-1"/> Inquilino
+                                    </Badge>
+                                )}
+                            </div>
+                            <span className="text-sm text-slate-700 truncate max-w-[300px]">{ex.descrizione}</span>
+                        </div>
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate text-slate-600 text-sm">{ex.descrizione}</TableCell>
-                    <TableCell className="font-bold text-red-600 text-right font-mono">-€{parseFloat(ex.importo).toFixed(2)}</TableCell>
+                    
+                    {/* IMPORTO E STATO */}
+                    <TableCell className="text-right">
+                        <div className="flex flex-col items-end">
+                            <span className="font-bold text-red-600 font-mono">-€{parseFloat(ex.importo).toFixed(2)}</span>
+                            <span className={`px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold uppercase ${ex.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                {ex.stato === 'pagato' ? 'PAGATO' : 'DA PAGARE'}
+                            </span>
+                        </div>
+                    </TableCell>
+                    
+                    {/* AZIONI */}
                     <TableCell className="text-right">
                         <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(ex)}>
@@ -312,6 +346,26 @@ export default function Expenses() {
                     </Select>
                 </div>
             </div>
+
+            {/* NUOVO CAMPO: COMPETENZA */}
+            <div className="space-y-2 pt-2 border-t mt-2">
+                <Label className="flex items-center gap-2"><User className="w-4 h-4 text-purple-600"/> A carico di</Label>
+                <Select value={formData.competence} onValueChange={(v: 'owner'|'tenant') => setFormData({...formData, competence: v})}>
+                    <SelectTrigger className={formData.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="owner">🏠 Proprietario (Costo Mio)</SelectItem>
+                        <SelectItem value="tenant">👤 Inquilino (Da Ribaltare)</SelectItem>
+                    </SelectContent>
+                </Select>
+                <p className="text-[10px] text-gray-500">
+                    {formData.competence === 'tenant' 
+                        ? 'Questa spesa non rientrerà nei tuoi costi, ma verrà addebitata all\'inquilino.' 
+                        : 'Questa spesa è un costo di gestione a tuo carico.'}
+                </p>
+            </div>
+
           </div>
 
           <DialogFooter>
