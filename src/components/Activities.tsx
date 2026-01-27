@@ -41,14 +41,16 @@ export default function Activities() {
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
-  const [activeTab, setActiveTab] = useState('open'); // 'open' | 'closed'
-  const [filterType, setFilterType] = useState('all'); // 'all' | 'real' | 'mobile'
+  const [activeTab, setActiveTab] = useState('open'); 
+  const [filterType, setFilterType] = useState('all'); 
 
+  // FORM DATA CON SWITCHER
+  const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
   const [formData, setFormData] = useState({
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    property_real_id: '',
+    target_id: '', // ID Generico
     booking_id: 'none',
     assigned_to: [] as string[]
   });
@@ -70,7 +72,7 @@ export default function Activities() {
     }
   });
 
-  // 2. FETCH VEICOLI (Per i filtri e creazione)
+  // 2. FETCH VEICOLI
   const { data: mobileProperties } = useQuery({
     queryKey: ['mobile-properties-ticket'],
     queryFn: async () => {
@@ -79,20 +81,21 @@ export default function Activities() {
     }
   });
 
+  // 3. FETCH INQUILINI (Solo per Immobili)
   const { data: activeTenants } = useQuery({
-    queryKey: ['active-tenants-ticket', formData.property_real_id],
+    queryKey: ['active-tenants-ticket', formData.target_id],
     queryFn: async () => {
-        if (!formData.property_real_id) return [];
+        if (targetType !== 'real' || !formData.target_id) return [];
         const today = new Date().toISOString();
         const { data } = await supabase
             .from('bookings')
             .select('id, nome_ospite')
-            .eq('property_id', formData.property_real_id)
+            .eq('property_id', formData.target_id)
             .lte('data_inizio', today)
             .gte('data_fine', today);
         return data || [];
     },
-    enabled: !!formData.property_real_id
+    enabled: targetType === 'real' && !!formData.target_id
   });
 
   const { data: tickets, isLoading, isError, error } = useQuery({
@@ -135,24 +138,31 @@ export default function Activities() {
       setIsUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Upload files first
       let attachments: string[] = [];
       if (uploadFiles.length > 0) {
           attachments = await handleFileUpload(uploadFiles);
       }
 
-      const payload = {
+      const payload: any = {
         titolo: newTicket.titolo,
         descrizione: newTicket.descrizione,
         priorita: newTicket.priorita,
-        property_real_id: newTicket.property_real_id || null,
         user_id: user?.id,
         creato_da: 'manager',
         stato: 'aperto',
         booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id,
         assigned_to: newTicket.assigned_to,
-        attachments: attachments // Salva l'array di file
+        attachments: attachments
       };
+
+      // Assegnazione condizionale
+      if (targetType === 'real') {
+          payload.property_real_id = newTicket.target_id;
+          payload.property_mobile_id = null;
+      } else {
+          payload.property_real_id = null;
+          payload.property_mobile_id = newTicket.target_id;
+      }
       
       const { error } = await supabase.from('tickets').insert(payload);
       if (error) throw error;
@@ -160,7 +170,7 @@ export default function Activities() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
-      setFormData({ titolo: '', descrizione: '', priorita: 'media', property_real_id: '', booking_id: 'none', assigned_to: [] });
+      setFormData({ titolo: '', descrizione: '', priorita: 'media', target_id: '', booking_id: 'none', assigned_to: [] });
       setUploadFiles([]);
       setIsUploading(false);
       toast({ title: "Ticket creato", description: "Assegnato al team e file caricati." });
@@ -187,12 +197,8 @@ export default function Activities() {
 
   const openFile = async (path: string) => {
       if(!path) return;
-      // Gestisce sia percorsi completi che nomi file semplici
-      const bucket = path.includes('/') ? '' : 'documents'; // Fallback per vecchi file
-      // Se è un attachment nuovo, usa ticket-files
-      const actualBucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
-      
-      const { data } = await supabase.storage.from(actualBucket).createSignedUrl(path, 3600);
+      const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
+      const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
@@ -215,16 +221,13 @@ export default function Activities() {
     return ids.map(id => teamMembers.find(m => m.id === id)).filter(Boolean);
   };
 
-  // LOGICA FILTRI
   const filteredTickets = tickets?.filter((t: any) => {
-      // Filtro Stato (Tabs)
       const isResolved = t.stato === 'risolto';
       if (activeTab === 'open' && isResolved) return false;
       if (activeTab === 'closed' && !isResolved) return false;
 
-      // Filtro Tipo (Property/Vehicle)
       if (filterType === 'real' && !t.property_real_id && !t.bookings?.properties_real) return false;
-      if (filterType === 'mobile' && !t.properties_mobile) return false;
+      if (filterType === 'mobile' && !t.property_mobile_id && !t.properties_mobile) return false;
 
       return true;
   });
@@ -235,8 +238,8 @@ export default function Activities() {
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Ticket & Manutenzioni</h1>
-          <p className="text-gray-500">Gestione operativa, assegnazioni e report.</p>
+          <h1 className="text-3xl font-bold text-gray-900">Attività e Ticket</h1>
+          <p className="text-gray-500">Panoramica operativa e segnalazioni.</p>
         </div>
         
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -252,14 +255,32 @@ export default function Activities() {
             </DialogHeader>
             <div className="space-y-4 mt-2">
               
+              {/* SWITCHER TIPO (Nuovo) */}
+              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
+                  <button 
+                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                      onClick={() => { setTargetType('real'); setFormData({...formData, target_id: ''}); }}
+                  >
+                      <Home className="w-4 h-4"/> Immobile
+                  </button>
+                  <button 
+                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                      onClick={() => { setTargetType('mobile'); setFormData({...formData, target_id: ''}); }}
+                  >
+                      <Car className="w-4 h-4"/> Veicolo
+                  </button>
+              </div>
+
               {/* PROPERTY SELECTOR */}
               <div className="grid gap-2">
-                <Label className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600"/> Proprietà / Veicolo</Label>
-                <Select value={formData.property_real_id} onValueChange={v => setFormData({...formData, property_real_id: v, booking_id: 'none'})}>
+                <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
+                <Select value={formData.target_id} onValueChange={v => setFormData({...formData, target_id: v, booking_id: 'none'})}>
                   <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
                   <SelectContent>
-                    {realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)}
-                    {/* Nota: Per ora il form supporta solo immobili o veicoli. Se vuoi veicoli, servirebbe un altro select o unificati */}
+                    {targetType === 'real' 
+                        ? realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)
+                        : mobileProperties?.map(m => <SelectItem key={m.id} value={m.id}>🚗 {m.veicolo} ({m.targa})</SelectItem>)
+                    }
                   </SelectContent>
                 </Select>
               </div>
@@ -276,16 +297,18 @@ export default function Activities() {
               </div>
 
               {/* INQUILINO (Se Immobile) */}
-              <div className="grid gap-2">
-                <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
-                <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.property_real_id}>
-                  <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">-- Nessuno --</SelectItem>
-                    {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {targetType === 'real' && (
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
+                    <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.target_id}>
+                      <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">-- Nessuno --</SelectItem>
+                        {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
@@ -308,7 +331,7 @@ export default function Activities() {
               
               <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli del problema..." /></div>
               
-              {/* FILE UPLOAD (Nuovo) */}
+              {/* FILE UPLOAD */}
               <div className="grid gap-2">
                   <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
                   <Input 
@@ -328,7 +351,7 @@ export default function Activities() {
                   )}
               </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading}>
+              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading || !formData.target_id || !formData.titolo}>
                   {isUploading ? 'Caricamento...' : 'Crea Ticket'}
               </Button>
             </div>
