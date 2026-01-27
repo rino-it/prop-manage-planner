@@ -22,7 +22,7 @@ import { usePropertiesReal } from '@/hooks/useProperties';
 import TicketManager from '@/components/TicketManager';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
 
-// Helper per link cliccabili nelle note
+// Helper per link cliccabili
 const renderTextWithLinks = (text: string) => {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -42,15 +42,17 @@ export default function Tickets() {
   // STATI UI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
-  const [activeTab, setActiveTab] = useState('open'); // 'open' | 'closed'
-  const [filterType, setFilterType] = useState('all'); // 'all' | 'real' | 'mobile'
+  const [activeTab, setActiveTab] = useState('open'); 
+  const [filterType, setFilterType] = useState('all'); 
 
   // FORM CREAZIONE TICKET
+  // Usiamo 'targetType' per distinguere cosa stiamo selezionando
+  const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
   const [formData, setFormData] = useState({
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    property_real_id: '',
+    target_id: '', // ID Generico (sarà real o mobile a seconda di targetType)
     booking_id: 'none',
     assigned_to: [] as string[]
   });
@@ -58,7 +60,7 @@ export default function Tickets() {
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  // 1. FETCH MEMBRI TEAM
+  // FETCH TEAM
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
     queryFn: async () => {
@@ -72,7 +74,7 @@ export default function Tickets() {
     }
   });
 
-  // 2. FETCH VEICOLI (Per i filtri e creazione)
+  // FETCH VEICOLI
   const { data: mobileProperties } = useQuery({
     queryKey: ['mobile-properties-ticket'],
     queryFn: async () => {
@@ -81,24 +83,24 @@ export default function Tickets() {
     }
   });
 
-  // 3. FETCH INQUILINI ATTIVI (Per assegnazione su Immobile)
+  // FETCH INQUILINI (Solo se seleziono un immobile)
   const { data: activeTenants } = useQuery({
-    queryKey: ['active-tenants-ticket', formData.property_real_id],
+    queryKey: ['active-tenants-ticket', formData.target_id],
     queryFn: async () => {
-        if (!formData.property_real_id) return [];
+        if (targetType !== 'real' || !formData.target_id) return [];
         const today = new Date().toISOString();
         const { data } = await supabase
             .from('bookings')
             .select('id, nome_ospite')
-            .eq('property_id', formData.property_real_id)
+            .eq('property_id', formData.target_id)
             .lte('data_inizio', today)
             .gte('data_fine', today);
         return data || [];
     },
-    enabled: !!formData.property_real_id
+    enabled: targetType === 'real' && !!formData.target_id
   });
 
-  // 4. FETCH TICKETS (Completi)
+  // FETCH TICKETS
   const { data: tickets, isLoading, isError, error } = useQuery({
     queryKey: ['tickets'],
     queryFn: async () => {
@@ -120,10 +122,9 @@ export default function Tickets() {
       if (error) throw error;
       return data;
     },
-    refetchInterval: 5000 // Auto-refresh ogni 5 secondi per vedere aggiornamenti
+    refetchInterval: 5000 
   });
 
-  // UPLOAD HELPER
   const handleFileUpload = async (files: File[]) => {
     const uploadedUrls: string[] = [];
     for (const file of files) {
@@ -135,30 +136,37 @@ export default function Tickets() {
     return uploadedUrls;
   };
 
-  // MUTATION: CREA TICKET
   const createTicket = useMutation({
     mutationFn: async (newTicket: typeof formData) => {
       setIsUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Upload files first
       let attachments: string[] = [];
       if (uploadFiles.length > 0) {
           attachments = await handleFileUpload(uploadFiles);
       }
 
-      const payload = {
+      // Costruiamo il payload dinamico
+      const payload: any = {
         titolo: newTicket.titolo,
         descrizione: newTicket.descrizione,
         priorita: newTicket.priorita,
-        property_real_id: newTicket.property_real_id || null,
         user_id: user?.id,
         creato_da: 'manager',
         stato: 'aperto',
         booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id,
         assigned_to: newTicket.assigned_to,
-        attachments: attachments // Salva l'array di file
+        attachments: attachments
       };
+
+      // Assegna alla colonna corretta
+      if (targetType === 'real') {
+          payload.property_real_id = newTicket.target_id;
+          payload.property_mobile_id = null;
+      } else {
+          payload.property_real_id = null;
+          payload.property_mobile_id = newTicket.target_id;
+      }
       
       const { error } = await supabase.from('tickets').insert(payload);
       if (error) throw error;
@@ -166,7 +174,8 @@ export default function Tickets() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
-      setFormData({ titolo: '', descrizione: '', priorita: 'media', property_real_id: '', booking_id: 'none', assigned_to: [] });
+      // Reset form
+      setFormData({ titolo: '', descrizione: '', priorita: 'media', target_id: '', booking_id: 'none', assigned_to: [] });
       setUploadFiles([]);
       setIsUploading(false);
       toast({ title: "Ticket creato", description: "Assegnato al team e file caricati." });
@@ -177,7 +186,6 @@ export default function Tickets() {
     }
   });
 
-  // MUTATION: RIAPRI TICKET
   const reopenTicket = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -218,16 +226,14 @@ export default function Tickets() {
     return ids.map(id => teamMembers.find(m => m.id === id)).filter(Boolean);
   };
 
-  // LOGICA FILTRI LATO CLIENT
+  // FILTRI
   const filteredTickets = tickets?.filter((t: any) => {
-      // Filtro Stato (Tabs)
       const isResolved = t.stato === 'risolto';
       if (activeTab === 'open' && isResolved) return false;
       if (activeTab === 'closed' && !isResolved) return false;
 
-      // Filtro Tipo (Property/Vehicle)
       if (filterType === 'real' && !t.property_real_id && !t.bookings?.properties_real) return false;
-      if (filterType === 'mobile' && !t.properties_mobile) return false;
+      if (filterType === 'mobile' && !t.property_mobile_id && !t.properties_mobile) return false;
 
       return true;
   });
@@ -235,7 +241,6 @@ export default function Tickets() {
   return (
     <div className="space-y-6 animate-in fade-in">
       
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Ticket e Guasti</h1>
@@ -255,14 +260,32 @@ export default function Tickets() {
             </DialogHeader>
             <div className="space-y-4 mt-2">
               
-              {/* PROPERTY SELECTOR */}
+              {/* SWITCHER TIPO (Nuovo) */}
+              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
+                  <button 
+                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                      onClick={() => { setTargetType('real'); setFormData({...formData, target_id: ''}); }}
+                  >
+                      <Home className="w-4 h-4"/> Immobile
+                  </button>
+                  <button 
+                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                      onClick={() => { setTargetType('mobile'); setFormData({...formData, target_id: ''}); }}
+                  >
+                      <Car className="w-4 h-4"/> Veicolo
+                  </button>
+              </div>
+
+              {/* SELETTORE PROPRIETÀ / VEICOLO */}
               <div className="grid gap-2">
-                <Label className="flex items-center gap-2"><Home className="w-4 h-4 text-blue-600"/> Proprietà / Veicolo</Label>
-                <Select value={formData.property_real_id} onValueChange={v => setFormData({...formData, property_real_id: v, booking_id: 'none'})}>
+                <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
+                <Select value={formData.target_id} onValueChange={v => setFormData({...formData, target_id: v, booking_id: 'none'})}>
                   <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
                   <SelectContent>
-                    {realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)}
-                    {/* Per ora supportiamo selezione immobili qui, veicoli a parte o integrati se necessario */}
+                    {targetType === 'real' 
+                        ? realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)
+                        : mobileProperties?.map(m => <SelectItem key={m.id} value={m.id}>🚗 {m.veicolo} ({m.targa})</SelectItem>)
+                    }
                   </SelectContent>
                 </Select>
               </div>
@@ -278,22 +301,24 @@ export default function Tickets() {
                 />
               </div>
 
-              {/* INQUILINO (Se Immobile) */}
-              <div className="grid gap-2">
-                <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
-                <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.property_real_id}>
-                  <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">-- Nessuno --</SelectItem>
-                    {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
+              {/* INQUILINO (Solo se Immobile) */}
+              {targetType === 'real' && (
+                  <div className="grid gap-2">
+                    <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
+                    <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.target_id}>
+                      <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="none">-- Nessuno --</SelectItem>
+                        {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                       <Label>Titolo</Label>
-                      <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto Caldaia" />
+                      <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
                   </div>
                   <div className="grid gap-2">
                     <Label>Priorità</Label>
@@ -309,17 +334,11 @@ export default function Tickets() {
                   </div>
               </div>
               
-              <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli del problema..." /></div>
+              <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
               
-              {/* FILE UPLOAD (Nuovo) */}
               <div className="grid gap-2">
                   <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
-                  <Input 
-                    type="file" 
-                    multiple 
-                    onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
-                    className="text-xs"
-                  />
+                  <Input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
                   {uploadFiles.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
                           {uploadFiles.map((f, i) => (
@@ -331,7 +350,7 @@ export default function Tickets() {
                   )}
               </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading}>
+              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading || !formData.target_id || !formData.titolo}>
                   {isUploading ? 'Caricamento...' : 'Crea Ticket'}
               </Button>
             </div>
@@ -341,7 +360,6 @@ export default function Tickets() {
 
       {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati: {(error as any)?.message}</div>}
 
-      {/* TABS E FILTRI */}
       <Tabs defaultValue="open" value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
             <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
@@ -390,7 +408,6 @@ export default function Tickets() {
                         
                         <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
                         
-                        {/* NOTE STAFF */}
                         {ticket.admin_notes && (
                             <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
                                 <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
@@ -406,13 +423,11 @@ export default function Tickets() {
                             {ticket.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.properties_real.nome}</span>}
                             {ticket.properties_mobile && <span className="font-medium text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">🚗 {ticket.properties_mobile.veicolo}</span>}
                             {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
-                            {/* Indicatore Allegati */}
                             {ticket.attachments && ticket.attachments.length > 0 && (
                                 <span className="flex items-center text-blue-600"><Paperclip className="w-3 h-3 mr-1"/> {ticket.attachments.length} file</span>
                             )}
                         </div>
 
-                        {/* AZIONI RAPIDE */}
                         <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
                             {ticket.supplier_contact && (
                                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
