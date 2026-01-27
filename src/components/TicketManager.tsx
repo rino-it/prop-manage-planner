@@ -55,7 +55,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     queryKey: ['colleagues'],
     queryFn: async () => {
       const { data } = await supabase.from('profiles').select('*');
-      // Trasformiamo i dati nel formato richiesto dal UserMultiSelect {id, label}
       return data?.map(u => ({
           id: u.id,
           label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
@@ -64,7 +63,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   });
 
   const saveProgress = async () => {
-    // Aggiorniamo anche il vecchio campo assigned_partner_id prendendo il primo della lista (per sicurezza)
     const primaryAssignee = assignedTo.length > 0 ? assignedTo[0] : null;
 
     const { error } = await supabase.from('tickets').update({ 
@@ -72,10 +70,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         share_notes: shareNotes,
         supplier: supplier,
         supplier_contact: supplierContact,
-        assigned_to: assignedTo, // <--- SALVA ARRAY NUOVO
-        assigned_partner_id: primaryAssignee, // <--- SALVA SINGOLO (Legacy)
+        assigned_to: assignedTo, 
+        assigned_partner_id: primaryAssignee,
         data_scadenza: dueDate || null,
-        // Non forziamo lo stato a 'in_lavorazione' se è già 'risolto' o altro, manteniamo quello attuale a meno che non sia specificato
         stato: ticket.stato === 'aperto' ? 'in_lavorazione' : ticket.stato
       }).eq('id', ticket.id);
 
@@ -114,43 +111,37 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { toast({ title: "Reset Effettuato" }); onUpdate(); }
   };
 
-  // --- FUNZIONE CRITICA AGGIORNATA (CREA SPESA AUTOMATICA) ---
+  // --- FUNZIONE CORRETTA: Rimosso rata_corrente e rate_totali ---
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
         const newState = decision === 'approved' ? 'in_corso' : 'aperto';
         
-        // 1. Aggiorna il Ticket
         const { error: ticketError } = await supabase.from('tickets')
             .update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
         
         if (ticketError) throw new Error("Errore ticket: " + ticketError.message);
 
-        // 2. SE APPROVATO: Crea automaticamente la spesa in 'payments'
         if (decision === 'approved') {
-            // Data scadenza: se non definita, default oggi + 30gg
             const expenseDate = ticket.data_scadenza || new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
             
-            // FIX: Usiamo property_real_id come chiave corretta per payments
             const entityData = ticket.property_real_id 
                 ? { property_real_id: ticket.property_real_id } 
                 : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
 
             const importo = ticket.quote_amount || 0;
 
-            // Nota: uso 'payments' perché è il nome della tabella spese nel tuo schema
             const { error: expenseError } = await supabase.from('payments').insert({
                 descrizione: `Spesa Ticket: ${ticket.titolo}`,
                 importo: importo,
-                importo_originale: importo, // FIX: Copia importo anche qui
+                importo_originale: importo,
                 scadenza: expenseDate,
                 stato: 'da_pagare', 
-                payment_status: 'pending', // Nuova colonna
-                competence: 'owner', // Default a carico proprietario
+                payment_status: 'pending', 
+                competence: 'owner', 
                 ticket_id: ticket.id,
                 user_id: ticket.user_id,
-                rate_totali: 1, // Default 1 rata
-                rata_corrente: 1, // Default rata 1
+                // RIMOSSI: rate_totali e rata_corrente perché non esistono nel DB
                 ...entityData
             });
 
@@ -255,7 +246,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} />
                     </div>
                     
-                    {/* --- SEZIONE MULTI-SELEZIONE --- */}
                     <div className="grid gap-2">
                         <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Delega a Team</Label>
                         <UserMultiSelect 
