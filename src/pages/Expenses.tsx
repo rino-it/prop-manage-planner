@@ -15,12 +15,10 @@ import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Expenses() {
-  // STATI
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [filterType, setFilterType] = useState('all'); 
 
-  // FORM DATA (Aggiornato con payment_method)
   const [formData, setFormData] = useState({
     targetType: 'real' as 'real' | 'mobile',
     targetId: '',
@@ -30,7 +28,7 @@ export default function Expenses() {
     scadenza: format(new Date(), 'yyyy-MM-dd'),
     stato: 'da_pagare',
     competence: 'owner' as 'owner' | 'tenant',
-    payment_method: 'da definire' // <--- NUOVO CAMPO
+    payment_method: 'da definire'
   });
 
   const { data: realProperties } = usePropertiesReal();
@@ -69,7 +67,7 @@ export default function Expenses() {
         scadenza: formData.scadenza,
         stato: formData.stato,
         competence: formData.competence,
-        payment_method: formData.payment_method, // <--- SALVIAMO METODO
+        payment_method: formData.payment_method,
         user_id: user?.id,
         property_real_id: formData.targetType === 'real' ? formData.targetId : null,
         property_mobile_id: formData.targetType === 'mobile' ? formData.targetId : null
@@ -114,7 +112,7 @@ export default function Expenses() {
         scadenza: expense.scadenza,
         stato: expense.stato || 'da_pagare',
         competence: expense.competence || 'owner',
-        payment_method: expense.payment_method || 'da definire' // <--- LOAD
+        payment_method: expense.payment_method || 'da definire'
     });
     setIsDialogOpen(true);
   };
@@ -141,114 +139,116 @@ export default function Expenses() {
   });
 
   return (
-    <div className="space-y-6 animate-in fade-in">
+    <div className="space-y-6 animate-in fade-in pb-20"> 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestione Spese</h1>
-          <p className="text-gray-500 text-sm">Registra uscite per immobili e veicoli</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestione Spese</h1>
+          <p className="text-gray-500 text-sm">Uscite immobili e veicoli</p>
         </div>
-        <div className="flex items-center gap-2 bg-white p-1 rounded-lg border shadow-sm">
-            <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="text-xs">Tutti</Button>
-            <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="text-xs flex gap-1"><Home className="w-3 h-3"/> Immobili</Button>
-            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs flex gap-1"><Car className="w-3 h-3"/> Veicoli</Button>
+        <div className="flex flex-wrap items-center gap-2 bg-white p-1 rounded-lg border shadow-sm w-full md:w-auto">
+            <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="flex-1 md:flex-none text-xs">Tutti</Button>
+            <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="flex-1 md:flex-none text-xs flex gap-1"><Home className="w-3 h-3"/> Immobili</Button>
+            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="flex-1 md:flex-none text-xs flex gap-1"><Car className="w-3 h-3"/> Veicoli</Button>
         </div>
-        <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={openCreate}>
+        <Button className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={openCreate}>
             <Plus className="w-4 h-4 mr-2" /> Nuova Spesa
         </Button>
       </div>
 
-      <Card className="border-t-4 border-t-blue-500 shadow-md">
+      <Card className="border-t-4 border-t-blue-500 shadow-md overflow-hidden">
         <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Data</TableHead>
-                <TableHead>Riferimento</TableHead>
-                <TableHead>Dettagli</TableHead>
-                <TableHead>Metodo</TableHead> {/* NUOVA COLONNA */}
-                <TableHead className="text-right">Importo</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredExpenses.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
-              ) : (
-                filteredExpenses.map((ex: any) => (
-                  <TableRow key={ex.id} className="hover:bg-slate-50 group transition-colors">
-                    <TableCell className="font-mono text-xs text-slate-500">
-                        {ex.scadenza ? format(new Date(ex.scadenza), 'dd/MM/yy') : '-'}
-                    </TableCell>
-                    <TableCell className="font-medium">
-                        {ex.properties_mobile ? (
-                            <div className="flex items-center gap-2 text-slate-700">
-                                <span className="bg-indigo-100 text-indigo-700 p-1 rounded"><Car className="w-3 h-3"/></span>
-                                <div>
-                                    <p className="text-xs font-bold leading-none">{ex.properties_mobile.veicolo}</p>
-                                    <p className="text-[10px] text-gray-400 leading-none">{ex.properties_mobile.targa}</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2 text-slate-700">
-                                <span className="bg-orange-100 text-orange-700 p-1 rounded"><Home className="w-3 h-3"/></span>
-                                <span className="text-xs font-bold">{ex.properties_real?.nome || 'Generale'}</span>
-                            </div>
-                        )}
-                    </TableCell>
-                    <TableCell>
-                        <div className="flex flex-col gap-1">
-                            <div className="flex items-center gap-2">
-                                <span className="capitalize bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 border border-slate-200">
-                                    {ex.categoria}
-                                </span>
-                                {ex.ticket_id && (
-                                    <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 gap-1 border-blue-200 text-blue-600 bg-blue-50">
-                                        <Ticket className="w-3 h-3"/> Ticket
-                                    </Badge>
-                                )}
-                                {ex.competence === 'tenant' && (
-                                    <Badge className="text-[10px] px-1 py-0 h-5 bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200">
-                                        <User className="w-3 h-3 mr-1"/> Inquilino
-                                    </Badge>
-                                )}
-                            </div>
-                            <span className="text-sm text-slate-700 truncate max-w-[300px]">{ex.descrizione}</span>
-                        </div>
-                    </TableCell>
-                    
-                    {/* COLONNA METODO PAGAMENTO */}
-                    <TableCell>
-                        <span className="text-xs text-gray-500 capitalize">{ex.payment_method || '-'}</span>
-                    </TableCell>
+          {/* WRAPPER SCROLLABILE PER MOBILE */}
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[90px] whitespace-nowrap">Data</TableHead>
+                  <TableHead className="min-w-[140px] whitespace-nowrap">Riferimento</TableHead>
+                  <TableHead className="min-w-[180px]">Dettagli</TableHead>
+                  <TableHead className="hidden md:table-cell whitespace-nowrap">Metodo</TableHead>
+                  <TableHead className="text-right whitespace-nowrap">Importo</TableHead>
+                  <TableHead className="text-right w-[80px]">Azioni</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredExpenses.length === 0 ? (
+                  <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
+                ) : (
+                  filteredExpenses.map((ex: any) => (
+                    <TableRow key={ex.id} className="hover:bg-slate-50 group transition-colors">
+                      <TableCell className="font-mono text-xs text-slate-500 whitespace-nowrap">
+                          {ex.scadenza ? format(new Date(ex.scadenza), 'dd/MM/yy') : '-'}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                          {ex.properties_mobile ? (
+                              <div className="flex items-center gap-2 text-slate-700">
+                                  <span className="bg-indigo-100 text-indigo-700 p-1 rounded shrink-0"><Car className="w-3 h-3"/></span>
+                                  <div className="min-w-0">
+                                      <p className="text-xs font-bold leading-none truncate max-w-[100px]">{ex.properties_mobile.veicolo}</p>
+                                      <p className="text-[10px] text-gray-400 leading-none truncate">{ex.properties_mobile.targa}</p>
+                                  </div>
+                              </div>
+                          ) : (
+                              <div className="flex items-center gap-2 text-slate-700">
+                                  <span className="bg-orange-100 text-orange-700 p-1 rounded shrink-0"><Home className="w-3 h-3"/></span>
+                                  <span className="text-xs font-bold truncate max-w-[100px]">{ex.properties_real?.nome || 'Generale'}</span>
+                              </div>
+                          )}
+                      </TableCell>
+                      <TableCell>
+                          <div className="flex flex-col gap-1">
+                              <div className="flex flex-wrap items-center gap-1">
+                                  <span className="capitalize bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 border border-slate-200 whitespace-nowrap">
+                                      {ex.categoria}
+                                  </span>
+                                  {ex.ticket_id && (
+                                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 gap-1 border-blue-200 text-blue-600 bg-blue-50 whitespace-nowrap">
+                                          <Ticket className="w-3 h-3"/> Ticket
+                                      </Badge>
+                                  )}
+                                  {ex.competence === 'tenant' && (
+                                      <Badge className="text-[10px] px-1 py-0 h-5 bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 whitespace-nowrap">
+                                          <User className="w-3 h-3 mr-1"/> Inquilino
+                                      </Badge>
+                                  )}
+                              </div>
+                              <span className="text-sm text-slate-700 truncate max-w-[150px] md:max-w-[300px]" title={ex.descrizione}>{ex.descrizione}</span>
+                          </div>
+                      </TableCell>
+                      
+                      <TableCell className="hidden md:table-cell">
+                          <span className="text-xs text-gray-500 capitalize truncate">{ex.payment_method || '-'}</span>
+                      </TableCell>
 
-                    <TableCell className="text-right">
-                        <div className="flex flex-col items-end">
-                            <span className="font-bold text-red-600 font-mono">-€{parseFloat(ex.importo).toFixed(2)}</span>
-                            <span className={`px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold uppercase ${ex.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                {ex.stato === 'pagato' ? 'PAGATO' : 'DA PAGARE'}
-                            </span>
-                        </div>
-                    </TableCell>
-                    <TableCell className="text-right">
-                        <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(ex)}>
-                                <Pencil className="w-4 h-4" />
-                            </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => { if(confirm("Eliminare questa spesa?")) deleteExpense.mutate(ex.id) }}>
-                                <Trash2 className="w-4 h-4" />
-                            </Button>
-                        </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+                      <TableCell className="text-right whitespace-nowrap">
+                          <div className="flex flex-col items-end">
+                              <span className="font-bold text-red-600 font-mono text-sm">-€{parseFloat(ex.importo).toFixed(2)}</span>
+                              <span className={`px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold uppercase ${ex.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                  {ex.stato === 'pagato' ? 'PAGATO' : 'DA PAGARE'}
+                              </span>
+                          </div>
+                      </TableCell>
+                      <TableCell className="text-right">
+                          <div className="flex justify-end gap-1">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(ex)}>
+                                  <Pencil className="w-4 h-4" />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => { if(confirm("Eliminare questa spesa?")) deleteExpense.mutate(ex.id) }}>
+                                  <Trash2 className="w-4 h-4" />
+                              </Button>
+                          </div>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[500px]">
+        <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? 'Modifica Spesa' : 'Registra Nuova Spesa'}</DialogTitle>
           </DialogHeader>
@@ -282,7 +282,7 @@ export default function Expenses() {
                 </Select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> 
                 <div className="space-y-2">
                     <Label>Importo (€)</Label>
                     <div className="relative">
@@ -301,7 +301,7 @@ export default function Expenses() {
                 <Input placeholder="Es. Bolletta Enel" value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label>Categoria</Label>
                     <Select value={formData.categoria} onValueChange={(v) => setFormData({...formData, categoria: v})}>
@@ -327,8 +327,7 @@ export default function Expenses() {
                 </div>
             </div>
 
-            {/* NUOVO: METODO PAGAMENTO */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label className="flex items-center gap-2"><CreditCard className="w-4 h-4"/> Metodo</Label>
                     <Select value={formData.payment_method} onValueChange={(v) => setFormData({...formData, payment_method: v})}>
@@ -361,9 +360,9 @@ export default function Expenses() {
 
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annulla</Button>
-            <Button onClick={() => saveExpense.mutate()} disabled={!formData.importo || !formData.targetId}>
+          <DialogFooter className="flex-col sm:flex-row gap-2"> 
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto">Annulla</Button>
+            <Button onClick={() => saveExpense.mutate()} disabled={!formData.importo || !formData.targetId} className="w-full sm:w-auto">
                 {editingId ? 'Salva Modifiche' : 'Aggiungi Spesa'}
             </Button>
           </DialogFooter>

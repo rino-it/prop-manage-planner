@@ -293,18 +293,18 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   if (showCloseConfirm) {
       return (
         <Dialog open={true} onOpenChange={() => setShowCloseConfirm(false)}>
-            <DialogContent>
+            <DialogContent className="w-[95vw] sm:max-w-md"> {/* Mobile optimized width */}
                 <DialogHeader>
                     <DialogTitle className="text-red-600 flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> Conferma Chiusura</DialogTitle>
                     <DialogDescription>
                         Questa azione è definitiva. Per confermare, digita esattamente il nome del ticket: <br/>
-                        <span className="font-bold text-black block mt-2 select-all">{ticket.titolo}</span>
+                        <span className="font-bold text-black block mt-2 select-all break-all">{ticket.titolo}</span>
                     </DialogDescription>
                 </DialogHeader>
                 <Input value={confirmText} onChange={e => setConfirmText(e.target.value)} placeholder="Scrivi qui il nome..." />
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowCloseConfirm(false)}>Annulla</Button>
-                    <Button className="bg-red-600 hover:bg-red-700" onClick={handleFinalClose} disabled={confirmText !== ticket.titolo}>Conferma Chiusura</Button>
+                <DialogFooter className="flex-col sm:flex-row gap-2">
+                    <Button variant="outline" onClick={() => setShowCloseConfirm(false)} className="w-full sm:w-auto">Annulla</Button>
+                    <Button className="bg-red-600 hover:bg-red-700 w-full sm:w-auto" onClick={handleFinalClose} disabled={confirmText !== ticket.titolo}>Conferma Chiusura</Button>
                 </DialogFooter>
             </DialogContent>
         </Dialog>
@@ -313,22 +313,22 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto"> {/* Mobile optimized */}
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <span className="bg-blue-100 text-blue-700 p-1 rounded">{headerIcon}</span>
+          <DialogTitle className="flex items-center gap-2 text-lg">
+            <span className="bg-blue-100 text-blue-700 p-1 rounded shrink-0">{headerIcon}</span>
             <span className="truncate">{headerTitle}: {ticket.titolo}</span>
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Aperto il {format(new Date(ticket.created_at), 'dd/MM/yyyy')} - Stato: <Badge className={status === 'risolto' ? 'bg-green-600' : ''}>{status}</Badge>
           </DialogDescription>
         </DialogHeader>
 
         <Tabs defaultValue="management" className="w-full mt-2">
-            <TabsList className="grid w-full grid-cols-3">
-                <TabsTrigger value="management">1. Gestione</TabsTrigger>
-                <TabsTrigger value="quote">2. Preventivo</TabsTrigger>
-                <TabsTrigger value="closing">3. Chiusura</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-3 h-auto"> {/* h-auto per evitare taglio testo */}
+                <TabsTrigger value="management" className="text-xs px-1">1. Gestione</TabsTrigger>
+                <TabsTrigger value="quote" className="text-xs px-1">2. Preventivo</TabsTrigger>
+                <TabsTrigger value="closing" className="text-xs px-1">3. Chiusura</TabsTrigger>
             </TabsList>
 
             <TabsContent value="management" className="space-y-4 py-4">
@@ -345,18 +345,18 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     </div>
                 )}
 
-                {/* BOTTONE DELEGA PDF (Aggiornato) */}
-                <div className="bg-blue-50 border border-blue-100 p-4 rounded-md flex items-center justify-between">
+                {/* BOTTONE DELEGA PDF */}
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                     <div>
                         <h4 className="text-sm font-bold text-blue-800">Delega e Condivisione</h4>
                         <p className="text-xs text-blue-600">Genera PDF con foto e invia su WhatsApp.</p>
                     </div>
-                    <Button onClick={() => generateAndSharePDF(null)} disabled={uploading} className="bg-blue-600 hover:bg-blue-700">
-                        {uploading ? 'Generazione...' : <><Share2 className="w-4 h-4 mr-2"/> Invia Delega</>}
+                    <Button onClick={() => generateAndSharePDF(null)} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto text-xs">
+                        {uploading ? 'Generazione...' : <><Share2 className="w-3 h-3 mr-2"/> Invia Delega</>}
                     </Button>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"> {/* Mobile 1 col */}
                     <div className="grid gap-2">
                         <Label>Data Scadenza</Label>
                         <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} />
@@ -370,8 +370,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <div className="grid gap-2 p-3 bg-slate-50 rounded border">
                     <Label className="text-slate-700 font-semibold">Fornitore Esterno</Label>
                     <div className="flex gap-2">
-                        <Input placeholder="Ditta" value={supplier} onChange={e => setSupplier(e.target.value)} disabled={isReadOnly}/>
-                        <Input placeholder="Tel" value={supplierContact} onChange={e => setSupplierContact(e.target.value)} className="w-1/3" disabled={isReadOnly}/>
+                        <Input placeholder="Ditta" value={supplier} onChange={e => setSupplier(e.target.value)} disabled={isReadOnly} className="flex-1"/>
+                        <Input placeholder="Tel" value={supplierContact} onChange={e => setSupplierContact(e.target.value)} className="w-[100px] sm:w-1/3" disabled={isReadOnly}/>
                         {supplierContact && <Button size="icon" variant="outline" onClick={() => window.open(`tel:${supplierContact}`)}><Phone className="w-4 h-4 text-blue-600"/></Button>}
                     </div>
                 </div>
@@ -385,7 +385,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     </div>
                 </div>
 
-                {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress}>Salva Modifiche</Button></div>}
+                {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress} className="w-full sm:w-auto">Salva Modifiche</Button></div>}
             </TabsContent>
 
             <TabsContent value="quote" className="space-y-4 py-4">
@@ -431,7 +431,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {status !== 'in_verifica' && status !== 'risolto' && (
                     <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
                         <Label className="font-bold text-yellow-800 block mb-2">Chiusura</Label>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             <Input type="number" placeholder="Totale €" value={costAmount} onChange={e => setCostAmount(e.target.value)} disabled={isReadOnly} className="bg-white"/>
                             <div className="flex items-center gap-2"><Switch checked={costVisible} onCheckedChange={setCostVisible} disabled={isReadOnly}/><Label className="text-xs">Addebita Ospite</Label></div>
                         </div>

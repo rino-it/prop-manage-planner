@@ -96,25 +96,22 @@ const Properties = () => {
     enabled: !!detailsOpen
   });
 
-  // --- QUERY DOCUMENTI CORRETTA E ROBUSTA ---
   const { data: allDocs } = useQuery({
     queryKey: ['property-docs-full', docsOpen?.id],
     queryFn: async () => {
       if (!docsOpen) return { struct: [], tenant: [], expense: [] };
       
       try {
-          // 1. Fetch unico per tutti i documenti della proprietà (usa created_at invece di uploaded_at)
           const { data: rawDocs, error } = await supabase.from('documents')
-            .select(`*, payments(*)`) // Tenta il join, se fallisce payments sarà null
+            .select(`*, payments(*)`) 
             .eq('property_real_id', docsOpen.id)
-            .order('created_at', { ascending: false }); // FIX: Usa created_at standard
+            .order('created_at', { ascending: false });
 
           if (error) {
               console.error("Errore fetch documenti:", error);
               return { struct: [], tenant: [], expense: [] };
           }
 
-          // 2. Fetch Documenti Inquilini (resta separato perché tabella diversa)
           const { data: bookings } = await supabase.from('bookings').select('id').eq('property_id', docsOpen.id);
           const bookingIds = bookings?.map(b => b.id) || [];
           let tenantDocs: any[] = [];
@@ -125,7 +122,6 @@ const Properties = () => {
               tenantDocs = tDocs || [];
           }
 
-          // 3. Filtraggio in memoria (più sicuro)
           const structDocs = rawDocs?.filter(d => !d.payment_id) || [];
           const expenseDocs = rawDocs?.filter(d => d.payment_id) || [];
 
@@ -142,7 +138,6 @@ const Properties = () => {
   const getCombinedDocs = () => {
       if (!allDocs) return [];
       const combined = [...(allDocs.struct || []), ...(allDocs.expense || [])];
-      // Ordina per data creazione
       return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   };
 
@@ -211,7 +206,6 @@ const Properties = () => {
           setIsExpense(false);
           setSmartData({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
           
-          // Forza refresh multipli
           queryClient.invalidateQueries({ queryKey: ['property-docs-full'] });
           queryClient.invalidateQueries({ queryKey: ['unified-expenses'] });
 
@@ -234,13 +228,13 @@ const Properties = () => {
   const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 pb-20"> {/* Padding bottom per mobile */}
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
             <h1 className="text-3xl font-bold text-gray-900">Gestione Proprietà</h1>
             <p className="text-gray-500 text-sm">Gestisci immobili, documenti e storico</p>
         </div>
-        <AddPropertyDialog><Button className="bg-blue-600">Aggiungi Proprietà</Button></AddPropertyDialog>
+        <AddPropertyDialog><Button className="bg-blue-600 w-full md:w-auto">Aggiungi Proprietà</Button></AddPropertyDialog>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -252,7 +246,7 @@ const Properties = () => {
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-300"><Home className="w-12 h-12"/></div>
                     )}
-                    <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"> {/* Sempre visibile su mobile */}
                         <Button size="icon" variant="secondary" className="h-8 w-8 bg-white/90" onClick={() => setEditOpen(prop)}>
                             <Pencil className="w-4 h-4 text-blue-600" />
                         </Button>
@@ -269,8 +263,8 @@ const Properties = () => {
                     <p className="text-xs text-gray-500 flex items-center"><MapPin className="w-3 h-3 mr-1"/> {prop.citta}</p>
                 </CardHeader>
                 <CardFooter className="bg-slate-50 p-3 grid grid-cols-2 gap-2">
-                    <Button variant="outline" className="w-full text-xs h-8" onClick={() => setDetailsOpen(prop)}>Analytics</Button>
-                    <Button variant="outline" className="w-full text-xs h-8 bg-white hover:text-blue-700" onClick={() => setDocsOpen(prop)}>
+                    <Button variant="outline" className="w-full text-xs h-9 md:h-8" onClick={() => setDetailsOpen(prop)}>Analytics</Button>
+                    <Button variant="outline" className="w-full text-xs h-9 md:h-8 bg-white hover:text-blue-700" onClick={() => setDocsOpen(prop)}>
                         <FolderOpen className="w-3 h-3 mr-1" /> Documenti
                     </Button>
                 </CardFooter>
@@ -278,23 +272,24 @@ const Properties = () => {
         ))}
       </div>
 
+      {/* DIALOG MODIFICA */}
       <Dialog open={!!editOpen} onOpenChange={() => setEditOpen(null)}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-md w-[95vw]"> {/* Mobile width */}
             <DialogHeader><DialogTitle>Modifica Profilo</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
                 <Input placeholder="Nome" value={editFormData.nome} onChange={e => setEditFormData({...editFormData, nome: e.target.value})} />
                 <Input placeholder="Indirizzo" value={editFormData.indirizzo} onChange={e => setEditFormData({...editFormData, indirizzo: e.target.value})} />
                 <Input placeholder="Città" value={editFormData.citta} onChange={e => setEditFormData({...editFormData, citta: e.target.value})} />
             </div>
-            <DialogFooter>
-                <Button variant="outline" onClick={() => setEditOpen(null)}>Annulla</Button>
-                <Button onClick={() => updateProperty.mutate()} className="bg-blue-600">Salva</Button>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+                <Button variant="outline" onClick={() => setEditOpen(null)} className="w-full sm:w-auto">Annulla</Button>
+                <Button onClick={() => updateProperty.mutate()} className="bg-blue-600 w-full sm:w-auto">Salva</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <AlertDialog open={!!deleteOpen} onOpenChange={() => setDeleteOpen(null)}>
-        <AlertDialogContent>
+        <AlertDialogContent className="w-[95vw] sm:max-w-lg">
             <AlertDialogHeader>
                 <AlertDialogTitle className="text-red-600">Eliminazione Definitiva</AlertDialogTitle>
                 <AlertDialogDescription>
@@ -302,15 +297,15 @@ const Properties = () => {
                     <Input className="mt-2 border-red-200" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder={deleteOpen?.nome} />
                 </AlertDialogDescription>
             </AlertDialogHeader>
-            <AlertDialogFooter>
-                <AlertDialogCancel>Annulla</AlertDialogCancel>
-                <Button variant="destructive" disabled={deleteConfirmText !== deleteOpen?.nome} onClick={() => deleteProperty.mutate()}>Elimina</Button>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+                <AlertDialogCancel className="w-full sm:w-auto">Annulla</AlertDialogCancel>
+                <Button variant="destructive" disabled={deleteConfirmText !== deleteOpen?.nome} onClick={() => deleteProperty.mutate()} className="w-full sm:w-auto">Elimina</Button>
             </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
       <Sheet open={!!detailsOpen} onOpenChange={() => setDetailsOpen(null)}>
-        <SheetContent className="sm:max-w-md overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
             <SheetHeader className="mb-6">
                 <SheetTitle className="flex items-center gap-2"><Home className="w-5 h-5 text-blue-600"/> {detailsOpen?.nome}</SheetTitle>
                 <SheetDescription>Registro storico occupanti.</SheetDescription>
@@ -329,27 +324,31 @@ const Properties = () => {
         </SheetContent>
       </Sheet>
 
+      {/* DIALOG INQUILINO */}
       <Dialog open={!!selectedTenant} onOpenChange={(open) => !open && setSelectedTenant(null)}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0">
-            <div className="p-6 border-b bg-slate-50"><DialogTitle>{selectedTenant?.nome_ospite}</DialogTitle></div>
-            <Tabs defaultValue="tickets" className="flex-1 p-6">
-                <TabsList className="mb-4">
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0"> {/* Full height mobile */}
+            <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-center">
+                <DialogTitle>{selectedTenant?.nome_ospite}</DialogTitle>
+                <Button size="sm" variant="ghost" onClick={() => setSelectedTenant(null)}><X className="w-4 h-4"/></Button>
+            </div>
+            <Tabs defaultValue="tickets" className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
+                <TabsList className="mb-4 w-full grid grid-cols-2">
                     <TabsTrigger value="tickets">Ticket</TabsTrigger>
                     <TabsTrigger value="payments">Pagamenti</TabsTrigger>
                 </TabsList>
-                <TabsContent value="tickets">
+                <TabsContent value="tickets" className="flex-1 overflow-y-auto">
                     {tenantDetails?.tickets.map((t:any) => (
                         <div key={t.id} className="p-3 border rounded mb-2 flex justify-between items-center">
-                            <span>{t.titolo}</span>
+                            <span className="text-sm font-medium">{t.titolo}</span>
                             <Button size="sm" variant="ghost" onClick={() => setManagingTicket(t)}>Gestisci</Button>
                         </div>
                     ))}
                 </TabsContent>
-                <TabsContent value="payments">
+                <TabsContent value="payments" className="flex-1 overflow-y-auto">
                     {tenantDetails?.payments.map((p:any) => (
-                        <div key={p.id} className="p-3 border rounded mb-2 flex justify-between">
-                            <span>{p.description || p.tipo}</span>
-                            <span className="font-bold">€{p.importo}</span>
+                        <div key={p.id} className="p-3 border rounded mb-2 flex justify-between items-center">
+                            <span className="text-sm">{p.description || p.tipo}</span>
+                            <span className="font-bold text-sm">€{p.importo}</span>
                         </div>
                     ))}
                 </TabsContent>
@@ -357,12 +356,14 @@ const Properties = () => {
         </DialogContent>
       </Dialog>
 
+      {/* DIALOG DOCUMENTI */}
       <Dialog open={!!docsOpen} onOpenChange={() => setDocsOpen(null)}>
-        <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
-            <DialogHeader><DialogTitle className="flex items-center gap-2"><FolderOpen className="w-5 h-5 text-blue-600"/> Archivio: {docsOpen?.nome}</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col">
+            <DialogHeader><DialogTitle className="flex items-center gap-2 truncate"><FolderOpen className="w-5 h-5 text-blue-600"/> Archivio: {docsOpen?.nome}</DialogTitle></DialogHeader>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden mt-2">
                 
+                {/* UPLOAD FORM - Stacks on mobile */}
                 <div className="bg-slate-50 p-4 rounded-lg border flex flex-col gap-4 overflow-y-auto">
                     <h4 className="font-bold flex items-center gap-2 text-sm uppercase text-slate-500">Carica Nuovo</h4>
                     <div className="space-y-2">
@@ -401,31 +402,29 @@ const Properties = () => {
                     )}
                 </div>
 
+                {/* LISTA DOCS */}
                 <div className="md:col-span-2 overflow-y-auto">
                     <Tabs defaultValue="all" className="w-full">
-                        <TabsList className="w-full justify-start">
+                        <TabsList className="w-full justify-start overflow-x-auto"> {/* Scrollable tabs */}
                             <TabsTrigger value="all">Tutti</TabsTrigger>
                             <TabsTrigger value="spese">Spese</TabsTrigger>
                         </TabsList>
                         
-                        {/* TAB TUTTI - ORA COMBINA E VISUALIZZA TUTTO */}
                         <TabsContent value="all" className="space-y-2 mt-2">
                             {getCombinedDocs().map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50">
-                                    <div className="flex items-center gap-3">
-                                        {/* Icona Diversa se Spesa o Doc */}
-                                        {doc.payment_id ? <Euro className="w-4 h-4 text-green-600"/> : <FileText className="w-4 h-4 text-gray-400"/>}
-                                        <div>
-                                            <span className="text-sm font-medium truncate max-w-[200px] block">{doc.nome}</span>
-                                            {/* Se è spesa, mostra importo */}
+                                    <div className="flex items-center gap-3 overflow-hidden">
+                                        {doc.payment_id ? <Euro className="w-4 h-4 text-green-600 shrink-0"/> : <FileText className="w-4 h-4 text-gray-400 shrink-0"/>}
+                                        <div className="min-w-0">
+                                            <span className="text-sm font-medium truncate block max-w-[150px] sm:max-w-[200px]">{doc.nome}</span>
                                             {doc.payments && (
-                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded">
+                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded truncate block">
                                                     € {doc.payments.importo} - {doc.payments.categoria}
                                                 </span>
                                             )}
                                         </div>
                                     </div>
-                                    <div className="flex gap-1">
+                                    <div className="flex gap-1 shrink-0">
                                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-3 h-3"/></Button>
                                         <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => deleteDoc.mutate(doc.id)}><Trash2 className="w-3 h-3"/></Button>
                                     </div>
@@ -434,15 +433,14 @@ const Properties = () => {
                             {getCombinedDocs().length === 0 && <p className="text-gray-400 text-center text-sm mt-4">Nessun documento.</p>}
                         </TabsContent>
 
-                        {/* TAB SOLO SPESE */}
                         <TabsContent value="spese" className="space-y-2 mt-2">
                             {allDocs?.expense.map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50 border-l-4 border-l-green-500">
-                                    <div>
-                                        <div className="flex items-center gap-2"><Euro className="w-4 h-4 text-green-600"/><span className="text-sm font-bold">{doc.nome}</span></div>
+                                    <div className="overflow-hidden">
+                                        <div className="flex items-center gap-2"><Euro className="w-4 h-4 text-green-600 shrink-0"/><span className="text-sm font-bold truncate">{doc.nome}</span></div>
                                         {doc.payments && <p className="text-xs text-gray-500 ml-6">€ {doc.payments.importo} ({doc.payments.categoria})</p>}
                                     </div>
-                                    <div className="flex gap-1">
+                                    <div className="flex gap-1 shrink-0">
                                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-3 h-3"/></Button>
                                         <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => deleteDoc.mutate(doc.id)}><Trash2 className="w-3 h-3"/></Button>
                                     </div>

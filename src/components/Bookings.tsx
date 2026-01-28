@@ -9,8 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch'; // Importante
-import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck, Lock, Unlock } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck } from 'lucide-react';
 import { format, isBefore, addDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -136,7 +136,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     }
   });
 
-  // NUOVA MUTATION: SBLOCCO/BLOCCO CHECK-IN
   const toggleCheckinApproval = useMutation({
     mutationFn: async ({ id, approved }: { id: string, approved: boolean }) => {
         const { error } = await supabase.from('bookings').update({ documents_approved: approved }).eq('id', id);
@@ -144,7 +143,6 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     },
     onSuccess: (_, variables) => {
         queryClient.invalidateQueries({ queryKey: ['bookings'] });
-        // Aggiorna anche lo stato locale per vedere subito il cambiamento nel dialog
         setCustomerSheetOpen((prev: any) => ({ ...prev, documents_approved: variables.approved }));
         toast({ 
             title: variables.approved ? "Accesso Sbloccato" : "Accesso Bloccato", 
@@ -183,16 +181,16 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6 pb-20">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <h1 className="text-3xl font-bold text-gray-900">Prenotazioni</h1>
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={() => setNewBookingOpen(true)}>
+        <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto" onClick={() => setNewBookingOpen(true)}>
             <Plus className="w-4 h-4 mr-2" /> Nuova
         </Button>
       </div>
 
       <Dialog open={newBookingOpen} onOpenChange={setNewBookingOpen}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent className="sm:max-w-[600px] w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>Nuova Prenotazione</DialogTitle></DialogHeader>
             <div className="space-y-4 mt-4">
                 <div className="bg-slate-50 p-3 rounded-lg border border-slate-200">
@@ -216,12 +214,12 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                     <Label>Ospite / Inquilino</Label>
                     <Input value={formData.nome_ospite} onChange={e => setFormData({...formData, nome_ospite: e.target.value})} placeholder="Nome Cognome" />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label>Check-in / Inizio</Label>
                         <Popover>
-                            <PopoverTrigger asChild><Button variant={"outline"}>{formData.data_inizio ? format(formData.data_inizio, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger>
-                            <PopoverContent className="p-0">
+                            <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal">{formData.data_inizio ? format(formData.data_inizio, "dd/MM/yyyy") : "Seleziona data"}</Button></PopoverTrigger>
+                            <PopoverContent className="p-0" align="start">
                                 <Calendar mode="single" selected={formData.data_inizio} onSelect={(d) => setFormData({...formData, data_inizio: d})} disabled={[...getOccupiedDates(formData.property_id), { before: new Date() }]} />
                             </PopoverContent>
                         </Popover>
@@ -229,8 +227,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                     <div className="grid gap-2">
                         <Label>Check-out / Fine</Label>
                         <Popover>
-                            <PopoverTrigger asChild><Button variant={"outline"}>{formData.data_fine ? format(formData.data_fine, "dd/MM/yyyy") : "Data"}</Button></PopoverTrigger>
-                            <PopoverContent className="p-0">
+                            <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal">{formData.data_fine ? format(formData.data_fine, "dd/MM/yyyy") : "Seleziona data"}</Button></PopoverTrigger>
+                            <PopoverContent className="p-0" align="start">
                                 <Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} disabled={[...getOccupiedDates(formData.property_id), { before: formData.data_inizio || new Date() }]} />
                             </PopoverContent>
                         </Popover>
@@ -243,54 +241,57 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
       {/* --- SCHEDA CLIENTE COMPLETA --- */}
       <Dialog open={!!customerSheetOpen} onOpenChange={(open) => !open && setCustomerSheetOpen(null)}>
-        <DialogContent className="max-w-4xl h-[85vh] flex flex-col p-0 overflow-hidden">
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden">
             
-            <div className="p-6 border-b bg-slate-50 flex justify-between items-start">
-                <div className="flex gap-4 items-center">
-                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 border border-blue-200">
+            <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-start">
+                <div className="flex gap-4 items-center overflow-hidden">
+                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 border border-blue-200 shrink-0">
                         <User className="w-6 h-6" />
                     </div>
-                    <div>
-                        <DialogTitle className="text-xl font-bold text-gray-900">{customerSheetOpen?.nome_ospite}</DialogTitle>
-                        <p className="text-sm text-gray-500 flex items-center gap-2 mt-1">
-                            <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100">{customerSheetOpen?.properties_real?.nome}</span> 
-                            <span className="text-xs text-gray-400">|</span>
+                    <div className="min-w-0">
+                        <DialogTitle className="text-lg md:text-xl font-bold text-gray-900 truncate">{customerSheetOpen?.nome_ospite}</DialogTitle>
+                        <p className="text-xs md:text-sm text-gray-500 flex flex-wrap items-center gap-2 mt-1">
+                            <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 truncate max-w-[150px]">{customerSheetOpen?.properties_real?.nome}</span> 
+                            <span className="text-gray-400">|</span>
                             <span className="capitalize">{customerSheetOpen?.tipo_affitto} Termine</span>
                         </p>
                     </div>
                 </div>
-                <div className="flex flex-col items-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200">
-                        <Copy className="w-4 h-4 mr-2" /> Link Portale
+                <div className="flex flex-col items-end gap-2 shrink-0">
+                    <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200 h-8 text-xs">
+                        <Copy className="w-3 h-3 mr-2" /> <span className="hidden sm:inline">Link Portale</span><span className="sm:hidden">Link</span>
                     </Button>
-                    <Badge className={customerSheetOpen?.documents_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}>
-                        {customerSheetOpen?.documents_approved ? '✅ Accesso Sbloccato' : '🔒 Accesso Bloccato'}
+                    <Badge className={`text-[10px] sm:text-xs ${customerSheetOpen?.documents_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                        {customerSheetOpen?.documents_approved ? '✅ Sbloccato' : '🔒 Bloccato'}
                     </Badge>
                 </div>
             </div>
 
             <div className="flex-1 overflow-hidden flex flex-col">
                 <Tabs defaultValue="overview" className="flex-1 flex flex-col">
-                    <div className="px-6 pt-4 border-b bg-white">
-                        <TabsList className="grid w-full grid-cols-4 lg:w-[480px]">
-                            <TabsTrigger value="overview">Panoramica</TabsTrigger>
-                            <TabsTrigger value="docs">Documenti</TabsTrigger>
-                            <TabsTrigger value="tickets">Ticket</TabsTrigger>
-                            <TabsTrigger value="payments">Contabilità</TabsTrigger>
+                    <div className="px-4 md:px-6 pt-4 border-b bg-white">
+                        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
+                            <TabsTrigger value="overview" className="flex-1 min-w-[90px]">Panoramica</TabsTrigger>
+                            <TabsTrigger value="docs" className="flex-1 min-w-[90px]">Documenti</TabsTrigger>
+                            <TabsTrigger value="tickets" className="flex-1 min-w-[90px]">Ticket</TabsTrigger>
+                            <TabsTrigger value="payments" className="flex-1 min-w-[90px]">Contabilità</TabsTrigger>
                         </TabsList>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto p-6 bg-white/50">
+                    <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-white/50">
                         
                         <TabsContent value="overview" className="mt-0 space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Card className="bg-white border-slate-200 shadow-sm">
                                     <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Soggiorno</CardTitle></CardHeader>
                                     <CardContent>
-                                        <div className="flex items-center gap-3 text-lg">
-                                            <CalendarIcon className="w-5 h-5 text-blue-600"/>
-                                            <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
-                                            <span className="text-gray-300">→</span>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-base md:text-lg">
+                                            <div className="flex items-center gap-2">
+                                                <CalendarIcon className="w-5 h-5 text-blue-600"/>
+                                                <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
+                                            </div>
+                                            <span className="text-gray-300 hidden sm:inline">→</span>
+                                            <span className="text-gray-300 sm:hidden">fino al</span>
                                             <span className="font-bold">{format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}</span>
                                         </div>
                                     </CardContent>
@@ -298,7 +299,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                 <Card className="bg-white border-slate-200 shadow-sm">
                                     <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Contatti</CardTitle></CardHeader>
                                     <CardContent className="space-y-1">
-                                        <p className="text-sm flex items-center gap-2"><span className="text-gray-400">✉️</span> {customerSheetOpen?.email_ospite || 'Nessuna email'}</p>
+                                        <p className="text-sm flex items-center gap-2 truncate"><span className="text-gray-400">✉️</span> {customerSheetOpen?.email_ospite || 'Nessuna email'}</p>
                                         <p className="text-sm flex items-center gap-2"><span className="text-gray-400">📞</span> {customerSheetOpen?.telefono_ospite || 'Nessun telefono'}</p>
                                     </CardContent>
                                 </Card>
@@ -306,10 +307,10 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             
                             {isBefore(new Date(customerSheetOpen?.data_fine), addDays(new Date(), 7)) && (
                                 <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg flex items-start gap-3 shadow-sm">
-                                    <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5" />
+                                    <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 shrink-0" />
                                     <div>
-                                        <h4 className="font-bold text-orange-800">In Scadenza</h4>
-                                        <p className="text-sm text-orange-700">Il contratto scade tra meno di 7 giorni. Assicurati di aver programmato il check-out.</p>
+                                        <h4 className="font-bold text-orange-800 text-sm">In Scadenza</h4>
+                                        <p className="text-xs md:text-sm text-orange-700">Il contratto scade tra meno di 7 giorni. Assicurati di aver programmato il check-out.</p>
                                     </div>
                                 </div>
                             )}
@@ -327,21 +328,21 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         </TabsContent>
 
                         <TabsContent value="docs" className="mt-0">
-                            {/* --- NUOVA SEZIONE DI CONTROLLO ACCESSO --- */}
-                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <ShieldCheck className={`w-8 h-8 ${customerSheetOpen?.documents_approved ? 'text-green-600' : 'text-orange-500'}`} />
+                            {/* --- CONTROLLO ACCESSO --- */}
+                            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                                <div className="flex items-start gap-3">
+                                    <ShieldCheck className={`w-8 h-8 ${customerSheetOpen?.documents_approved ? 'text-green-600' : 'text-orange-500'} shrink-0`} />
                                     <div>
-                                        <h4 className="font-bold text-blue-900">Controllo Accessi</h4>
-                                        <p className="text-sm text-blue-700">
+                                        <h4 className="font-bold text-blue-900 text-sm">Controllo Accessi</h4>
+                                        <p className="text-xs text-blue-700">
                                             {customerSheetOpen?.documents_approved 
-                                                ? "L'inquilino ha accesso completo al portale (chiavi e servizi)." 
-                                                : "L'inquilino vede solo la schermata di verifica."}
+                                                ? "L'inquilino ha accesso completo." 
+                                                : "L'inquilino vede solo la verifica."}
                                         </p>
                                     </div>
                                 </div>
-                                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border">
-                                    <Label className="cursor-pointer font-bold mr-2 text-slate-700">Accesso Sbloccato</Label>
+                                <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border w-full sm:w-auto justify-between sm:justify-start">
+                                    <Label className="cursor-pointer font-bold mr-2 text-slate-700 text-sm">Accesso Sbloccato</Label>
                                     <Switch 
                                         checked={customerSheetOpen?.documents_approved || false}
                                         onCheckedChange={(val) => toggleCheckinApproval.mutate({ id: customerSheetOpen.id, approved: val })}
@@ -352,14 +353,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             <div className="space-y-3">
                                 {activeDocs?.map(doc => (
                                     <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
-                                        <div className="flex items-center gap-3">
-                                            <div className="p-2 bg-slate-100 rounded text-slate-500"><FileText className="w-5 h-5" /></div>
-                                            <div>
-                                                <p className="font-medium text-sm text-gray-900">{doc.filename}</p>
+                                        <div className="flex items-center gap-3 overflow-hidden">
+                                            <div className="p-2 bg-slate-100 rounded text-slate-500 shrink-0"><FileText className="w-5 h-5" /></div>
+                                            <div className="min-w-0">
+                                                <p className="font-medium text-sm text-gray-900 truncate">{doc.filename}</p>
                                                 <p className="text-xs text-gray-500">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
                                             </div>
                                         </div>
-                                        <div className="flex items-center gap-2">
+                                        <div className="flex items-center gap-2 shrink-0">
                                             <Button variant="ghost" size="sm" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
                                             {doc.status === 'in_revisione' ? (
                                                 <div className="flex gap-1">
@@ -367,12 +368,12 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                                     <Button size="icon" className="h-7 w-7 bg-red-600 hover:bg-red-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'rifiutato' })} title="Rifiuta"><X className="w-4 h-4" /></Button>
                                                 </div>
                                             ) : (
-                                                <Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'} className="capitalize">{doc.status}</Badge>
+                                                <Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'} className="capitalize text-[10px]">{doc.status}</Badge>
                                             )}
                                         </div>
                                     </div>
                                 ))}
-                                {activeDocs?.length === 0 && <div className="text-center text-gray-400 py-12 bg-slate-50 rounded-lg border border-dashed"><FileText className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun documento caricato dal cliente.</p></div>}
+                                {activeDocs?.length === 0 && <div className="text-center text-gray-400 py-12 bg-slate-50 rounded-lg border border-dashed"><FileText className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun documento.</p></div>}
                             </div>
                         </TabsContent>
 
@@ -381,48 +382,48 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                 {activeTickets?.map(ticket => (
                                     <div key={ticket.id} className="p-4 border rounded-lg bg-white shadow-sm hover:shadow-md transition-shadow">
                                         <div className="flex justify-between items-start mb-2">
-                                            <h4 className="font-bold text-gray-900 flex items-center gap-2">
-                                                {ticket.priorita === 'alta' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                                            <h4 className="font-bold text-gray-900 flex items-center gap-2 text-sm">
+                                                {ticket.priorita === 'alta' && <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />}
                                                 {ticket.titolo}
                                             </h4>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 shrink-0">
                                                 <Badge variant={ticket.stato === 'risolto' ? 'secondary' : 'destructive'} className="uppercase text-[10px] tracking-wider">{ticket.stato}</Badge>
-                                                <Button size="sm" variant="ghost" className="h-6 text-blue-600 hover:bg-blue-50 hover:text-blue-700" onClick={() => setManagingTicket(ticket)}>
-                                                    <UserCog className="w-3 h-3 mr-1" /> Gestisci
+                                                <Button size="sm" variant="ghost" className="h-6 text-blue-600 hover:bg-blue-50 hover:text-blue-700 px-2" onClick={() => setManagingTicket(ticket)}>
+                                                    <UserCog className="w-3 h-3 sm:mr-1" /> <span className="hidden sm:inline">Gestisci</span>
                                                 </Button>
                                             </div>
                                         </div>
-                                        <p className="text-sm text-gray-600 mb-3 bg-slate-50 p-2 rounded border border-slate-100">"{ticket.descrizione}"</p>
+                                        <p className="text-xs md:text-sm text-gray-600 mb-3 bg-slate-50 p-2 rounded border border-slate-100">"{ticket.descrizione}"</p>
                                         <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
                                             <span className="flex items-center gap-1"><CalendarIcon className="w-3 h-3"/> {format(new Date(ticket.created_at), 'dd MMM yyyy')}</span>
-                                            {ticket.creato_da === 'ospite' && <span className="flex items-center gap-1 text-blue-500 font-medium"><MessageSquare className="w-3 h-3"/> Creato da Ospite</span>}
+                                            {ticket.creato_da === 'ospite' && <span className="flex items-center gap-1 text-blue-500 font-medium"><MessageSquare className="w-3 h-3"/> Ospite</span>}
                                         </div>
                                     </div>
                                 ))}
-                                {activeTickets?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><Wrench className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessuna segnalazione guasti.</p></div>}
+                                {activeTickets?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><Wrench className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessuna segnalazione.</p></div>}
                             </div>
                         </TabsContent>
 
                         <TabsContent value="payments" className="mt-0">
                             <div className="space-y-3">
                                 {activePayments?.map(pay => (
-                                    <div key={pay.id} className="flex justify-between items-center p-4 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
-                                        <div className="flex items-center gap-4">
-                                            <div className={`p-2 rounded-full ${pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                <CreditCard className="w-5 h-5" />
+                                    <div key={pay.id} className="flex justify-between items-center p-3 md:p-4 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
+                                        <div className="flex items-center gap-3 md:gap-4">
+                                            <div className={`p-2 rounded-full shrink-0 ${pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                <CreditCard className="w-4 h-4 md:w-5 md:h-5" />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-gray-900 capitalize">{pay.tipo?.replace('_', ' ') || 'Rata'}</p>
-                                                <p className="text-xs text-gray-500 font-medium">Scadenza: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                                                <p className="font-bold text-gray-900 capitalize text-sm">{pay.tipo?.replace('_', ' ') || 'Rata'}</p>
+                                                <p className="text-xs text-gray-500 font-medium">{format(new Date(pay.data_scadenza), 'dd MMM')}</p>
                                             </div>
                                         </div>
                                         <div className="text-right">
-                                            <p className="font-bold text-lg text-slate-800">€ {pay.importo}</p>
-                                            <Badge variant="outline" className={pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'}>{pay.stato.toUpperCase()}</Badge>
+                                            <p className="font-bold text-base md:text-lg text-slate-800">€ {pay.importo}</p>
+                                            <Badge variant="outline" className={`text-[10px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato.toUpperCase()}</Badge>
                                         </div>
                                     </div>
                                 ))}
-                                {activePayments?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun movimento contabile registrato.</p></div>}
+                                {activePayments?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun movimento.</p></div>}
                             </div>
                         </TabsContent>
 
@@ -451,7 +452,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
       {editingBooking && (
         <Dialog open={!!editingBooking} onOpenChange={(open) => !open && setEditingBooking(null)}>
-            <DialogContent className="sm:max-w-[400px]">
+            <DialogContent className="sm:max-w-[400px] w-[95vw]">
                 <DialogHeader><DialogTitle>Modifica Contatto</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-4">
                      <div className="grid gap-2"><Label>Email</Label><Input value={editingBooking.email_ospite || ''} onChange={e => setEditingBooking({...editingBooking, email_ospite: e.target.value})} /></div>
@@ -492,7 +493,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             </Button>
                         </div>
 
-                        <div className="flex justify-end gap-2 border-t pt-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="flex justify-end gap-2 border-t pt-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                             <Button variant="ghost" size="sm" className="h-8 text-gray-400 hover:text-blue-600" onClick={() => setEditingBooking(booking)}><Pencil className="w-3 h-3" /></Button>
                             <Button variant="ghost" size="sm" className="h-8 text-gray-400 hover:text-red-600" onClick={() => { if(confirm("Eliminare?")) deleteBooking.mutate(booking.id) }}><Trash2 className="w-3 h-3" /></Button>
                         </div>

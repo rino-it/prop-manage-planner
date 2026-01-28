@@ -182,7 +182,7 @@ export default function MobileProperties() {
   };
 
   return (
-    <div className="space-y-6 animate-in fade-in">
+    <div className="space-y-6 animate-in fade-in pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Gestione Flotta</h1>
@@ -190,10 +190,10 @@ export default function MobileProperties() {
         </div>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={openCreate}>
+          <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm w-full md:w-auto" onClick={openCreate}>
               <Plus className="w-4 h-4 mr-2" /> Aggiungi Veicolo
           </Button>
-          <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+          <DialogContent className="sm:max-w-[600px] w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editingId ? 'Modifica Veicolo' : 'Nuovo Veicolo'}</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
               
@@ -202,7 +202,7 @@ export default function MobileProperties() {
                 <Label>Modello</Label>
                 <Input placeholder="Es. Fiat Panda" value={formData.veicolo} onChange={e => setFormData({...formData, veicolo: e.target.value})} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="grid gap-2">
                   <Label>Targa</Label>
                   <Input placeholder="AA 000 BB" className="uppercase" value={formData.targa} onChange={e => setFormData({...formData, targa: e.target.value.toUpperCase()})} />
@@ -218,7 +218,7 @@ export default function MobileProperties() {
                 <h4 className="text-xs font-bold text-orange-800 uppercase flex items-center gap-2">
                     <Calendar className="w-3 h-3"/> Scadenze Obbligatorie
                 </h4>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <div className="grid gap-1">
                         <Label className="text-xs">Assicurazione</Label>
                         <Input type="date" className="h-8 text-xs bg-white" value={formData.scadenza_assicurazione} onChange={e => setFormData({...formData, scadenza_assicurazione: e.target.value})} />
@@ -239,7 +239,7 @@ export default function MobileProperties() {
                  <h4 className="text-xs font-bold text-slate-700 uppercase flex items-center gap-2">
                     <FileText className="w-3 h-3"/> {editingId ? 'Aggiorna Documenti (Opzionale)' : 'Upload Documenti'}
                 </h4>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2">
                         <Label className="text-xs text-blue-600 font-medium">Libretto (PDF/Foto)</Label>
                         <Input type="file" className="text-xs bg-white h-9" accept=".pdf,.jpg,.png" onChange={(e) => handleFile(e, 'libretto')} />
@@ -252,9 +252,9 @@ export default function MobileProperties() {
               </div>
 
             </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setIsDialogOpen(false)}>Annulla</Button>
-              <Button onClick={() => saveVehicle.mutate()} disabled={!formData.veicolo || !formData.targa || isUploading}>
+            <DialogFooter className="flex-col sm:flex-row gap-2">
+              <Button variant="outline" onClick={() => setIsDialogOpen(false)} className="w-full sm:w-auto">Annulla</Button>
+              <Button onClick={() => saveVehicle.mutate()} disabled={!formData.veicolo || !formData.targa || isUploading} className="w-full sm:w-auto">
                 {isUploading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin"/> {editingId ? 'Aggiornamento...' : 'Salvataggio...'}</> : (editingId ? 'Salva Modifiche' : 'Crea Veicolo')}
               </Button>
             </DialogFooter>
@@ -271,8 +271,8 @@ export default function MobileProperties() {
                 {v.veicolo}
               </CardTitle>
               
-              {/* Pulsanti Azione (Edit & Delete) */}
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {/* Pulsanti Azione (Edit & Delete) - Sempre visibili su mobile */}
+              <div className="flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                   <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-600 hover:bg-blue-50" onClick={() => openEdit(v)}>
                     <Pencil className="w-4 h-4" />
                   </Button>
@@ -285,7 +285,7 @@ export default function MobileProperties() {
               
               <div className="grid grid-cols-2 gap-2 text-sm border-b pb-3">
                  <div><span className="text-gray-400 text-xs block">Targa</span><span className="font-mono font-bold">{v.targa}</span></div>
-                 <div className="text-right"><span className="text-gray-400 text-xs block">Intestatario</span><span className="font-medium">{v.proprietario || '-'}</span></div>
+                 <div className="text-right"><span className="text-gray-400 text-xs block">Intestatario</span><span className="font-medium truncate">{v.proprietario || '-'}</span></div>
               </div>
 
               <div className="space-y-1 bg-slate-50 p-2 rounded">
