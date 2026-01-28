@@ -10,13 +10,13 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users, Paperclip, AlertTriangle, Share2, Download
+  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users, Paperclip, AlertTriangle, Share2
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer';
-import { TicketDocument } from './TicketPDF'; // Importa il template PDF
+import { TicketDocument } from './TicketPDF';
 
 interface TicketManagerProps {
   ticket: any;
@@ -29,7 +29,6 @@ interface TicketManagerProps {
 export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isReadOnly = false }: TicketManagerProps) {
   const { toast } = useToast();
   
-  // STATI ESISTENTI
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
@@ -56,7 +55,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
-  // Sync stati
   useEffect(() => {
     if(isOpen && ticket) {
         setStatus(ticket.stato);
@@ -211,33 +209,37 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     } finally { setUploading(false); }
   };
 
-  // --- LOGICA PDF DELEGA (Nuova Feature) ---
-  const generateAndSharePDF = async () => {
+  // --- LOGICA PDF DELEGA (Aggiornata per accettare telefono) ---
+  const generateAndSharePDF = async (targetPhone: string | null = null) => {
     setUploading(true);
     toast({ title: "Generazione PDF...", description: "Sto creando il documento di delega." });
 
     try {
-        // 1. Recupera URL pubblici delle immagini per il PDF
+        // 1. Risolvi immagini
         const imageUrls = await Promise.all((ticket.attachments || []).map(async (path: string) => {
-            const { data } = await supabase.storage.from('ticket-files').createSignedUrl(path, 3600);
+            const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
+            const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
             return data?.signedUrl;
         }));
         
-        // 2. Genera Blob PDF
+        // 2. Genera Blob
         const blob = await pdf(<TicketDocument ticket={ticket} publicUrls={imageUrls.filter(Boolean)} />).toBlob();
         
-        // 3. Upload su Supabase (Temporaneo/Pubblico) per avere un link
+        // 3. Upload
         const fileName = `delega_${ticket.id}_${Date.now()}.pdf`;
         const { error: uploadError } = await supabase.storage.from('ticket-files').upload(fileName, blob);
-        
         if (uploadError) throw uploadError;
 
-        // 4. Ottieni Public URL
+        // 4. Link Pubblico
         const { data: { publicUrl } } = supabase.storage.from('ticket-files').getPublicUrl(fileName);
 
-        // 5. Crea Messaggio WhatsApp
+        // 5. WhatsApp (Generico o Specifico)
         const message = `Ciao, ecco la scheda intervento per: *${ticket.titolo}*\nLink Documento: ${publicUrl}`;
-        window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+        const waLink = targetPhone 
+            ? `https://wa.me/${targetPhone}?text=${encodeURIComponent(message)}`
+            : `https://wa.me/?text=${encodeURIComponent(message)}`;
+            
+        window.open(waLink, '_blank');
 
         toast({ title: "Pronto!", description: "WhatsApp aperto con il link al PDF." });
 
@@ -263,7 +265,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       try {
           const { error } = await supabase.from('tickets').update({ stato: 'risolto' }).eq('id', ticket.id);
           if (error) throw error;
-          
           setStatus('risolto'); 
           setShowCloseConfirm(false);
           toast({ title: "Ticket Chiuso", description: "Segnalazione risolta con successo." });
@@ -331,7 +332,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </TabsList>
 
             <TabsContent value="management" className="space-y-4 py-4">
-                {/* ALLEGATI INIZIALI */}
                 {ticket.attachments && ticket.attachments.length > 0 && (
                     <div className="bg-slate-50 p-3 rounded border">
                         <Label className="text-xs font-bold text-slate-500 mb-2 block">Allegati Iniziali</Label>
@@ -345,13 +345,13 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     </div>
                 )}
 
-                {/* BOTTONE DELEGA PDF */}
+                {/* BOTTONE DELEGA PDF (Aggiornato) */}
                 <div className="bg-blue-50 border border-blue-100 p-4 rounded-md flex items-center justify-between">
                     <div>
                         <h4 className="text-sm font-bold text-blue-800">Delega e Condivisione</h4>
                         <p className="text-xs text-blue-600">Genera PDF con foto e invia su WhatsApp.</p>
                     </div>
-                    <Button onClick={generateAndSharePDF} disabled={uploading} className="bg-blue-600 hover:bg-blue-700">
+                    <Button onClick={() => generateAndSharePDF(null)} disabled={uploading} className="bg-blue-600 hover:bg-blue-700">
                         {uploading ? 'Generazione...' : <><Share2 className="w-4 h-4 mr-2"/> Invia Delega</>}
                     </Button>
                 </div>
