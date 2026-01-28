@@ -8,13 +8,12 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { MapPin, Pencil, Home, FileText, Upload, Download, Trash2, Users, TrendingUp, Clock, AlertCircle, FolderOpen, Euro, Calendar as CalendarIcon, MessageSquare, CreditCard, Eye, Check, X, UserCog, User, Wrench, AlertTriangle, Loader2 } from 'lucide-react';
+import { MapPin, Pencil, Home, FileText, Upload, Trash2, TrendingUp, Clock, AlertCircle, FolderOpen, Euro, Calendar as CalendarIcon, MessageSquare, CreditCard, Eye, Check, X, UserCog, User, Wrench, AlertTriangle, Loader2, Plus } from 'lucide-react';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -46,7 +45,6 @@ const Properties = () => {
   const { data: propertiesReal = [] } = usePropertiesReal();
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
