@@ -15,7 +15,6 @@ interface AddPropertyDialogProps {
   propertyToEdit?: any;
 }
 
-// NOTA: Ho rimosso 'default' per correggere l'errore di importazione
 export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -28,7 +27,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
     veicolo: '',   // Solo Mobile
     targa: '',     // Solo Mobile
     proprietario: '', // Nuovo campo intestatario
-    scadenza_bollo: '', // <--- NUOVO CAMPO BOLLO
+    scadenza_bollo: '', 
     scadenza_assicurazione: '',
     scadenza_revisione: ''
   });
@@ -83,7 +82,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
           user_id: user.id,
           nome: formData.nome,
           indirizzo: formData.indirizzo,
-          stato: 'sfitto' // Default
+          stato: 'uso_personale' // CORRETTO: Uso un valore valido per il check constraint
         };
 
         if (propertyToEdit) {
@@ -120,7 +119,8 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
       onSuccess();
       onClose();
     } catch (error: any) {
-      toast({ title: "Errore", description: error.message, variant: "destructive" });
+      console.error(error); // Logga l'errore per debug
+      toast({ title: "Errore", description: error.message || "Errore durante il salvataggio", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -128,7 +128,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{propertyToEdit ? 'Modifica Proprietà' : 'Aggiungi Nuova Proprietà'}</DialogTitle>
         </DialogHeader>
@@ -164,7 +164,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
             </>
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                     <Label>Modello Veicolo</Label>
                     <Input placeholder="Es. Fiat Panda" value={formData.veicolo} onChange={e => setFormData({...formData, veicolo: e.target.value})} />
@@ -184,7 +184,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
               <div className="space-y-3 pt-2 border-t">
                 <h4 className="text-sm font-semibold text-gray-700">Scadenze & Documenti</h4>
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1">
                         <Label className="text-xs">Scadenza Assicurazione</Label>
                         <Input type="date" className="h-8 text-xs" value={formData.scadenza_assicurazione} onChange={e => setFormData({...formData, scadenza_assicurazione: e.target.value})} />
@@ -199,7 +199,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4 mt-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
                     <div className="space-y-1">
                         <Label className="text-xs flex items-center gap-1"><FileText className="w-3 h-3"/> Carica Libretto</Label>
                         <Input type="file" className="h-8 text-xs" onChange={e => setLibrettoFile(e.target.files?.[0] || null)} accept=".pdf,.jpg,.png"/>
@@ -214,9 +214,9 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
           )}
         </div>
 
-        <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose}>Annulla</Button>
-          <Button onClick={handleSave} disabled={loading} className="bg-blue-600 hover:bg-blue-700">
+        <DialogFooter className="mt-4 flex-col sm:flex-row gap-2">
+          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Annulla</Button>
+          <Button onClick={handleSave} disabled={loading} className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
             {loading ? 'Salvataggio...' : 'Salva'}
           </Button>
         </DialogFooter>
