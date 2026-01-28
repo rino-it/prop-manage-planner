@@ -10,11 +10,13 @@ import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users, Paperclip, AlertTriangle
+  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users, Paperclip, AlertTriangle, Share2, Download
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery } from '@tanstack/react-query';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
+import { pdf } from '@react-pdf/renderer';
+import { TicketDocument } from './TicketPDF'; // Importa il template PDF
 
 interface TicketManagerProps {
   ticket: any;
@@ -51,8 +53,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   
   const [uploading, setUploading] = useState(false);
-
-  // NUOVO: Stato per conferma chiusura
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
@@ -211,7 +211,44 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     } finally { setUploading(false); }
   };
 
-  // --- NUOVA LOGICA CHIUSURA CON CONFERMA ---
+  // --- LOGICA PDF DELEGA (Nuova Feature) ---
+  const generateAndSharePDF = async () => {
+    setUploading(true);
+    toast({ title: "Generazione PDF...", description: "Sto creando il documento di delega." });
+
+    try {
+        // 1. Recupera URL pubblici delle immagini per il PDF
+        const imageUrls = await Promise.all((ticket.attachments || []).map(async (path: string) => {
+            const { data } = await supabase.storage.from('ticket-files').createSignedUrl(path, 3600);
+            return data?.signedUrl;
+        }));
+        
+        // 2. Genera Blob PDF
+        const blob = await pdf(<TicketDocument ticket={ticket} publicUrls={imageUrls.filter(Boolean)} />).toBlob();
+        
+        // 3. Upload su Supabase (Temporaneo/Pubblico) per avere un link
+        const fileName = `delega_${ticket.id}_${Date.now()}.pdf`;
+        const { error: uploadError } = await supabase.storage.from('ticket-files').upload(fileName, blob);
+        
+        if (uploadError) throw uploadError;
+
+        // 4. Ottieni Public URL
+        const { data: { publicUrl } } = supabase.storage.from('ticket-files').getPublicUrl(fileName);
+
+        // 5. Crea Messaggio WhatsApp
+        const message = `Ciao, ecco la scheda intervento per: *${ticket.titolo}*\nLink Documento: ${publicUrl}`;
+        window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, '_blank');
+
+        toast({ title: "Pronto!", description: "WhatsApp aperto con il link al PDF." });
+
+    } catch (e: any) {
+        console.error(e);
+        toast({ title: "Errore PDF", description: e.message, variant: "destructive" });
+    } finally {
+        setUploading(false);
+    }
+  };
+
   const attemptClose = () => {
       setShowCloseConfirm(true);
       setConfirmText('');
@@ -307,6 +344,17 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         </div>
                     </div>
                 )}
+
+                {/* BOTTONE DELEGA PDF */}
+                <div className="bg-blue-50 border border-blue-100 p-4 rounded-md flex items-center justify-between">
+                    <div>
+                        <h4 className="text-sm font-bold text-blue-800">Delega e Condivisione</h4>
+                        <p className="text-xs text-blue-600">Genera PDF con foto e invia su WhatsApp.</p>
+                    </div>
+                    <Button onClick={generateAndSharePDF} disabled={uploading} className="bg-blue-600 hover:bg-blue-700">
+                        {uploading ? 'Generazione...' : <><Share2 className="w-4 h-4 mr-2"/> Invia Delega</>}
+                    </Button>
+                </div>
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="grid gap-2">
