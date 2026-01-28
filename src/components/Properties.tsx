@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { MapPin, Pencil, Home, FileText, Upload, Download, Trash2, Users, TrendingUp, Clock, AlertCircle, FolderOpen, Euro, Calendar as CalendarIcon, MessageSquare, CreditCard, Eye, Check, X, UserCog, User, Wrench, AlertTriangle } from 'lucide-react';
+import { MapPin, Pencil, Home, FileText, Upload, Download, Trash2, Users, TrendingUp, Clock, AlertCircle, FolderOpen, Euro, Calendar as CalendarIcon, MessageSquare, CreditCard, Eye, Check, X, UserCog, User, Wrench, AlertTriangle, Loader2 } from 'lucide-react';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -24,6 +24,9 @@ const Properties = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState<'all' | 'real' | 'mobile'>('all');
   
+  // FIX: Stato esplicito per aprire il dialog di creazione
+  const [isAddOpen, setIsAddOpen] = useState(false);
+
   const [detailsOpen, setDetailsOpen] = useState<any>(null);
   const [docsOpen, setDocsOpen] = useState<any>(null);
   const [editOpen, setEditOpen] = useState<any>(null);
@@ -228,43 +231,57 @@ const Properties = () => {
   const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
   return (
-    <div className="space-y-6 pb-20"> {/* Padding bottom per mobile */}
+    <div className="space-y-6 pb-20 animate-in fade-in">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
         <div>
             <h1 className="text-3xl font-bold text-gray-900">Gestione Proprietà</h1>
             <p className="text-gray-500 text-sm">Gestisci immobili, documenti e storico</p>
         </div>
-        <AddPropertyDialog><Button className="bg-blue-600 w-full md:w-auto">Aggiungi Proprietà</Button></AddPropertyDialog>
+        {/* FIX: Pulsante ora apre il Dialog controllato dallo stato */}
+        <Button className="bg-blue-600 w-full md:w-auto shadow-sm" onClick={() => setIsAddOpen(true)}>
+            <Plus className="w-4 h-4 mr-2"/> Aggiungi Proprietà
+        </Button>
       </div>
+
+      {/* FIX: Dialog di creazione renderizzato correttamente */}
+      <AddPropertyDialog 
+        isOpen={isAddOpen} 
+        onClose={() => setIsAddOpen(false)} 
+        onSuccess={() => {
+            setIsAddOpen(false);
+            queryClient.invalidateQueries({ queryKey: ['properties_real'] });
+        }} 
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredPropertiesReal.map(prop => (
-            <Card key={prop.id} className="group hover:shadow-lg transition-all relative">
-                <div className="h-32 bg-slate-100 relative overflow-hidden rounded-t-lg">
+            <Card key={prop.id} className="group hover:shadow-lg transition-all relative border-t-4 border-t-blue-500">
+                <div className="h-32 bg-slate-100 relative overflow-hidden">
                     {prop.immagine_url ? (
                         <img src={prop.immagine_url} alt={prop.nome} className="w-full h-full object-cover" />
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-300"><Home className="w-12 h-12"/></div>
                     )}
-                    <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity"> {/* Sempre visibile su mobile */}
-                        <Button size="icon" variant="secondary" className="h-8 w-8 bg-white/90" onClick={() => setEditOpen(prop)}>
+                    {/* Pulsanti Edit/Delete sempre visibili su mobile */}
+                    <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                        <Button size="icon" variant="secondary" className="h-8 w-8 bg-white/90 shadow-sm" onClick={() => setEditOpen(prop)}>
                             <Pencil className="w-4 h-4 text-blue-600" />
                         </Button>
-                        <Button size="icon" variant="destructive" className="h-8 w-8" onClick={() => { setDeleteOpen(prop); setDeleteConfirmText(''); }}>
+                        <Button size="icon" variant="destructive" className="h-8 w-8 shadow-sm" onClick={() => { setDeleteOpen(prop); setDeleteConfirmText(''); }}>
                             <Trash2 className="w-4 h-4" />
                         </Button>
                     </div>
                 </div>
                 <CardHeader className="pb-2 pt-3">
-                    <CardTitle className="text-lg flex justify-between">
-                        <span>{prop.nome}</span>
-                        <Badge variant="outline" className="text-green-700 bg-green-50 border-green-200">Attivo</Badge>
+                    <CardTitle className="text-lg flex justify-between items-center">
+                        <span className="truncate">{prop.nome}</span>
+                        <Badge variant="outline" className="text-green-700 bg-green-50 border-green-200 shrink-0">Attivo</Badge>
                     </CardTitle>
                     <p className="text-xs text-gray-500 flex items-center"><MapPin className="w-3 h-3 mr-1"/> {prop.citta}</p>
                 </CardHeader>
                 <CardFooter className="bg-slate-50 p-3 grid grid-cols-2 gap-2">
                     <Button variant="outline" className="w-full text-xs h-9 md:h-8" onClick={() => setDetailsOpen(prop)}>Analytics</Button>
-                    <Button variant="outline" className="w-full text-xs h-9 md:h-8 bg-white hover:text-blue-700" onClick={() => setDocsOpen(prop)}>
+                    <Button variant="outline" className="w-full text-xs h-9 md:h-8 bg-white hover:text-blue-700 border-blue-200 text-blue-600" onClick={() => setDocsOpen(prop)}>
                         <FolderOpen className="w-3 h-3 mr-1" /> Documenti
                     </Button>
                 </CardFooter>
@@ -274,12 +291,12 @@ const Properties = () => {
 
       {/* DIALOG MODIFICA */}
       <Dialog open={!!editOpen} onOpenChange={() => setEditOpen(null)}>
-        <DialogContent className="sm:max-w-md w-[95vw]"> {/* Mobile width */}
+        <DialogContent className="sm:max-w-md w-[95vw]">
             <DialogHeader><DialogTitle>Modifica Profilo</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
-                <Input placeholder="Nome" value={editFormData.nome} onChange={e => setEditFormData({...editFormData, nome: e.target.value})} />
-                <Input placeholder="Indirizzo" value={editFormData.indirizzo} onChange={e => setEditFormData({...editFormData, indirizzo: e.target.value})} />
-                <Input placeholder="Città" value={editFormData.citta} onChange={e => setEditFormData({...editFormData, citta: e.target.value})} />
+                <div className="grid gap-2"><Label>Nome</Label><Input placeholder="Nome" value={editFormData.nome} onChange={e => setEditFormData({...editFormData, nome: e.target.value})} /></div>
+                <div className="grid gap-2"><Label>Indirizzo</Label><Input placeholder="Indirizzo" value={editFormData.indirizzo} onChange={e => setEditFormData({...editFormData, indirizzo: e.target.value})} /></div>
+                <div className="grid gap-2"><Label>Città</Label><Input placeholder="Città" value={editFormData.citta} onChange={e => setEditFormData({...editFormData, citta: e.target.value})} /></div>
             </div>
             <DialogFooter className="flex-col sm:flex-row gap-2">
                 <Button variant="outline" onClick={() => setEditOpen(null)} className="w-full sm:w-auto">Annulla</Button>
@@ -291,10 +308,10 @@ const Properties = () => {
       <AlertDialog open={!!deleteOpen} onOpenChange={() => setDeleteOpen(null)}>
         <AlertDialogContent className="w-[95vw] sm:max-w-lg">
             <AlertDialogHeader>
-                <AlertDialogTitle className="text-red-600">Eliminazione Definitiva</AlertDialogTitle>
+                <AlertDialogTitle className="text-red-600 flex items-center gap-2"><AlertTriangle className="w-5 h-5"/> Eliminazione Definitiva</AlertDialogTitle>
                 <AlertDialogDescription>
                     Scrivi <strong>{deleteOpen?.nome}</strong> per confermare. Questa azione è irreversibile.
-                    <Input className="mt-2 border-red-200" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder={deleteOpen?.nome} />
+                    <Input className="mt-4 border-red-200" value={deleteConfirmText} onChange={(e) => setDeleteConfirmText(e.target.value)} placeholder={deleteOpen?.nome} />
                 </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter className="flex-col sm:flex-row gap-2">
@@ -313,22 +330,26 @@ const Properties = () => {
             <div className="space-y-4">
                 {propertyHistory?.map((booking) => (
                     <div key={booking.id} className="p-3 rounded-lg border bg-slate-50 cursor-pointer hover:bg-white hover:border-blue-300 transition-all" onClick={() => setSelectedTenant(booking)}>
-                        <div className="flex justify-between">
+                        <div className="flex justify-between items-center">
                             <p className="font-bold text-sm">{booking.nome_ospite}</p>
                             <Badge variant="outline">{booking.tipo_affitto}</Badge>
                         </div>
-                        <p className="text-xs text-gray-500 mt-1">{format(new Date(booking.data_inizio), 'dd/MM/yy')} - {format(new Date(booking.data_fine), 'dd/MM/yy')}</p>
+                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                            <CalendarIcon className="w-3 h-3"/>
+                            {format(new Date(booking.data_inizio), 'dd/MM/yy')} - {format(new Date(booking.data_fine), 'dd/MM/yy')}
+                        </p>
                     </div>
                 ))}
+                {propertyHistory?.length === 0 && <p className="text-gray-400 text-center py-8">Nessun dato storico.</p>}
             </div>
         </SheetContent>
       </Sheet>
 
       {/* DIALOG INQUILINO */}
       <Dialog open={!!selectedTenant} onOpenChange={(open) => !open && setSelectedTenant(null)}>
-        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0"> {/* Full height mobile */}
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
             <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-center">
-                <DialogTitle>{selectedTenant?.nome_ospite}</DialogTitle>
+                <DialogTitle className="flex items-center gap-2"><User className="w-5 h-5 text-blue-600"/> {selectedTenant?.nome_ospite}</DialogTitle>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedTenant(null)}><X className="w-4 h-4"/></Button>
             </div>
             <Tabs defaultValue="tickets" className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
@@ -338,19 +359,27 @@ const Properties = () => {
                 </TabsList>
                 <TabsContent value="tickets" className="flex-1 overflow-y-auto">
                     {tenantDetails?.tickets.map((t:any) => (
-                        <div key={t.id} className="p-3 border rounded mb-2 flex justify-between items-center">
-                            <span className="text-sm font-medium">{t.titolo}</span>
-                            <Button size="sm" variant="ghost" onClick={() => setManagingTicket(t)}>Gestisci</Button>
+                        <div key={t.id} className="p-3 border rounded mb-2 flex justify-between items-center bg-white hover:bg-slate-50">
+                            <div>
+                                <span className="text-sm font-bold block">{t.titolo}</span>
+                                <span className="text-xs text-gray-500">{format(new Date(t.created_at), 'dd MMM yyyy')}</span>
+                            </div>
+                            <Button size="sm" variant="ghost" onClick={() => setManagingTicket(t)} className="text-blue-600 h-8"><UserCog className="w-4 h-4"/></Button>
                         </div>
                     ))}
+                    {tenantDetails?.tickets.length === 0 && <p className="text-gray-400 text-center py-4">Nessun ticket.</p>}
                 </TabsContent>
                 <TabsContent value="payments" className="flex-1 overflow-y-auto">
                     {tenantDetails?.payments.map((p:any) => (
-                        <div key={p.id} className="p-3 border rounded mb-2 flex justify-between items-center">
-                            <span className="text-sm">{p.description || p.tipo}</span>
-                            <span className="font-bold text-sm">€{p.importo}</span>
+                        <div key={p.id} className="p-3 border rounded mb-2 flex justify-between items-center bg-white">
+                            <div>
+                                <span className="text-sm font-medium block capitalize">{p.tipo?.replace('_', ' ') || 'Rata'}</span>
+                                <span className="text-xs text-gray-500">Scad: {format(new Date(p.data_scadenza), 'dd MMM')}</span>
+                            </div>
+                            <span className={`font-bold text-sm ${p.stato === 'pagato' ? 'text-green-600' : 'text-red-600'}`}>€{p.importo}</span>
                         </div>
                     ))}
+                    {tenantDetails?.payments.length === 0 && <p className="text-gray-400 text-center py-4">Nessun pagamento.</p>}
                 </TabsContent>
             </Tabs>
         </DialogContent>
@@ -363,7 +392,7 @@ const Properties = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden mt-2">
                 
-                {/* UPLOAD FORM - Stacks on mobile */}
+                {/* UPLOAD FORM */}
                 <div className="bg-slate-50 p-4 rounded-lg border flex flex-col gap-4 overflow-y-auto">
                     <h4 className="font-bold flex items-center gap-2 text-sm uppercase text-slate-500">Carica Nuovo</h4>
                     <div className="space-y-2">
@@ -396,7 +425,7 @@ const Properties = () => {
                                 <Input className="h-8" value={smartData.description} onChange={e => setSmartData({...smartData, description: e.target.value})} />
                             </div>
                             <Button className="w-full bg-blue-600" size="sm" onClick={handleSmartUpload} disabled={uploading}>
-                                {uploading ? '...' : (isExpense ? 'Salva & Contabilizza' : 'Archivia')}
+                                {uploading ? <Loader2 className="w-4 h-4 animate-spin"/> : (isExpense ? 'Salva & Contabilizza' : 'Archivia')}
                             </Button>
                         </div>
                     )}
@@ -405,32 +434,33 @@ const Properties = () => {
                 {/* LISTA DOCS */}
                 <div className="md:col-span-2 overflow-y-auto">
                     <Tabs defaultValue="all" className="w-full">
-                        <TabsList className="w-full justify-start overflow-x-auto"> {/* Scrollable tabs */}
-                            <TabsTrigger value="all">Tutti</TabsTrigger>
-                            <TabsTrigger value="spese">Spese</TabsTrigger>
+                        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
+                            <TabsTrigger value="all" className="flex-1">Tutti</TabsTrigger>
+                            <TabsTrigger value="spese" className="flex-1">Spese</TabsTrigger>
                         </TabsList>
                         
                         <TabsContent value="all" className="space-y-2 mt-2">
                             {getCombinedDocs().map((doc: any) => (
-                                <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50">
+                                <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50 transition-colors">
                                     <div className="flex items-center gap-3 overflow-hidden">
-                                        {doc.payment_id ? <Euro className="w-4 h-4 text-green-600 shrink-0"/> : <FileText className="w-4 h-4 text-gray-400 shrink-0"/>}
+                                        {doc.payment_id ? <Euro className="w-8 h-8 p-1.5 bg-green-100 text-green-600 rounded shrink-0"/> : <FileText className="w-8 h-8 p-1.5 bg-slate-100 text-slate-500 rounded shrink-0"/>}
                                         <div className="min-w-0">
-                                            <span className="text-sm font-medium truncate block max-w-[150px] sm:max-w-[200px]">{doc.nome}</span>
+                                            <span className="text-sm font-medium truncate block max-w-[150px] sm:max-w-[250px]">{doc.nome}</span>
                                             {doc.payments && (
-                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded truncate block">
+                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded truncate block w-fit">
                                                     € {doc.payments.importo} - {doc.payments.categoria}
                                                 </span>
                                             )}
+                                            <span className="text-[10px] text-gray-400 block">{format(new Date(doc.created_at), 'dd/MM/yyyy')}</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
-                                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-3 h-3"/></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => deleteDoc.mutate(doc.id)}><Trash2 className="w-3 h-3"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 hover:text-blue-600" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-4 h-4"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => deleteDoc.mutate(doc.id)}><Trash2 className="w-4 h-4"/></Button>
                                     </div>
                                 </div>
                             ))}
-                            {getCombinedDocs().length === 0 && <p className="text-gray-400 text-center text-sm mt-4">Nessun documento.</p>}
+                            {getCombinedDocs().length === 0 && <div className="text-center py-12 bg-slate-50 rounded border border-dashed text-gray-400"><FolderOpen className="w-10 h-10 mx-auto mb-2 opacity-20"/><p>Nessun documento.</p></div>}
                         </TabsContent>
 
                         <TabsContent value="spese" className="space-y-2 mt-2">

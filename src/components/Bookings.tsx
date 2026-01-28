@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck, Upload, Loader2 } from 'lucide-react';
 import { format, isBefore, addDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -32,6 +32,10 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const [customerSheetOpen, setCustomerSheetOpen] = useState<any | null>(null);
   const [editingBooking, setEditingBooking] = useState<any>(null);
   const [managingTicket, setManagingTicket] = useState<any>(null);
+
+  // FIX: Stato per upload documento host
+  const [hostDocFile, setHostDocFile] = useState<File | null>(null);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
 
   const [formData, setFormData] = useState({
     property_id: '', nome_ospite: '', email_ospite: '', telefono_ospite: '',
@@ -162,6 +166,39 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       toast({ title: "Stato Documento Aggiornato" });
     }
   });
+
+  // FIX: Funzione per caricare documenti come Host
+  const handleHostUpload = async () => {
+    if (!hostDocFile || !customerSheetOpen) return;
+    setIsUploadingDoc(true);
+    try {
+        const fileExt = hostDocFile.name.split('.').pop();
+        const fileName = `booking_${customerSheetOpen.id}_${Date.now()}.${fileExt}`;
+        
+        // 1. Upload Storage
+        const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, hostDocFile);
+        if (uploadError) throw uploadError;
+
+        // 2. Insert DB
+        const { error: dbError } = await supabase.from('booking_documents').insert({
+            booking_id: customerSheetOpen.id,
+            filename: hostDocFile.name,
+            file_url: fileName,
+            status: 'approvato', // Approvato di default perché caricato dall'host
+            uploaded_at: new Date().toISOString()
+        });
+        if (dbError) throw dbError;
+
+        toast({ title: "Documento Caricato", description: "L'inquilino potrà vederlo nel suo portale." });
+        setHostDocFile(null);
+        queryClient.invalidateQueries({ queryKey: ['booking-docs'] });
+
+    } catch (e: any) {
+        toast({ title: "Errore Upload", description: e.message, variant: "destructive" });
+    } finally {
+        setIsUploadingDoc(false);
+    }
+  };
 
   const copyLink = (booking: any) => {
     const baseUrl = window.location.origin;
@@ -347,6 +384,18 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                         checked={customerSheetOpen?.documents_approved || false}
                                         onCheckedChange={(val) => toggleCheckinApproval.mutate({ id: customerSheetOpen.id, approved: val })}
                                     />
+                                </div>
+                            </div>
+
+                            {/* FIX: SEZIONE UPLOAD HOST */}
+                            <div className="bg-slate-50 p-4 border border-dashed border-slate-300 rounded-lg mb-4">
+                                <Label className="text-sm font-bold text-slate-700 mb-2 block">Carica Documento per Inquilino</Label>
+                                <div className="flex gap-2 items-center">
+                                    <Input type="file" className="bg-white" onChange={(e) => setHostDocFile(e.target.files?.[0] || null)} />
+                                    <Button onClick={handleHostUpload} disabled={!hostDocFile || isUploadingDoc} className="bg-blue-600 hover:bg-blue-700">
+                                        {isUploadingDoc ? <Loader2 className="w-4 h-4 animate-spin"/> : <Upload className="w-4 h-4 mr-2"/>}
+                                        Carica
+                                    </Button>
                                 </div>
                             </div>
 
