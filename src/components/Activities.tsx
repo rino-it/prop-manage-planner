@@ -21,6 +21,8 @@ import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import TicketManager from '@/components/TicketManager';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
+import { pdf } from '@react-pdf/renderer'; // Import PDF
+import { TicketDocument } from './TicketPDF'; // Import Template
 
 // Helper locale per link
 const renderTextWithLinks = (text: string) => {
@@ -44,21 +46,21 @@ export default function Activities() {
   const [activeTab, setActiveTab] = useState('open'); 
   const [filterType, setFilterType] = useState('all'); 
 
-  // FORM DATA CON SWITCHER
+  // FORM DATA
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
   const [formData, setFormData] = useState({
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    target_id: '', // ID Generico
+    target_id: '', 
     booking_id: 'none',
     assigned_to: [] as string[]
   });
 
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null); // Loading state
 
-  // 1. FETCH MEMBRI TEAM
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
     queryFn: async () => {
@@ -72,7 +74,6 @@ export default function Activities() {
     }
   });
 
-  // 2. FETCH VEICOLI
   const { data: mobileProperties } = useQuery({
     queryKey: ['mobile-properties-ticket'],
     queryFn: async () => {
@@ -81,7 +82,6 @@ export default function Activities() {
     }
   });
 
-  // 3. FETCH INQUILINI (Solo per Immobili)
   const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants-ticket', formData.target_id],
     queryFn: async () => {
@@ -118,10 +118,10 @@ export default function Activities() {
       
       if (error) throw error;
       return data;
-    }
+    },
+    refetchInterval: 5000
   });
 
-  // UPLOAD HELPER
   const handleFileUpload = async (files: File[]) => {
     const uploadedUrls: string[] = [];
     for (const file of files) {
@@ -155,7 +155,6 @@ export default function Activities() {
         attachments: attachments
       };
 
-      // Assegnazione condizionale
       if (targetType === 'real') {
           payload.property_real_id = newTicket.target_id;
           payload.property_mobile_id = null;
@@ -202,12 +201,42 @@ export default function Activities() {
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
-  const contactPartner = (phone: string | null, title: string) => {
+  // --- FUNZIONE PDF AGGIUNTA ANCHE QUI ---
+  const handleContactPartner = async (ticket: any, phone: string | null) => {
       if (!phone) {
-          toast({ title: "Nessun telefono", description: "L'utente non ha un numero salvato.", variant: "destructive" });
+          toast({ title: "Nessun telefono", description: "Impossibile inviare WhatsApp.", variant: "destructive" });
           return;
       }
-      window.open(`https://wa.me/${phone}?text=Ciao, info su ticket: ${title}`, '_blank');
+
+      setGeneratingPdfId(ticket.id);
+      toast({ title: "Generazione PDF...", description: "Sto preparando la scheda intervento." });
+
+      try {
+          const imageUrls = await Promise.all((ticket.attachments || []).map(async (path: string) => {
+              const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
+              const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+              return data?.signedUrl;
+          }));
+
+          const blob = await pdf(<TicketDocument ticket={ticket} publicUrls={imageUrls.filter(Boolean)} />).toBlob();
+
+          const fileName = `delega_${ticket.id}_${Date.now()}.pdf`;
+          const { error: uploadError } = await supabase.storage.from('ticket-files').upload(fileName, blob);
+          if (uploadError) throw uploadError;
+
+          const { data: { publicUrl } } = supabase.storage.from('ticket-files').getPublicUrl(fileName);
+
+          const msg = `Ciao, ti assegno questo intervento: *${ticket.titolo}*\n\n📄 Scarica scheda e foto qui: ${publicUrl}`;
+          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+
+          toast({ title: "Inviato!", description: "WhatsApp aperto con link PDF." });
+
+      } catch (e: any) {
+          console.error(e);
+          toast({ title: "Errore", description: "Fallita generazione PDF: " + e.message, variant: "destructive" });
+      } finally {
+          setGeneratingPdfId(null);
+      }
   };
 
   const getPriorityColor = (p: string) => {
@@ -235,7 +264,6 @@ export default function Activities() {
   return (
     <div className="space-y-6 animate-in fade-in">
       
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Attività e Ticket</h1>
@@ -255,7 +283,6 @@ export default function Activities() {
             </DialogHeader>
             <div className="space-y-4 mt-2">
               
-              {/* SWITCHER TIPO (Nuovo) */}
               <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
                   <button 
                       className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
@@ -271,7 +298,6 @@ export default function Activities() {
                   </button>
               </div>
 
-              {/* PROPERTY SELECTOR */}
               <div className="grid gap-2">
                 <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
                 <Select value={formData.target_id} onValueChange={v => setFormData({...formData, target_id: v, booking_id: 'none'})}>
@@ -285,7 +311,6 @@ export default function Activities() {
                 </Select>
               </div>
 
-              {/* TEAM ASSIGNMENT */}
               <div className="grid gap-2">
                 <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Assegna al Team</Label>
                 <UserMultiSelect 
@@ -296,7 +321,6 @@ export default function Activities() {
                 />
               </div>
 
-              {/* INQUILINO (Se Immobile) */}
               {targetType === 'real' && (
                   <div className="grid gap-2">
                     <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
@@ -313,7 +337,7 @@ export default function Activities() {
               <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
                       <Label>Titolo</Label>
-                      <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto Caldaia" />
+                      <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
                   </div>
                   <div className="grid gap-2">
                     <Label>Priorità</Label>
@@ -329,17 +353,11 @@ export default function Activities() {
                   </div>
               </div>
               
-              <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli del problema..." /></div>
+              <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
               
-              {/* FILE UPLOAD */}
               <div className="grid gap-2">
                   <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
-                  <Input 
-                    type="file" 
-                    multiple 
-                    onChange={(e) => setUploadFiles(Array.from(e.target.files || []))}
-                    className="text-xs"
-                  />
+                  <Input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
                   {uploadFiles.length > 0 && (
                       <div className="flex flex-wrap gap-1 mt-1">
                           {uploadFiles.map((f, i) => (
@@ -361,7 +379,6 @@ export default function Activities() {
 
       {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati: {(error as any)?.message}</div>}
 
-      {/* TABS E FILTRI */}
       <Tabs defaultValue="open" value={activeTab} onValueChange={setActiveTab} className="w-full">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
             <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
@@ -378,12 +395,14 @@ export default function Activities() {
 
         <TabsContent value={activeTab} className="space-y-4">
             <div className="grid gap-4">
-                {isLoading ? <p>Caricamento...</p> : filteredTickets?.length === 0 ? (
+                {isLoading ? <p className="text-center py-8 text-gray-500">Caricamento ticket...</p> : filteredTickets?.length === 0 ? (
                     <div className="text-center py-12 bg-slate-50 border border-dashed rounded-lg text-gray-500">
                         Nessun ticket in questa sezione.
                     </div>
                 ) : filteredTickets?.map((ticket: any) => {
                     const assignees = getAssigneesDetails(ticket.assigned_to);
+                    const isGenerating = generatingPdfId === ticket.id;
+
                     return (
                 <Card key={ticket.id} className={`border-l-4 shadow-sm hover:shadow-md transition-all ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-90 bg-slate-50' : 'border-l-red-500'}`}>
                     <CardContent className="p-6">
@@ -410,7 +429,6 @@ export default function Activities() {
                         
                         <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
                         
-                        {/* NOTE STAFF */}
                         {ticket.admin_notes && (
                             <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
                                 <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
@@ -426,13 +444,11 @@ export default function Activities() {
                             {ticket.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.properties_real.nome}</span>}
                             {ticket.properties_mobile && <span className="font-medium text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">🚗 {ticket.properties_mobile.veicolo}</span>}
                             {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
-                            {/* Indicatore Allegati */}
                             {ticket.attachments && ticket.attachments.length > 0 && (
                                 <span className="flex items-center text-blue-600"><Paperclip className="w-3 h-3 mr-1"/> {ticket.attachments.length} file</span>
                             )}
                         </div>
 
-                        {/* AZIONI RAPIDE */}
                         <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
                             {ticket.supplier_contact && (
                                 <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
@@ -440,10 +456,16 @@ export default function Activities() {
                                 </Button>
                             )}
                             
+                            {/* BOTTONE DELEGA PDF */}
                             {assignees.length === 1 && (
-                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50" 
-                                    onClick={() => contactPartner(assignees[0].phone, ticket.titolo)}>
-                                    <Share2 className="w-3 h-3" /> Contatta {assignees[0].firstName}
+                                <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    disabled={isGenerating}
+                                    className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50" 
+                                    onClick={() => handleContactPartner(ticket, assignees[0].phone)}
+                                >
+                                    {isGenerating ? <span className="animate-pulse">PDF...</span> : <><Share2 className="w-3 h-3" /> Contatta {assignees[0].firstName}</>}
                                 </Button>
                             )}
 
@@ -451,12 +473,12 @@ export default function Activities() {
                                 <DropdownMenu>
                                     <DropdownMenuTrigger asChild>
                                         <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50">
-                                            <Share2 className="w-3 h-3" /> Contatta Team <ChevronDown className="w-3 h-3 ml-1"/>
+                                            {isGenerating ? '...' : <><Share2 className="w-3 h-3" /> Contatta Team <ChevronDown className="w-3 h-3 ml-1"/></>}
                                         </Button>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent>
                                         {assignees.map((u: any) => (
-                                            <DropdownMenuItem key={u.id} onClick={() => contactPartner(u.phone, ticket.titolo)}>
+                                            <DropdownMenuItem key={u.id} onClick={() => handleContactPartner(ticket, u.phone)}>
                                                 <Share2 className="w-3 h-3 mr-2 text-green-600"/> {u.label}
                                             </DropdownMenuItem>
                                         ))}
