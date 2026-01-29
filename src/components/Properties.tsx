@@ -8,12 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { MapPin, Pencil, Home, FileText, Upload, Trash2, TrendingUp, Clock, AlertCircle, FolderOpen, Euro, Calendar as CalendarIcon, MessageSquare, CreditCard, Eye, Check, X, UserCog, User, Wrench, AlertTriangle, Loader2, Plus } from 'lucide-react';
+import { MapPin, Pencil, Home, FileText, Upload, Download, Trash2, Users, TrendingUp, Clock, AlertCircle, FolderOpen, Euro, Calendar as CalendarIcon, MessageSquare, CreditCard, Eye, Check, X, UserCog, User, Wrench, AlertTriangle, Loader2, Plus, ExternalLink } from 'lucide-react';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -103,23 +104,24 @@ const Properties = () => {
       if (!docsOpen) return { struct: [], tenant: [], expense: [] };
       
       try {
+          // 1. Documenti Strutturali (tabella 'documents')
           const { data: rawDocs, error } = await supabase.from('documents')
             .select(`*, payments(*)`) 
             .eq('property_real_id', docsOpen.id)
             .order('created_at', { ascending: false });
 
-          if (error) {
-              console.error("Errore fetch documenti:", error);
-              return { struct: [], tenant: [], expense: [] };
-          }
+          if (error) throw error;
 
+          // 2. Documenti Inquilini (tabella 'booking_documents')
           const { data: bookings } = await supabase.from('bookings').select('id').eq('property_id', docsOpen.id);
           const bookingIds = bookings?.map(b => b.id) || [];
           let tenantDocs: any[] = [];
           
           if (bookingIds.length > 0) {
               const { data: tDocs } = await supabase.from('booking_documents')
-                .select('*, bookings(nome_ospite)').in('booking_id', bookingIds).order('uploaded_at', { ascending: false });
+                .select('*, bookings(nome_ospite, tipo_affitto)')
+                .in('booking_id', bookingIds)
+                .order('uploaded_at', { ascending: false });
               tenantDocs = tDocs || [];
           }
 
@@ -136,10 +138,25 @@ const Properties = () => {
     enabled: !!docsOpen
   });
 
+  // FIX CRITICO: Combina TUTTE le liste (Struttura + Inquilini + Spese)
   const getCombinedDocs = () => {
       if (!allDocs) return [];
-      const combined = [...(allDocs.struct || []), ...(allDocs.expense || [])];
-      return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      
+      // Normalizziamo i dati per poterli mostrare insieme
+      const normalizedStruct = allDocs.struct.map((d: any) => ({...d, type: 'struct', date: d.created_at}));
+      const normalizedExpense = allDocs.expense.map((d: any) => ({...d, type: 'expense', date: d.created_at}));
+      const normalizedTenant = allDocs.tenant.map((d: any) => ({
+          id: d.id,
+          nome: d.filename,
+          url: d.file_url, // Booking docs usano 'file_url'
+          created_at: d.uploaded_at,
+          date: d.uploaded_at,
+          type: 'tenant',
+          bookings: d.bookings
+      }));
+
+      const combined = [...normalizedStruct, ...normalizedExpense, ...normalizedTenant];
+      return combined.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   };
 
   const { data: tenantDetails } = useQuery({
@@ -218,7 +235,13 @@ const Properties = () => {
   };
 
   const deleteDoc = useMutation({
-    mutationFn: async (id: string) => await supabase.from('documents').delete().eq('id', id),
+    mutationFn: async ({ id, type }: { id: string, type: string }) => {
+        if (type === 'tenant') {
+            await supabase.from('booking_documents').delete().eq('id', id);
+        } else {
+            await supabase.from('documents').delete().eq('id', id);
+        }
+    },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['property-docs-full'] })
   });
 
@@ -235,13 +258,11 @@ const Properties = () => {
             <h1 className="text-3xl font-bold text-gray-900">Gestione Proprietà</h1>
             <p className="text-gray-500 text-sm">Gestisci immobili, documenti e storico</p>
         </div>
-        {/* FIX: Pulsante ora apre il Dialog controllato dallo stato */}
         <Button className="bg-blue-600 w-full md:w-auto shadow-sm" onClick={() => setIsAddOpen(true)}>
             <Plus className="w-4 h-4 mr-2"/> Aggiungi Proprietà
         </Button>
       </div>
 
-      {/* FIX: Dialog di creazione renderizzato correttamente */}
       <AddPropertyDialog 
         isOpen={isAddOpen} 
         onClose={() => setIsAddOpen(false)} 
@@ -260,7 +281,6 @@ const Properties = () => {
                     ) : (
                         <div className="w-full h-full flex items-center justify-center text-slate-300"><Home className="w-12 h-12"/></div>
                     )}
-                    {/* Pulsanti Edit/Delete sempre visibili su mobile */}
                     <div className="absolute top-2 right-2 flex gap-1 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         <Button size="icon" variant="secondary" className="h-8 w-8 bg-white/90 shadow-sm" onClick={() => setEditOpen(prop)}>
                             <Pencil className="w-4 h-4 text-blue-600" />
@@ -343,7 +363,6 @@ const Properties = () => {
         </SheetContent>
       </Sheet>
 
-      {/* DIALOG INQUILINO */}
       <Dialog open={!!selectedTenant} onOpenChange={(open) => !open && setSelectedTenant(null)}>
         <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
             <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-center">
@@ -383,14 +402,12 @@ const Properties = () => {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG DOCUMENTI */}
+      {/* DIALOG DOCUMENTI AGGIORNATO */}
       <Dialog open={!!docsOpen} onOpenChange={() => setDocsOpen(null)}>
         <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col">
             <DialogHeader><DialogTitle className="flex items-center gap-2 truncate"><FolderOpen className="w-5 h-5 text-blue-600"/> Archivio: {docsOpen?.nome}</DialogTitle></DialogHeader>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden mt-2">
-                
-                {/* UPLOAD FORM */}
                 <div className="bg-slate-50 p-4 rounded-lg border flex flex-col gap-4 overflow-y-auto">
                     <h4 className="font-bold flex items-center gap-2 text-sm uppercase text-slate-500">Carica Nuovo</h4>
                     <div className="space-y-2">
@@ -429,7 +446,6 @@ const Properties = () => {
                     )}
                 </div>
 
-                {/* LISTA DOCS */}
                 <div className="md:col-span-2 overflow-y-auto">
                     <Tabs defaultValue="all" className="w-full">
                         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
@@ -441,20 +457,37 @@ const Properties = () => {
                             {getCombinedDocs().map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50 transition-colors">
                                     <div className="flex items-center gap-3 overflow-hidden">
-                                        {doc.payment_id ? <Euro className="w-8 h-8 p-1.5 bg-green-100 text-green-600 rounded shrink-0"/> : <FileText className="w-8 h-8 p-1.5 bg-slate-100 text-slate-500 rounded shrink-0"/>}
+                                        {doc.type === 'tenant' ? (
+                                            <User className="w-8 h-8 p-1.5 bg-purple-100 text-purple-600 rounded shrink-0"/>
+                                        ) : doc.payment_id ? (
+                                            <Euro className="w-8 h-8 p-1.5 bg-green-100 text-green-600 rounded shrink-0"/>
+                                        ) : (
+                                            <FileText className="w-8 h-8 p-1.5 bg-slate-100 text-slate-500 rounded shrink-0"/>
+                                        )}
+                                        
                                         <div className="min-w-0">
                                             <span className="text-sm font-medium truncate block max-w-[150px] sm:max-w-[250px]">{doc.nome}</span>
+                                            
+                                            {/* Badge Inquilino */}
+                                            {doc.type === 'tenant' && doc.bookings && (
+                                                <span className="text-[10px] text-purple-700 bg-purple-50 px-1 rounded truncate block w-fit mb-0.5">
+                                                    {doc.bookings.nome_ospite}
+                                                </span>
+                                            )}
+
+                                            {/* Badge Spesa */}
                                             {doc.payments && (
-                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded truncate block w-fit">
+                                                <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded truncate block w-fit mb-0.5">
                                                     € {doc.payments.importo} - {doc.payments.categoria}
                                                 </span>
                                             )}
-                                            <span className="text-[10px] text-gray-400 block">{format(new Date(doc.created_at), 'dd/MM/yyyy')}</span>
+                                            
+                                            <span className="text-[10px] text-gray-400 block">{format(new Date(doc.date), 'dd/MM/yyyy')}</span>
                                         </div>
                                     </div>
                                     <div className="flex gap-1 shrink-0">
                                         <Button size="icon" variant="ghost" className="h-8 w-8 hover:text-blue-600" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-4 h-4"/></Button>
-                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => deleteDoc.mutate(doc.id)}><Trash2 className="w-4 h-4"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-8 w-8 text-red-400 hover:text-red-600 hover:bg-red-50" onClick={() => deleteDoc.mutate({ id: doc.id, type: doc.type })}><Trash2 className="w-4 h-4"/></Button>
                                     </div>
                                 </div>
                             ))}
@@ -470,7 +503,7 @@ const Properties = () => {
                                     </div>
                                     <div className="flex gap-1 shrink-0">
                                         <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.url), '_blank')}><Eye className="w-3 h-3"/></Button>
-                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => deleteDoc.mutate(doc.id)}><Trash2 className="w-3 h-3"/></Button>
+                                        <Button size="icon" variant="ghost" className="h-7 w-7 text-red-500" onClick={() => deleteDoc.mutate({ id: doc.id, type: 'expense' })}><Trash2 className="w-3 h-3"/></Button>
                                     </div>
                                 </div>
                             ))}
