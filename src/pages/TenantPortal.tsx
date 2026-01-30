@@ -34,14 +34,20 @@ export default function TenantPortal() {
       return data;
     },
     enabled: !!id,
-    refetchInterval: 5000 // FIX: Controlla ogni 5s se l'admin ha sbloccato
+    refetchInterval: 5000 // Controlla ogni 5s se l'admin ha sbloccato
   });
 
-  // 2. DOCUMENTI
+  // 2. DOCUMENTI (FIX: Corretto ordinamento usando uploaded_at)
   const { data: documents } = useQuery({
     queryKey: ['tenant-docs', id],
     queryFn: async () => {
-      const { data } = await supabase.from('booking_documents').select('*').eq('booking_id', id).order('created_at', { ascending: false });
+      // ERRORE ERA QUI: created_at -> uploaded_at
+      const { data, error } = await supabase.from('booking_documents')
+        .select('*')
+        .eq('booking_id', id)
+        .order('uploaded_at', { ascending: false }); 
+      
+      if (error) throw error;
       return data || [];
     },
     enabled: !!id
@@ -67,7 +73,7 @@ export default function TenantPortal() {
     enabled: !!id
   });
 
-  // --- LOGICA DI STATO CORRETTA ---
+  // --- LOGICA DI STATO ---
   const hasContactInfo = booking?.guest_phone && booking?.guest_email;
   const hasDocuments = documents && documents.length > 0;
   const isApproved = booking?.documents_approved === true;
@@ -76,11 +82,8 @@ export default function TenantPortal() {
   let currentStep = 1;
   if (hasContactInfo) currentStep = 2;
   if (hasContactInfo && hasDocuments) currentStep = 3; // Fase Verifica
-  
-  // FIX: Se l'admin ha approvato, forza lo Step 4 (anche se non ci sono documenti caricati)
-  if (isApproved) currentStep = 4; 
+  if (isApproved) currentStep = 4; // Se approvato, vai diretto allo step finale
 
-  // Variabili di comodo per la UI
   const isCheckinUnlocked = currentStep === 4;
   const isPendingApproval = currentStep === 3;
 
@@ -134,6 +137,8 @@ export default function TenantPortal() {
     navigator.clipboard.writeText(text);
     toast({ title: "Copiato!", duration: 1500 });
   };
+
+  const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
   if (isLoading || !booking) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-slate-400"/></div>;
 
@@ -211,7 +216,7 @@ export default function TenantPortal() {
                     </div>
                 )}
 
-                {/* STEP 2 & 3: DOCUMENTI (Sia caricamento che attesa) */}
+                {/* STEP 2 & 3: DOCUMENTI */}
                 {(currentStep === 2 || currentStep === 3) && (
                     <div className="space-y-4 animate-in fade-in">
                          <div className="text-center mb-4">
@@ -237,19 +242,30 @@ export default function TenantPortal() {
                              </div>
                          )}
 
-                         {/* Lista documenti caricati */}
+                         {/* LISTA DOCUMENTI (Ora visibile!) */}
                          <div className="space-y-2">
                              {documents?.map(doc => (
                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
-                                     <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-blue-500" /><span className="text-sm font-medium truncate max-w-[200px]">{doc.filename}</span></div>
-                                     <Badge variant="secondary">In Attesa</Badge>
+                                     <div className="flex items-center gap-3">
+                                         <FileText className="w-4 h-4 text-blue-500" />
+                                         <div className="min-w-0">
+                                             <p className="text-sm font-medium truncate max-w-[180px]">{doc.filename}</p>
+                                             <p className="text-xs text-gray-400">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
+                                         </div>
+                                     </div>
+                                     <div className="flex items-center gap-2">
+                                         <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}>
+                                             <Copy className="w-4 h-4"/>
+                                         </Button>
+                                         <Badge variant="secondary" className="text-[10px]">In Attesa</Badge>
+                                     </div>
                                  </div>
                              ))}
                          </div>
                     </div>
                 )}
 
-                {/* STEP 4: ACCESSO SBLOCCATO (Info Accesso) */}
+                {/* STEP 4: ACCESSO SBLOCCATO */}
                 {isCheckinUnlocked && (
                     <div className="space-y-6 animate-in fade-in">
                         <div className="grid grid-cols-2 gap-4 text-center">
@@ -271,7 +287,7 @@ export default function TenantPortal() {
                                     <Youtube className="w-4 h-4 mr-2 text-red-600"/> Video Guida
                                 </Button>
                             )}
-                            <Button variant="outline" className="h-14" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent((booking.properties_real?.indirizzo || '') + ' ' + (booking.properties_real?.citta || ''))}`, '_blank')}>
+                            <Button variant="outline" className="h-14" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((booking.properties_real?.indirizzo || '') + ' ' + (booking.properties_real?.citta || ''))}`, '_blank')}>
                                 <MapPin className="w-4 h-4 mr-2 text-blue-600"/> Mappa
                             </Button>
                         </div>
@@ -281,7 +297,6 @@ export default function TenantPortal() {
         </Card>
 
         {/* --- TABS (Pagamenti & Supporto) --- */}
-        {/* Mostrati solo se sbloccato o se ci sono ticket/pagamenti attivi */}
         {(isCheckinUnlocked || payments?.length > 0 || myTickets?.length > 0) && (
             <Tabs defaultValue="payments" className="w-full">
                 <TabsList className="w-full grid grid-cols-2">
@@ -321,12 +336,6 @@ export default function TenantPortal() {
                                     <Badge variant={t.stato === 'risolto' ? 'default' : 'secondary'}>{t.stato}</Badge>
                                 </div>
                                 <p className="text-sm text-gray-600 mb-2">"{t.descrizione}"</p>
-                                {t.share_notes && t.admin_notes && (
-                                    <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md">
-                                        <p className="text-xs font-bold text-blue-700 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1" /> Risposta Staff:</p>
-                                        <p className="text-sm text-blue-900">{t.admin_notes}</p>
-                                    </div>
-                                )}
                             </div>
                         ))}
                     </div>
