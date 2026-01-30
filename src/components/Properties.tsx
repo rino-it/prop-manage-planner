@@ -19,6 +19,8 @@ import TicketManager from '@/components/TicketManager';
 
 const Properties = () => {
   const [searchTerm, setSearchTerm] = useState('');
+  // FIX: Ripristinata la variabile filterType mancante
+  const [filterType, setFilterType] = useState<'all' | 'real' | 'mobile'>('all');
   
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState<any>(null);
@@ -93,19 +95,16 @@ const Properties = () => {
     onError: (err:any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
-  // FIX: Funzione per rinominare il documento
   const renameDocument = useMutation({
       mutationFn: async () => {
           if (!renamingDoc) return;
           
           if (renamingDoc.type === 'tenant') {
-              // Se è un documento inquilino (tabella booking_documents)
               const { error } = await supabase.from('booking_documents')
                   .update({ filename: newName })
                   .eq('id', renamingDoc.id);
               if (error) throw error;
           } else {
-              // Se è un documento proprietà/spesa (tabella documents)
               const { error } = await supabase.from('documents')
                   .update({ nome: newName })
                   .eq('id', renamingDoc.id);
