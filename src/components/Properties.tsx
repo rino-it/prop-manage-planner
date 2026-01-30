@@ -7,14 +7,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { MapPin, Pencil, Home, FileText, Upload, Download, Trash2, Users, TrendingUp, Clock, AlertCircle, FolderOpen, Euro, Calendar as CalendarIcon, MessageSquare, CreditCard, Eye, Check, X, UserCog, User, Wrench, AlertTriangle, Loader2, Plus, ExternalLink } from 'lucide-react';
+import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, Save } from 'lucide-react';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -22,11 +20,8 @@ import TicketManager from '@/components/TicketManager';
 
 const Properties = () => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'real' | 'mobile'>('all');
   
-  // FIX: Stato esplicito per aprire il dialog di creazione
   const [isAddOpen, setIsAddOpen] = useState(false);
-
   const [detailsOpen, setDetailsOpen] = useState<any>(null);
   const [docsOpen, setDocsOpen] = useState<any>(null);
   const [editOpen, setEditOpen] = useState<any>(null);
@@ -36,6 +31,10 @@ const Properties = () => {
 
   const [editFormData, setEditFormData] = useState({ nome: '', indirizzo: '', citta: '' });
   
+  // Stati per rinominare documenti
+  const [renamingDoc, setRenamingDoc] = useState<{id: string, nome: string, type: string} | null>(null);
+  const [newName, setNewName] = useState('');
+
   const [selectedTenant, setSelectedTenant] = useState<any>(null); 
   const [managingTicket, setManagingTicket] = useState<any>(null); 
 
@@ -57,6 +56,13 @@ const Properties = () => {
       });
     }
   }, [editOpen]);
+
+  // Gestione apertura dialog rinomina
+  useEffect(() => {
+    if (renamingDoc) {
+        setNewName(renamingDoc.nome);
+    }
+  }, [renamingDoc]);
 
   const updateProperty = useMutation({
     mutationFn: async () => {
@@ -88,6 +94,33 @@ const Properties = () => {
     onError: (err:any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
+  // FIX: Funzione per rinominare il documento
+  const renameDocument = useMutation({
+      mutationFn: async () => {
+          if (!renamingDoc) return;
+          
+          if (renamingDoc.type === 'tenant') {
+              // Se è un documento inquilino (tabella booking_documents)
+              const { error } = await supabase.from('booking_documents')
+                  .update({ filename: newName })
+                  .eq('id', renamingDoc.id);
+              if (error) throw error;
+          } else {
+              // Se è un documento proprietà/spesa (tabella documents)
+              const { error } = await supabase.from('documents')
+                  .update({ nome: newName })
+                  .eq('id', renamingDoc.id);
+              if (error) throw error;
+          }
+      },
+      onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: ['property-docs-full'] });
+          setRenamingDoc(null);
+          toast({ title: "Documento rinominato" });
+      },
+      onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
+  });
+
   const { data: propertyHistory } = useQuery({
     queryKey: ['property-history', detailsOpen?.id],
     queryFn: async () => {
@@ -104,7 +137,6 @@ const Properties = () => {
       if (!docsOpen) return { struct: [], tenant: [], expense: [] };
       
       try {
-          // 1. Documenti Strutturali (tabella 'documents')
           const { data: rawDocs, error } = await supabase.from('documents')
             .select(`*, payments(*)`) 
             .eq('property_real_id', docsOpen.id)
@@ -112,7 +144,6 @@ const Properties = () => {
 
           if (error) throw error;
 
-          // 2. Documenti Inquilini (tabella 'booking_documents')
           const { data: bookings } = await supabase.from('bookings').select('id').eq('property_id', docsOpen.id);
           const bookingIds = bookings?.map(b => b.id) || [];
           let tenantDocs: any[] = [];
@@ -138,17 +169,15 @@ const Properties = () => {
     enabled: !!docsOpen
   });
 
-  // FIX CRITICO: Combina TUTTE le liste (Struttura + Inquilini + Spese)
   const getCombinedDocs = () => {
       if (!allDocs) return [];
       
-      // Normalizziamo i dati per poterli mostrare insieme
       const normalizedStruct = allDocs.struct.map((d: any) => ({...d, type: 'struct', date: d.created_at}));
       const normalizedExpense = allDocs.expense.map((d: any) => ({...d, type: 'expense', date: d.created_at}));
       const normalizedTenant = allDocs.tenant.map((d: any) => ({
           id: d.id,
           nome: d.filename,
-          url: d.file_url, // Booking docs usano 'file_url'
+          url: d.file_url,
           created_at: d.uploaded_at,
           date: d.uploaded_at,
           type: 'tenant',
@@ -323,6 +352,7 @@ const Properties = () => {
         </DialogContent>
       </Dialog>
 
+      {/* DIALOG ELIMINAZIONE */}
       <AlertDialog open={!!deleteOpen} onOpenChange={() => setDeleteOpen(null)}>
         <AlertDialogContent className="w-[95vw] sm:max-w-lg">
             <AlertDialogHeader>
@@ -339,6 +369,7 @@ const Properties = () => {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* SHEET STORICO */}
       <Sheet open={!!detailsOpen} onOpenChange={() => setDetailsOpen(null)}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
             <SheetHeader className="mb-6">
@@ -363,6 +394,7 @@ const Properties = () => {
         </SheetContent>
       </Sheet>
 
+      {/* DIALOG INQUILINO */}
       <Dialog open={!!selectedTenant} onOpenChange={(open) => !open && setSelectedTenant(null)}>
         <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
             <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-center">
@@ -402,7 +434,7 @@ const Properties = () => {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG DOCUMENTI AGGIORNATO */}
+      {/* DIALOG DOCUMENTI AGGIORNATO CON RINOMINA */}
       <Dialog open={!!docsOpen} onOpenChange={() => setDocsOpen(null)}>
         <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col">
             <DialogHeader><DialogTitle className="flex items-center gap-2 truncate"><FolderOpen className="w-5 h-5 text-blue-600"/> Archivio: {docsOpen?.nome}</DialogTitle></DialogHeader>
@@ -456,7 +488,7 @@ const Properties = () => {
                         <TabsContent value="all" className="space-y-2 mt-2">
                             {getCombinedDocs().map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50 transition-colors">
-                                    <div className="flex items-center gap-3 overflow-hidden">
+                                    <div className="flex items-center gap-3 overflow-hidden flex-1">
                                         {doc.type === 'tenant' ? (
                                             <User className="w-8 h-8 p-1.5 bg-purple-100 text-purple-600 rounded shrink-0"/>
                                         ) : doc.payment_id ? (
@@ -465,8 +497,13 @@ const Properties = () => {
                                             <FileText className="w-8 h-8 p-1.5 bg-slate-100 text-slate-500 rounded shrink-0"/>
                                         )}
                                         
-                                        <div className="min-w-0">
-                                            <span className="text-sm font-medium truncate block max-w-[150px] sm:max-w-[250px]">{doc.nome}</span>
+                                        <div className="min-w-0 flex-1 mr-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium truncate block max-w-[150px] sm:max-w-[200px]" title={doc.nome}>{doc.nome}</span>
+                                                <Button size="icon" variant="ghost" className="h-6 w-6 hover:bg-slate-100 rounded-full" onClick={() => setRenamingDoc(doc)}>
+                                                    <Pencil className="w-3 h-3 text-slate-400"/>
+                                                </Button>
+                                            </div>
                                             
                                             {/* Badge Inquilino */}
                                             {doc.type === 'tenant' && doc.bookings && (
@@ -497,8 +534,14 @@ const Properties = () => {
                         <TabsContent value="spese" className="space-y-2 mt-2">
                             {allDocs?.expense.map((doc: any) => (
                                 <div key={doc.id} className="flex justify-between items-center p-3 border rounded bg-white hover:bg-slate-50 border-l-4 border-l-green-500">
-                                    <div className="overflow-hidden">
-                                        <div className="flex items-center gap-2"><Euro className="w-4 h-4 text-green-600 shrink-0"/><span className="text-sm font-bold truncate">{doc.nome}</span></div>
+                                    <div className="overflow-hidden flex-1">
+                                        <div className="flex items-center gap-2">
+                                            <Euro className="w-4 h-4 text-green-600 shrink-0"/>
+                                            <span className="text-sm font-bold truncate max-w-[200px]">{doc.nome}</span>
+                                            <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setRenamingDoc({...doc, type: 'expense'})}>
+                                                <Pencil className="w-3 h-3 text-slate-400"/>
+                                            </Button>
+                                        </div>
                                         {doc.payments && <p className="text-xs text-gray-500 ml-6">€ {doc.payments.importo} ({doc.payments.categoria})</p>}
                                     </div>
                                     <div className="flex gap-1 shrink-0">
@@ -511,6 +554,23 @@ const Properties = () => {
                     </Tabs>
                 </div>
             </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* NUOVO DIALOG PER RINOMINARE */}
+      <Dialog open={!!renamingDoc} onOpenChange={() => setRenamingDoc(null)}>
+        <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+                <DialogTitle>Rinomina Documento</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+                <Label>Nuovo Nome</Label>
+                <Input value={newName} onChange={(e) => setNewName(e.target.value)} className="mt-2" placeholder="Es. Fattura Idraulico" />
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setRenamingDoc(null)}>Annulla</Button>
+                <Button onClick={() => renameDocument.mutate()} disabled={!newName || newName === renamingDoc?.nome}>Salva</Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
 
