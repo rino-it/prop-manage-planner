@@ -1,0 +1,12 @@
+name: WhatsApp Notify
+on:
+  push:
+    branches:
+      - main  # Assicurati che il tuo branch si chiami main o master
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Clawdbot
+        run: |
+          curl -d "Vercel_Update_$(date +'%H:%M')" https://ntfy.sh/kristian_prop_2026

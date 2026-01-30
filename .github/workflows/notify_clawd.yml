@@ -1,0 +1,12 @@
+name: Notify Clawdbot
+on:
+  push:
+    branches:
+      - main  # o il nome del tuo branch principale
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Signal to Office PC
+        run: |
+          curl -X POST https://ntfy.sh/kristian_office_deploy -d "Deploy completato con successo!"
