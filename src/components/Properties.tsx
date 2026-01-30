@@ -11,8 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { Switch } from '@/components/ui/switch';
-import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, Save } from 'lucide-react';
+import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, X } from 'lucide-react';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
