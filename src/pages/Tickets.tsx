@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,9 +12,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { 
-    Calendar, UserCog, Plus, RotateCcw, 
-    Eye, Home, User, AlertCircle, StickyNote, 
-    Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter
+  Calendar, UserCog, Plus, RotateCcw, 
+  Eye, Home, User, AlertCircle, StickyNote, 
+  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, Info
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -24,7 +24,18 @@ import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer';
 import { TicketDocument } from '@/components/TicketPDF';
 
-// Helper per link
+// Mappa dei codici rapidi
+const PROPERTY_SHORTCUTS = [
+  { code: 'M', name: 'MENDOLA', color: 'bg-blue-100 text-blue-800' },
+  { code: 'V9', name: 'VERTOVA 703', color: 'bg-green-100 text-green-800' },
+  { code: 'V7', name: 'VERTOVA 704', color: 'bg-emerald-100 text-emerald-800' },
+  { code: 'C', name: 'CASA INDIPENDENTE', search: 'VERDE ZIE', color: 'bg-yellow-100 text-yellow-800' },
+  { code: 'S', name: 'VILLA SARDEGNA', color: 'bg-indigo-100 text-indigo-800' },
+  { code: 'U', name: 'UFFICIO', search: 'EDILVERTOVA', color: 'bg-gray-100 text-gray-800' },
+  { code: 'E', name: 'ENDINE', search: 'GAIANO', color: 'bg-purple-100 text-purple-800' },
+  { code: 'R', name: 'BAITA', search: 'ROVARO', color: 'bg-orange-100 text-orange-800' },
+];
+
 const renderTextWithLinks = (text: string) => {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -39,14 +50,13 @@ const renderTextWithLinks = (text: string) => {
 export default function Tickets() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: realProperties } = usePropertiesReal();
+  const { data: realProperties = [] } = usePropertiesReal(); 
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
   const [activeTab, setActiveTab] = useState('open'); 
   const [filterType, setFilterType] = useState('all'); 
 
-  // FORM DATA
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
   const [formData, setFormData] = useState({
     titolo: '',
@@ -59,7 +69,7 @@ export default function Tickets() {
 
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null); // Loading state per PDF
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
@@ -201,7 +211,6 @@ export default function Tickets() {
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
-  // --- NUOVA LOGICA "CONTATTA" CON PDF ---
   const handleContactPartner = async (ticket: any, phone: string | null) => {
       if (!phone) {
           toast({ title: "Nessun telefono", description: "Impossibile inviare WhatsApp.", variant: "destructive" });
@@ -212,25 +221,20 @@ export default function Tickets() {
       toast({ title: "Generazione PDF...", description: "Sto preparando la scheda intervento." });
 
       try {
-          // 1. Risolvi URL immagini
           const imageUrls = await Promise.all((ticket.attachments || []).map(async (path: string) => {
               const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
               const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
               return data?.signedUrl;
           }));
 
-          // 2. Genera PDF
           const blob = await pdf(<TicketDocument ticket={ticket} publicUrls={imageUrls.filter(Boolean)} />).toBlob();
 
-          // 3. Upload Temporaneo
           const fileName = `delega_${ticket.id}_${Date.now()}.pdf`;
           const { error: uploadError } = await supabase.storage.from('ticket-files').upload(fileName, blob);
           if (uploadError) throw uploadError;
 
-          // 4. Ottieni Link
           const { data: { publicUrl } } = supabase.storage.from('ticket-files').getPublicUrl(fileName);
 
-          // 5. WhatsApp
           const msg = `Ciao, ti assegno questo intervento: *${ticket.titolo}*\n\n📄 Scarica scheda e foto qui: ${publicUrl}`;
           window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
 
@@ -253,6 +257,20 @@ export default function Tickets() {
   const getAssigneesDetails = (ids: string[] | null) => {
     if (!ids || ids.length === 0) return [];
     return ids.map(id => teamMembers.find(m => m.id === id)).filter(Boolean);
+  };
+
+  // Funzione per selezione rapida proprietà
+  const handleShortcutClick = (shortcut: any) => {
+    const searchTerm = shortcut.search || shortcut.name;
+    const found = realProperties.find(p => p.nome.toLowerCase().includes(searchTerm.toLowerCase()));
+    
+    if (found) {
+      setTargetType('real'); // Forza tipo 'real'
+      setFormData({ ...formData, target_id: found.id });
+      toast({ title: "Proprietà Selezionata", description: `${found.nome} (${shortcut.code})` });
+    } else {
+      toast({ title: "Non trovata", description: `Nessuna proprietà corrisponde a "${shortcut.name}"`, variant: "destructive" });
+    }
   };
 
   const filteredTickets = tickets?.filter((t: any) => {
@@ -288,6 +306,25 @@ export default function Tickets() {
             </DialogHeader>
             <div className="space-y-4 mt-2">
               
+              {/* TASTI RAPIDI */}
+              <div className="space-y-2">
+                <Label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
+                    <Info className="w-3 h-3"/> Selezione Rapida
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                    {PROPERTY_SHORTCUTS.map(sc => (
+                        <button
+                            key={sc.code}
+                            onClick={() => handleShortcutClick(sc)}
+                            className={`px-3 py-1.5 rounded text-xs font-bold border transition-all hover:scale-105 active:scale-95 ${sc.color} ${formData.target_id && realProperties.find(p => p.id === formData.target_id)?.nome.toLowerCase().includes((sc.search || sc.name).toLowerCase()) ? 'ring-2 ring-offset-1 ring-blue-500' : 'border-transparent'}`}
+                        >
+                            {sc.code}
+                        </button>
+                    ))}
+                </div>
+              </div>
+
+              {/* SELEZIONE MANUALE */}
               <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
                   <button 
                       className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
