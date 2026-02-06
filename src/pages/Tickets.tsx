@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { 
   Calendar, UserCog, Plus, RotateCcw, 
   Eye, Home, User, AlertCircle, StickyNote, 
-  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, Info
+  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, Info, Upload, FileSpreadsheet
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -50,13 +50,15 @@ const renderTextWithLinks = (text: string) => {
 export default function Tickets() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: realProperties = [] } = usePropertiesReal(); 
+  const { data: realProperties = [] } = usePropertiesReal();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false); // Stato Dialog Import
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
   const [activeTab, setActiveTab] = useState('open'); 
   const [filterType, setFilterType] = useState('all'); 
 
+  // FORM DATA
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
   const [formData, setFormData] = useState({
     titolo: '',
@@ -70,6 +72,10 @@ export default function Tickets() {
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+  
+  // Stato per Import CSV
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
@@ -131,6 +137,69 @@ export default function Tickets() {
     },
     refetchInterval: 5000 
   });
+
+  // --- LOGICA IMPORTAZIONE CSV ---
+  const processCSVImport = async () => {
+    if (!csvFile) return;
+    setImporting(true);
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const text = e.target?.result as string;
+            // Divide per righe, ignora righe vuote
+            const rows = text.split('\n').filter(row => row.trim() !== '');
+            let importedCount = 0;
+            const { data: { user } } = await supabase.auth.getUser();
+
+            // Loop dalla seconda riga se c'è intestazione (opzionale, qui assumiamo no header o controlliamo)
+            for (const row of rows) {
+                // Supporta separatore ; (Excel ITA) o , (Standard)
+                const cols = row.includes(';') ? row.split(';') : row.split(',');
+                
+                // Formato atteso: CODICE; TITOLO; DESCRIZIONE; PRIORITA
+                if (cols.length < 2) continue; // Salta righe malformate
+
+                const code = cols[0].trim().toUpperCase();
+                const title = cols[1].trim();
+                const desc = cols[2] ? cols[2].trim() : '';
+                const priority = cols[3] ? cols[3].trim().toLowerCase() : 'media';
+
+                if (title.toLowerCase() === 'titolo') continue; // Salta header se presente
+
+                // Trova ID proprietà dal codice
+                const mapping = PROPERTY_SHORTCUTS.find(s => s.code === code);
+                let propId = null;
+                if (mapping) {
+                    const foundProp = realProperties.find(p => p.nome.toUpperCase().includes(mapping.search || mapping.name));
+                    if (foundProp) propId = foundProp.id;
+                }
+
+                await supabase.from('tickets').insert({
+                    titolo: title,
+                    descrizione: desc,
+                    priorita: ['bassa', 'media', 'alta', 'critica'].includes(priority) ? priority : 'media',
+                    stato: 'aperto',
+                    creato_da: 'manager',
+                    user_id: user?.id,
+                    property_real_id: propId
+                });
+                importedCount++;
+            }
+
+            toast({ title: "Importazione Riuscita", description: `${importedCount} ticket creati.` });
+            setIsImportOpen(false);
+            setCsvFile(null);
+            queryClient.invalidateQueries({ queryKey: ['tickets'] });
+
+        } catch (err: any) {
+            toast({ title: "Errore Importazione", description: err.message, variant: "destructive" });
+        } finally {
+            setImporting(false);
+        }
+    };
+    reader.readAsText(csvFile);
+  };
 
   const handleFileUpload = async (files: File[]) => {
     const uploadedUrls: string[] = [];
@@ -259,13 +328,12 @@ export default function Tickets() {
     return ids.map(id => teamMembers.find(m => m.id === id)).filter(Boolean);
   };
 
-  // Funzione per selezione rapida proprietà
   const handleShortcutClick = (shortcut: any) => {
     const searchTerm = shortcut.search || shortcut.name;
     const found = realProperties.find(p => p.nome.toLowerCase().includes(searchTerm.toLowerCase()));
     
     if (found) {
-      setTargetType('real'); // Forza tipo 'real'
+      setTargetType('real'); 
       setFormData({ ...formData, target_id: found.id });
       toast({ title: "Proprietà Selezionata", description: `${found.nome} (${shortcut.code})` });
     } else {
@@ -293,130 +361,173 @@ export default function Tickets() {
           <p className="text-gray-500">Centro di controllo manutenzioni e interventi.</p>
         </div>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm">
-              <Plus className="w-4 h-4 mr-2" /> Nuovo Ticket
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-                <DialogTitle>Nuovo Ticket di Intervento</DialogTitle>
-                <DialogDescription>Crea un ticket, assegna il team e allega foto.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              
-              {/* TASTI RAPIDI */}
-              <div className="space-y-2">
-                <Label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
-                    <Info className="w-3 h-3"/> Selezione Rapida
-                </Label>
-                <div className="flex flex-wrap gap-2">
-                    {PROPERTY_SHORTCUTS.map(sc => (
-                        <button
-                            key={sc.code}
-                            onClick={() => handleShortcutClick(sc)}
-                            className={`px-3 py-1.5 rounded text-xs font-bold border transition-all hover:scale-105 active:scale-95 ${sc.color} ${formData.target_id && realProperties.find(p => p.id === formData.target_id)?.nome.toLowerCase().includes((sc.search || sc.name).toLowerCase()) ? 'ring-2 ring-offset-1 ring-blue-500' : 'border-transparent'}`}
-                        >
-                            {sc.code}
-                        </button>
-                    ))}
+        <div className="flex gap-2">
+            
+            {/* BOTTONE IMPORT CSV */}
+            <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" className="text-green-700 border-green-200 hover:bg-green-50 shadow-sm">
+                        <FileSpreadsheet className="w-4 h-4 mr-2"/> Importa CSV
+                    </Button>
+                </DialogTrigger>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Importazione Massiva</DialogTitle>
+                        <DialogDescription>
+                            Carica un file CSV con formato: <br/>
+                            <code className="bg-slate-100 px-1 rounded">CODICE; TITOLO; DESCRIZIONE; PRIORITÀ</code>
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors">
+                            <Input 
+                                type="file" 
+                                accept=".csv" 
+                                onChange={(e) => setCsvFile(e.target.files?.[0] || null)} 
+                                className="cursor-pointer"
+                            />
+                            <p className="text-xs text-gray-400 mt-2">Usa punto e virgola (;) come separatore.</p>
+                        </div>
+                        {csvFile && (
+                            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded">
+                                <FileSpreadsheet className="w-4 h-4"/> {csvFile.name}
+                            </div>
+                        )}
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setIsImportOpen(false)}>Annulla</Button>
+                        <Button onClick={processCSVImport} disabled={!csvFile || importing} className="bg-green-600 hover:bg-green-700">
+                            {importing ? 'Importazione...' : 'Avvia Importazione'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+                <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm">
+                <Plus className="w-4 h-4 mr-2" /> Nuovo Ticket
+                </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[600px]">
+                <DialogHeader>
+                    <DialogTitle>Nuovo Ticket di Intervento</DialogTitle>
+                    <DialogDescription>Crea un ticket, assegna il team e allega foto.</DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 mt-2">
+                
+                {/* --- TASTI RAPIDI --- */}
+                <div className="space-y-2 pb-2 border-b">
+                    <Label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
+                        <Info className="w-3 h-3 text-blue-500"/> Selezione Rapida
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                        {PROPERTY_SHORTCUTS.map(sc => (
+                            <button
+                                key={sc.code}
+                                type="button"
+                                onClick={() => handleShortcutClick(sc)}
+                                className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-all hover:scale-105 active:scale-95 ${sc.color} ${formData.target_id && realProperties.find(p => p.id === formData.target_id)?.nome.toLowerCase().includes(sc.search.toLowerCase()) ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md' : ''}`}
+                            >
+                                {sc.code}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-              </div>
 
-              {/* SELEZIONE MANUALE */}
-              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
-                  <button 
-                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
-                      onClick={() => { setTargetType('real'); setFormData({...formData, target_id: ''}); }}
-                  >
-                      <Home className="w-4 h-4"/> Immobile
-                  </button>
-                  <button 
-                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
-                      onClick={() => { setTargetType('mobile'); setFormData({...formData, target_id: ''}); }}
-                  >
-                      <Car className="w-4 h-4"/> Veicolo
-                  </button>
-              </div>
+                <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
+                    <button 
+                        className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                        onClick={() => { setTargetType('real'); setFormData({...formData, target_id: ''}); }}
+                    >
+                        <Home className="w-4 h-4"/> Immobile
+                    </button>
+                    <button 
+                        className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                        onClick={() => { setTargetType('mobile'); setFormData({...formData, target_id: ''}); }}
+                    >
+                        <Car className="w-4 h-4"/> Veicolo
+                    </button>
+                </div>
 
-              <div className="grid gap-2">
-                <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
-                <Select value={formData.target_id} onValueChange={v => setFormData({...formData, target_id: v, booking_id: 'none'})}>
-                  <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                  <SelectContent>
-                    {targetType === 'real' 
-                        ? realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)
-                        : mobileProperties?.map(m => <SelectItem key={m.id} value={m.id}>🚗 {m.veicolo} ({m.targa})</SelectItem>)
-                    }
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid gap-2">
-                <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Assegna al Team</Label>
-                <UserMultiSelect 
-                    options={teamMembers} 
-                    selected={formData.assigned_to} 
-                    onChange={(selected) => setFormData({...formData, assigned_to: selected})} 
-                    placeholder="Seleziona operatori..."
-                />
-              </div>
-
-              {targetType === 'real' && (
-                  <div className="grid gap-2">
-                    <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
-                    <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.target_id}>
-                      <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">-- Nessuno --</SelectItem>
-                        {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
-                      </SelectContent>
+                <div className="grid gap-2">
+                    <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
+                    <Select value={formData.target_id} onValueChange={v => setFormData({...formData, target_id: v, booking_id: 'none'})}>
+                    <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                    <SelectContent>
+                        {targetType === 'real' 
+                            ? realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)
+                            : mobileProperties?.map(m => <SelectItem key={m.id} value={m.id}>🚗 {m.veicolo} ({m.targa})</SelectItem>)
+                        }
+                    </SelectContent>
                     </Select>
-                  </div>
-              )}
+                </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                      <Label>Titolo</Label>
-                      <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Priorità</Label>
-                    <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="bassa">Bassa</SelectItem>
-                        <SelectItem value="media">Media</SelectItem>
-                        <SelectItem value="alta">Alta</SelectItem>
-                        <SelectItem value="critica">Critica</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-              </div>
-              
-              <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
-              
-              <div className="grid gap-2">
-                  <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
-                  <Input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
-                  {uploadFiles.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                          {uploadFiles.map((f, i) => (
-                              <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
-                                  {f.name} <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))}/>
-                              </Badge>
-                          ))}
-                      </div>
-                  )}
-              </div>
+                <div className="grid gap-2">
+                    <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Assegna al Team</Label>
+                    <UserMultiSelect 
+                        options={teamMembers} 
+                        selected={formData.assigned_to} 
+                        onChange={(selected) => setFormData({...formData, assigned_to: selected})} 
+                        placeholder="Seleziona operatori..."
+                    />
+                </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading || !formData.target_id || !formData.titolo}>
-                  {isUploading ? 'Caricamento...' : 'Crea Ticket'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+                {targetType === 'real' && (
+                    <div className="grid gap-2">
+                        <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
+                        <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.target_id}>
+                        <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="none">-- Nessuno --</SelectItem>
+                            {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
+                        </SelectContent>
+                        </Select>
+                    </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label>Titolo</Label>
+                        <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Priorità</Label>
+                        <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="bassa">Bassa</SelectItem>
+                            <SelectItem value="media">Media</SelectItem>
+                            <SelectItem value="alta">Alta</SelectItem>
+                            <SelectItem value="critica">Critica</SelectItem>
+                        </SelectContent>
+                        </Select>
+                    </div>
+                </div>
+                
+                <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
+                
+                <div className="grid gap-2">
+                    <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
+                    <Input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
+                    {uploadFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-1">
+                            {uploadFiles.map((f, i) => (
+                                <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
+                                    {f.name} <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))}/>
+                                </Badge>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading || !formData.target_id || !formData.titolo}>
+                    {isUploading ? 'Caricamento...' : 'Crea Ticket'}
+                </Button>
+                </div>
+            </DialogContent>
+            </Dialog>
+        </div>
       </div>
 
       {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati: {(error as any)?.message}</div>}
