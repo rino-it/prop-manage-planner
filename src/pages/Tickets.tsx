@@ -14,7 +14,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { 
   Calendar, UserCog, Plus, RotateCcw, 
   Eye, Home, User, AlertCircle, StickyNote, 
-  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, Info, Upload, FileSpreadsheet, Trash2, Clock
+  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, 
+  FileSpreadsheet, Trash2, Info, Clock // NUOVE ICONE AGGIUNTE
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -24,11 +25,11 @@ import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer';
 import { TicketDocument } from '@/components/TicketPDF';
 
-// --- MAPPING ESATTO PER IL TUO DB ---
+// --- NUOVA MAPPATURA CODICI RAPIDI ---
 const PROPERTY_SHORTCUTS = [
   { code: 'M', name: 'MENDOLA', search: 'MENDOLA', color: 'bg-blue-100 text-blue-800' },
-  { code: 'V9', name: 'VERTOVA SUB 703', search: 'SUB 703', color: 'bg-green-100 text-green-800' }, 
-  { code: 'V7', name: 'VERTOVA SUB 704', search: 'SUB 704', color: 'bg-emerald-100 text-emerald-800' },
+  { code: 'V9', name: 'VERTOVA SUB 703', search: '703', color: 'bg-green-100 text-green-800' }, 
+  { code: 'V7', name: 'VERTOVA SUB 704', search: '704', color: 'bg-emerald-100 text-emerald-800' }, 
   { code: 'C', name: 'CASA ZIE', search: 'ZIE', color: 'bg-yellow-100 text-yellow-800' },
   { code: 'S', name: 'SARDEGNA', search: 'SARDEGNA', color: 'bg-indigo-100 text-indigo-800' },
   { code: 'U', name: 'UFFICIO', search: 'UFFICIO', color: 'bg-gray-100 text-gray-800' },
@@ -36,6 +37,7 @@ const PROPERTY_SHORTCUTS = [
   { code: 'R', name: 'ROVARO', search: 'ROVARO', color: 'bg-orange-100 text-orange-800' },
 ];
 
+// Helper per link (TUO CODICE ORIGINALE)
 const renderTextWithLinks = (text: string) => {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
@@ -50,16 +52,19 @@ const renderTextWithLinks = (text: string) => {
 export default function Tickets() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { data: realProperties = [] } = usePropertiesReal();
+  const { data: realProperties = [] } = usePropertiesReal(); // Assicuro array vuoto
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false); // Stato Dialog Import
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
   const [activeTab, setActiveTab] = useState('open'); 
   const [filterType, setFilterType] = useState('all'); 
+
+  // NUOVI STATI PER IMPORTAZIONE
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // FORM DATA
+  // FORM DATA (AGGIUNTO CAMPO SCADENZA)
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
   const [formData, setFormData] = useState({
     titolo: '',
@@ -68,13 +73,12 @@ export default function Tickets() {
     target_id: '', 
     booking_id: 'none',
     assigned_to: [] as string[],
-    scadenza: '' // Nuovo campo Scadenza
+    scadenza: '' // NUOVO
   });
 
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
-  const [csvFile, setCsvFile] = useState<File | null>(null); // File per Import
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null); // Loading state per PDF
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
@@ -137,10 +141,9 @@ export default function Tickets() {
     refetchInterval: 5000 
   });
 
-  // --- FUNZIONI AGGIUNTIVE ---
-
+  // --- NUOVA FUNZIONE: PULIZIA ORFANI ---
   const deleteOrphans = async () => {
-      if(!confirm("Vuoi eliminare i ticket non assegnati a nessuna proprietà?")) return;
+      if(!confirm("ATTENZIONE: Stai per eliminare i ticket che non sono associati a nessuna proprietà. Procedere?")) return;
       setIsProcessing(true);
       try {
           const { error } = await supabase
@@ -158,11 +161,11 @@ export default function Tickets() {
       }
   };
 
+  // --- NUOVA FUNZIONE: IMPORT CSV ---
   const processCSVImport = async () => {
     if (!csvFile) return;
     setIsProcessing(true);
     const reader = new FileReader();
-    
     reader.onload = async (e) => {
         try {
             const text = e.target?.result as string;
@@ -177,10 +180,11 @@ export default function Tickets() {
                 const code = cols[0].trim().toUpperCase();
                 const title = cols[1].trim();
                 const desc = cols[2] ? cols[2].trim() : '';
-                const deadlineStr = cols[3] ? cols[3].trim() : null;
+                const deadlineStr = cols[3] ? cols[3].trim() : null; // Data formato aaaa-mm-gg
 
-                if (title.toLowerCase() === 'titolo' || title.toLowerCase() === 'attività') continue;
+                if (title.toLowerCase() === 'titolo') continue;
 
+                // Ricerca ID Proprietà
                 const mapping = PROPERTY_SHORTCUTS.find(s => s.code === code);
                 let propId = null;
                 if (mapping) {
@@ -200,12 +204,10 @@ export default function Tickets() {
                 });
                 importedCount++;
             }
-
             toast({ title: "Importazione Riuscita", description: `${importedCount} ticket creati.` });
             setIsImportOpen(false);
             setCsvFile(null);
             queryClient.invalidateQueries({ queryKey: ['tickets'] });
-
         } catch (err: any) {
             toast({ title: "Errore Importazione", description: err.message, variant: "destructive" });
         } finally {
@@ -215,7 +217,17 @@ export default function Tickets() {
     reader.readAsText(csvFile);
   };
 
-  // --- FINE FUNZIONI AGGIUNTIVE ---
+  // --- NUOVA FUNZIONE: CLICK TASTI RAPIDI ---
+  const handleShortcutClick = (shortcut: any) => {
+    const found = realProperties.find(p => p.nome.toUpperCase().includes(shortcut.search));
+    if (found) {
+      setTargetType('real'); 
+      setFormData({ ...formData, target_id: found.id });
+      toast({ title: "Proprietà Selezionata", description: `${found.nome}` });
+    } else {
+      toast({ title: "Non trovata", description: `Nessuna proprietà trovata per "${shortcut.name}"`, variant: "destructive" });
+    }
+  };
 
   const handleFileUpload = async (files: File[]) => {
     const uploadedUrls: string[] = [];
@@ -248,7 +260,7 @@ export default function Tickets() {
         booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id,
         assigned_to: newTicket.assigned_to,
         attachments: attachments,
-        scadenza: newTicket.scadenza || null // Campo scadenza aggiunto
+        scadenza: newTicket.scadenza || null // NUOVO: Salva scadenza nel DB
       };
 
       if (targetType === 'real') {
@@ -297,6 +309,7 @@ export default function Tickets() {
       if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
+  // --- NUOVA LOGICA "CONTATTA" CON PDF (TUO CODICE) ---
   const handleContactPartner = async (ticket: any, phone: string | null) => {
       if (!phone) {
           toast({ title: "Nessun telefono", description: "Impossibile inviare WhatsApp.", variant: "destructive" });
@@ -307,20 +320,25 @@ export default function Tickets() {
       toast({ title: "Generazione PDF...", description: "Sto preparando la scheda intervento." });
 
       try {
+          // 1. Risolvi URL immagini
           const imageUrls = await Promise.all((ticket.attachments || []).map(async (path: string) => {
               const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
               const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
               return data?.signedUrl;
           }));
 
+          // 2. Genera PDF
           const blob = await pdf(<TicketDocument ticket={ticket} publicUrls={imageUrls.filter(Boolean)} />).toBlob();
 
+          // 3. Upload Temporaneo
           const fileName = `delega_${ticket.id}_${Date.now()}.pdf`;
           const { error: uploadError } = await supabase.storage.from('ticket-files').upload(fileName, blob);
           if (uploadError) throw uploadError;
 
+          // 4. Ottieni Link
           const { data: { publicUrl } } = supabase.storage.from('ticket-files').getPublicUrl(fileName);
 
+          // 5. WhatsApp
           const msg = `Ciao, ti assegno questo intervento: *${ticket.titolo}*\n\n📄 Scarica scheda e foto qui: ${publicUrl}`;
           window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
 
@@ -345,18 +363,6 @@ export default function Tickets() {
     return ids.map(id => teamMembers.find(m => m.id === id)).filter(Boolean);
   };
 
-  const handleShortcutClick = (shortcut: any) => {
-    const found = realProperties.find(p => p.nome.toUpperCase().includes(shortcut.search));
-    
-    if (found) {
-      setTargetType('real'); 
-      setFormData({ ...formData, target_id: found.id });
-      toast({ title: "Proprietà Selezionata", description: `${found.nome}` });
-    } else {
-      toast({ title: "Non trovata", description: `Nessuna proprietà corrisponde a "${shortcut.name}"`, variant: "destructive" });
-    }
-  };
-
   const filteredTickets = tickets?.filter((t: any) => {
       const isResolved = t.stato === 'risolto';
       if (activeTab === 'open' && isResolved) return false;
@@ -379,35 +385,24 @@ export default function Tickets() {
         
         <div className="flex gap-2">
             
-            {/* BOTTONE PULIZIA ORFANI */}
+            {/* --- NUOVO: PULISCI ORFANI --- */}
             {tickets && tickets.some((t:any) => !t.property_real_id && !t.property_mobile_id) && (
                 <Button variant="destructive" className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100" onClick={deleteOrphans} disabled={isProcessing}>
                     <Trash2 className="w-4 h-4 mr-2"/> Pulisci Non Assegnati
                 </Button>
             )}
 
-            {/* BOTTONE IMPORT CSV */}
+            {/* --- NUOVO: IMPORT CSV --- */}
             <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
                 <DialogTrigger asChild>
-                    <Button variant="outline" className="text-green-700 border-green-200 hover:bg-green-50 shadow-sm">
-                        <FileSpreadsheet className="w-4 h-4 mr-2"/> Importa CSV
-                    </Button>
+                    <Button variant="outline" className="text-green-700 border-green-200 hover:bg-green-50 shadow-sm"><FileSpreadsheet className="w-4 h-4 mr-2"/> Importa CSV</Button>
                 </DialogTrigger>
                 <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Importazione Massiva</DialogTitle>
-                        <DialogDescription>CSV: <code className="bg-slate-100 px-1 rounded text-xs">CODICE; TITOLO; DESCRIZIONE; SCADENZA</code></DialogDescription>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle>Importazione Massiva</DialogTitle><DialogDescription>CSV: <code className="bg-slate-100 px-1 rounded text-xs">CODICE; TITOLO; DESCRIZIONE; SCADENZA</code></DialogDescription></DialogHeader>
                     <div className="space-y-4 py-4">
-                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors">
-                            <Input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} className="cursor-pointer" />
-                            <p className="text-xs text-gray-400 mt-2">Formato data: aaaa-mm-gg</p>
-                        </div>
+                        <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors"><Input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} className="cursor-pointer"/><p className="text-xs text-gray-400 mt-2">Formato data: aaaa-mm-gg</p></div>
                     </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsImportOpen(false)}>Annulla</Button>
-                        <Button onClick={processCSVImport} disabled={!csvFile || isProcessing} className="bg-green-600 hover:bg-green-700">{isProcessing ? 'Importazione...' : 'Avvia'}</Button>
-                    </DialogFooter>
+                    <DialogFooter><Button variant="outline" onClick={() => setIsImportOpen(false)}>Annulla</Button><Button onClick={processCSVImport} disabled={!csvFile || isProcessing} className="bg-green-600 hover:bg-green-700">{isProcessing ? 'Importazione...' : 'Avvia'}</Button></DialogFooter>
                 </DialogContent>
             </Dialog>
 
@@ -424,7 +419,7 @@ export default function Tickets() {
                 </DialogHeader>
                 <div className="space-y-4 mt-2">
                   
-                  {/* --- TASTI RAPIDI --- */}
+                  {/* --- NUOVO: TASTI RAPIDI --- */}
                   <div className="space-y-2 pb-2 border-b">
                     <Label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
                         <Info className="w-3 h-3 text-blue-500"/> Selezione Rapida
@@ -499,6 +494,8 @@ export default function Tickets() {
                           <Label>Titolo</Label>
                           <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
                       </div>
+                      
+                      {/* --- NUOVO: CAMPO SCADENZA --- */}
                       <div className="grid gap-2">
                           <Label>Scadenza (Opzionale)</Label>
                           <Input type="date" value={formData.scadenza} onChange={e => setFormData({...formData, scadenza: e.target.value})} />
@@ -506,16 +503,16 @@ export default function Tickets() {
                   </div>
 
                   <div className="grid gap-2">
-                        <Label>Priorità</Label>
-                        <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
-                          <SelectTrigger><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="bassa">Bassa</SelectItem>
-                            <SelectItem value="media">Media</SelectItem>
-                            <SelectItem value="alta">Alta</SelectItem>
-                            <SelectItem value="critica">Critica</SelectItem>
-                          </SelectContent>
-                        </Select>
+                    <Label>Priorità</Label>
+                    <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="bassa">Bassa</SelectItem>
+                        <SelectItem value="media">Media</SelectItem>
+                        <SelectItem value="alta">Alta</SelectItem>
+                        <SelectItem value="critica">Critica</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   
                   <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
@@ -578,7 +575,7 @@ export default function Tickets() {
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
                             
-                            {/* BADGE SCADENZA (NUOVO) */}
+                            {/* --- NUOVO: BADGE SCADENZA --- */}
                             {ticket.scadenza && (
                                 <Badge variant="secondary" className="flex items-center gap-1 bg-yellow-50 text-yellow-800 border-yellow-200">
                                     <Clock className="w-3 h-3"/> Scade: {format(new Date(ticket.scadenza), 'dd MMM')}
