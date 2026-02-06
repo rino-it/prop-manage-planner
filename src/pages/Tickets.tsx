@@ -24,11 +24,11 @@ import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer';
 import { TicketDocument } from '@/components/TicketPDF';
 
-// --- MAPPING ESATTO (Fix Codici Rapidi) ---
+// --- MAPPING ESATTO PER IL TUO DB ---
 const PROPERTY_SHORTCUTS = [
   { code: 'M', name: 'MENDOLA', search: 'MENDOLA', color: 'bg-blue-100 text-blue-800' },
-  { code: 'V9', name: 'VERTOVA SUB 703', search: 'SUB 703', color: 'bg-green-100 text-green-800' }, // FIX
-  { code: 'V7', name: 'VERTOVA SUB 704', search: 'SUB 704', color: 'bg-emerald-100 text-emerald-800' }, // FIX
+  { code: 'V9', name: 'VERTOVA SUB 703', search: 'SUB 703', color: 'bg-green-100 text-green-800' }, 
+  { code: 'V7', name: 'VERTOVA SUB 704', search: 'SUB 704', color: 'bg-emerald-100 text-emerald-800' },
   { code: 'C', name: 'CASA ZIE', search: 'ZIE', color: 'bg-yellow-100 text-yellow-800' },
   { code: 'S', name: 'SARDEGNA', search: 'SARDEGNA', color: 'bg-indigo-100 text-indigo-800' },
   { code: 'U', name: 'UFFICIO', search: 'UFFICIO', color: 'bg-gray-100 text-gray-800' },
@@ -53,11 +53,11 @@ export default function Tickets() {
   const { data: realProperties = [] } = usePropertiesReal();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false); // Stato per Dialog Import
+  const [isImportOpen, setIsImportOpen] = useState(false); // Stato Dialog Import
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
   const [activeTab, setActiveTab] = useState('open'); 
   const [filterType, setFilterType] = useState('all'); 
-  const [isProcessing, setIsProcessing] = useState(false); // Stato per caricamento import/delete
+  const [isProcessing, setIsProcessing] = useState(false);
 
   // FORM DATA
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
@@ -137,9 +137,8 @@ export default function Tickets() {
     refetchInterval: 5000 
   });
 
-  // --- FUNZIONI AGGIUNTIVE RICHIESTE ---
+  // --- FUNZIONI AGGIUNTIVE ---
 
-  // 1. Pulizia Orfani (per correggere import precedenti)
   const deleteOrphans = async () => {
       if(!confirm("Vuoi eliminare i ticket non assegnati a nessuna proprietà?")) return;
       setIsProcessing(true);
@@ -159,7 +158,6 @@ export default function Tickets() {
       }
   };
 
-  // 2. Importazione CSV
   const processCSVImport = async () => {
     if (!csvFile) return;
     setIsProcessing(true);
@@ -179,7 +177,6 @@ export default function Tickets() {
                 const code = cols[0].trim().toUpperCase();
                 const title = cols[1].trim();
                 const desc = cols[2] ? cols[2].trim() : '';
-                // Nuova colonna scadenza
                 const deadlineStr = cols[3] ? cols[3].trim() : null;
 
                 if (title.toLowerCase() === 'titolo' || title.toLowerCase() === 'attività') continue;
@@ -199,7 +196,7 @@ export default function Tickets() {
                     creato_da: 'manager',
                     user_id: user?.id,
                     property_real_id: propId,
-                    scadenza: deadlineStr || null // Salva nel campo scadenza del DB
+                    scadenza: deadlineStr || null
                 });
                 importedCount++;
             }
