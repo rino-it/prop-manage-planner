@@ -14,7 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { 
   Calendar, UserCog, Plus, RotateCcw, 
   Eye, Home, User, AlertCircle, StickyNote, 
-  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, Info, Upload, FileSpreadsheet
+  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, Info, Upload, FileSpreadsheet, Trash2, Clock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -24,11 +24,11 @@ import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer';
 import { TicketDocument } from '@/components/TicketPDF';
 
-// --- MAPPA CORRETTA CON I NOMI DB REALI ---
+// --- MAPPING ESATTO (Fix Codici Rapidi) ---
 const PROPERTY_SHORTCUTS = [
   { code: 'M', name: 'MENDOLA', search: 'MENDOLA', color: 'bg-blue-100 text-blue-800' },
-  { code: 'V9', name: 'VERTOVA 703', search: '703', color: 'bg-green-100 text-green-800' }, // Cerca "703" nel nome "VERTOVA SUB 703"
-  { code: 'V7', name: 'VERTOVA 704', search: '704', color: 'bg-emerald-100 text-emerald-800' }, // Cerca "704" nel nome "VERTOVA SUB 704"
+  { code: 'V9', name: 'VERTOVA SUB 703', search: 'SUB 703', color: 'bg-green-100 text-green-800' }, // FIX
+  { code: 'V7', name: 'VERTOVA SUB 704', search: 'SUB 704', color: 'bg-emerald-100 text-emerald-800' }, // FIX
   { code: 'C', name: 'CASA ZIE', search: 'ZIE', color: 'bg-yellow-100 text-yellow-800' },
   { code: 'S', name: 'SARDEGNA', search: 'SARDEGNA', color: 'bg-indigo-100 text-indigo-800' },
   { code: 'U', name: 'UFFICIO', search: 'UFFICIO', color: 'bg-gray-100 text-gray-800' },
@@ -53,10 +53,11 @@ export default function Tickets() {
   const { data: realProperties = [] } = usePropertiesReal();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false); 
+  const [isImportOpen, setIsImportOpen] = useState(false); // Stato per Dialog Import
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
   const [activeTab, setActiveTab] = useState('open'); 
   const [filterType, setFilterType] = useState('all'); 
+  const [isProcessing, setIsProcessing] = useState(false); // Stato per caricamento import/delete
 
   // FORM DATA
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
@@ -66,16 +67,14 @@ export default function Tickets() {
     priorita: 'media',
     target_id: '', 
     booking_id: 'none',
-    assigned_to: [] as string[]
+    assigned_to: [] as string[],
+    scadenza: '' // Nuovo campo Scadenza
   });
 
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
-  
-  // Stato per Import CSV
-  const [csvFile, setCsvFile] = useState<File | null>(null);
-  const [importing, setImporting] = useState(false);
+  const [csvFile, setCsvFile] = useState<File | null>(null); // File per Import
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
@@ -138,12 +137,34 @@ export default function Tickets() {
     refetchInterval: 5000 
   });
 
-  // --- LOGICA IMPORTAZIONE CSV ---
+  // --- FUNZIONI AGGIUNTIVE RICHIESTE ---
+
+  // 1. Pulizia Orfani (per correggere import precedenti)
+  const deleteOrphans = async () => {
+      if(!confirm("Vuoi eliminare i ticket non assegnati a nessuna proprietà?")) return;
+      setIsProcessing(true);
+      try {
+          const { error } = await supabase
+            .from('tickets')
+            .delete()
+            .is('property_real_id', null)
+            .is('property_mobile_id', null);
+          if (error) throw error;
+          toast({ title: "Pulizia Completata", description: "Ticket orfani rimossi." });
+          queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      } catch(e: any) {
+          toast({ title: "Errore", description: e.message, variant: "destructive" });
+      } finally {
+          setIsProcessing(false);
+      }
+  };
+
+  // 2. Importazione CSV
   const processCSVImport = async () => {
     if (!csvFile) return;
-    setImporting(true);
-    
+    setIsProcessing(true);
     const reader = new FileReader();
+    
     reader.onload = async (e) => {
         try {
             const text = e.target?.result as string;
@@ -153,38 +174,32 @@ export default function Tickets() {
 
             for (const row of rows) {
                 const cols = row.includes(';') ? row.split(';') : row.split(',');
-                
-                if (cols.length < 2) continue; 
+                if (cols.length < 2) continue;
 
                 const code = cols[0].trim().toUpperCase();
                 const title = cols[1].trim();
-                const rawDesc = cols[2] ? cols[2].trim() : '';
-                const deadline = cols[3] ? cols[3].trim() : '';
+                const desc = cols[2] ? cols[2].trim() : '';
+                // Nuova colonna scadenza
+                const deadlineStr = cols[3] ? cols[3].trim() : null;
 
-                if (title.toLowerCase() === 'titolo' || title.toLowerCase() === 'attività') continue; 
+                if (title.toLowerCase() === 'titolo' || title.toLowerCase() === 'attività') continue;
 
-                // FIX: Ricerca migliorata usando il campo "search"
                 const mapping = PROPERTY_SHORTCUTS.find(s => s.code === code);
                 let propId = null;
-                
                 if (mapping) {
-                    const searchTerm = mapping.search || mapping.name;
-                    const foundProp = realProperties.find(p => p.nome.toUpperCase().includes(searchTerm));
+                    const foundProp = realProperties.find(p => p.nome.toUpperCase().includes(mapping.search));
                     if (foundProp) propId = foundProp.id;
                 }
 
-                const enrichedDesc = deadline 
-                    ? `${rawDesc}\n\n📅 SCADENZA: ${deadline}` 
-                    : rawDesc;
-
                 await supabase.from('tickets').insert({
                     titolo: title,
-                    descrizione: enrichedDesc,
+                    descrizione: desc,
                     priorita: 'media',
                     stato: 'aperto',
                     creato_da: 'manager',
                     user_id: user?.id,
-                    property_real_id: propId
+                    property_real_id: propId,
+                    scadenza: deadlineStr || null // Salva nel campo scadenza del DB
                 });
                 importedCount++;
             }
@@ -197,11 +212,13 @@ export default function Tickets() {
         } catch (err: any) {
             toast({ title: "Errore Importazione", description: err.message, variant: "destructive" });
         } finally {
-            setImporting(false);
+            setIsProcessing(false);
         }
     };
     reader.readAsText(csvFile);
   };
+
+  // --- FINE FUNZIONI AGGIUNTIVE ---
 
   const handleFileUpload = async (files: File[]) => {
     const uploadedUrls: string[] = [];
@@ -233,7 +250,8 @@ export default function Tickets() {
         stato: 'aperto',
         booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id,
         assigned_to: newTicket.assigned_to,
-        attachments: attachments
+        attachments: attachments,
+        scadenza: newTicket.scadenza || null // Campo scadenza aggiunto
       };
 
       if (targetType === 'real') {
@@ -250,7 +268,7 @@ export default function Tickets() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
-      setFormData({ titolo: '', descrizione: '', priorita: 'media', target_id: '', booking_id: 'none', assigned_to: [] });
+      setFormData({ titolo: '', descrizione: '', priorita: 'media', target_id: '', booking_id: 'none', assigned_to: [], scadenza: '' });
       setUploadFiles([]);
       setIsUploading(false);
       toast({ title: "Ticket creato", description: "Assegnato al team e file caricati." });
@@ -331,13 +349,12 @@ export default function Tickets() {
   };
 
   const handleShortcutClick = (shortcut: any) => {
-    const searchTerm = shortcut.search || shortcut.name;
-    const found = realProperties.find(p => p.nome.toLowerCase().includes(searchTerm.toLowerCase()));
+    const found = realProperties.find(p => p.nome.toUpperCase().includes(shortcut.search));
     
     if (found) {
       setTargetType('real'); 
       setFormData({ ...formData, target_id: found.id });
-      toast({ title: "Proprietà Selezionata", description: `${found.nome} (${shortcut.code})` });
+      toast({ title: "Proprietà Selezionata", description: `${found.nome}` });
     } else {
       toast({ title: "Non trovata", description: `Nessuna proprietà corrisponde a "${shortcut.name}"`, variant: "destructive" });
     }
@@ -365,6 +382,13 @@ export default function Tickets() {
         
         <div className="flex gap-2">
             
+            {/* BOTTONE PULIZIA ORFANI */}
+            {tickets && tickets.some((t:any) => !t.property_real_id && !t.property_mobile_id) && (
+                <Button variant="destructive" className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100" onClick={deleteOrphans} disabled={isProcessing}>
+                    <Trash2 className="w-4 h-4 mr-2"/> Pulisci Non Assegnati
+                </Button>
+            )}
+
             {/* BOTTONE IMPORT CSV */}
             <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
                 <DialogTrigger asChild>
@@ -374,52 +398,37 @@ export default function Tickets() {
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Importazione Massiva (Excel/CSV)</DialogTitle>
-                        <DialogDescription>
-                            Carica un file con 4 colonne (senza intestazione o con): <br/>
-                            <code className="bg-slate-100 px-1 rounded text-xs font-mono">CODICE; TITOLO; DESCRIZIONE; DATA SCADENZA</code>
-                        </DialogDescription>
+                        <DialogTitle>Importazione Massiva</DialogTitle>
+                        <DialogDescription>CSV: <code className="bg-slate-100 px-1 rounded text-xs">CODICE; TITOLO; DESCRIZIONE; SCADENZA</code></DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center hover:bg-slate-50 transition-colors">
-                            <Input 
-                                type="file" 
-                                accept=".csv" 
-                                onChange={(e) => setCsvFile(e.target.files?.[0] || null)} 
-                                className="cursor-pointer"
-                            />
-                            <p className="text-xs text-gray-400 mt-2">Formato: M; Guasto Caldaia; Errore A01; 2026-03-15</p>
+                            <Input type="file" accept=".csv" onChange={(e) => setCsvFile(e.target.files?.[0] || null)} className="cursor-pointer" />
+                            <p className="text-xs text-gray-400 mt-2">Formato data: aaaa-mm-gg</p>
                         </div>
-                        {csvFile && (
-                            <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded">
-                                <FileSpreadsheet className="w-4 h-4"/> {csvFile.name}
-                            </div>
-                        )}
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setIsImportOpen(false)}>Annulla</Button>
-                        <Button onClick={processCSVImport} disabled={!csvFile || importing} className="bg-green-600 hover:bg-green-700">
-                            {importing ? 'Importazione...' : 'Avvia Importazione'}
-                        </Button>
+                        <Button onClick={processCSVImport} disabled={!csvFile || isProcessing} className="bg-green-600 hover:bg-green-700">{isProcessing ? 'Importazione...' : 'Avvia'}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
+              <DialogTrigger asChild>
                 <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm">
-                <Plus className="w-4 h-4 mr-2" /> Nuovo Ticket
+                  <Plus className="w-4 h-4 mr-2" /> Nuovo Ticket
                 </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[600px]">
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[600px]">
                 <DialogHeader>
                     <DialogTitle>Nuovo Ticket di Intervento</DialogTitle>
                     <DialogDescription>Crea un ticket, assegna il team e allega foto.</DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 mt-2">
-                
-                {/* --- TASTI RAPIDI --- */}
-                <div className="space-y-2 pb-2 border-b">
+                  
+                  {/* --- TASTI RAPIDI --- */}
+                  <div className="space-y-2 pb-2 border-b">
                     <Label className="text-xs font-bold text-gray-500 uppercase flex items-center gap-2">
                         <Info className="w-3 h-3 text-blue-500"/> Selezione Rapida
                     </Label>
@@ -429,43 +438,43 @@ export default function Tickets() {
                                 key={sc.code}
                                 type="button"
                                 onClick={() => handleShortcutClick(sc)}
-                                className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-all hover:scale-105 active:scale-95 ${sc.color} ${formData.target_id && realProperties.find(p => p.id === formData.target_id)?.nome.toLowerCase().includes(sc.search.toLowerCase()) ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md' : ''}`}
+                                className={`px-3 py-1.5 rounded-md text-xs font-bold border transition-all hover:scale-105 active:scale-95 ${sc.color} ${formData.target_id && realProperties.find(p => p.id === formData.target_id)?.nome.toUpperCase().includes(sc.search) ? 'ring-2 ring-offset-1 ring-blue-500 shadow-md' : ''}`}
                             >
                                 {sc.code}
                             </button>
                         ))}
                     </div>
-                </div>
+                  </div>
 
-                <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
-                    <button 
-                        className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
-                        onClick={() => { setTargetType('real'); setFormData({...formData, target_id: ''}); }}
-                    >
-                        <Home className="w-4 h-4"/> Immobile
-                    </button>
-                    <button 
-                        className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
-                        onClick={() => { setTargetType('mobile'); setFormData({...formData, target_id: ''}); }}
-                    >
-                        <Car className="w-4 h-4"/> Veicolo
-                    </button>
-                </div>
+                  <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
+                      <button 
+                          className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                          onClick={() => { setTargetType('real'); setFormData({...formData, target_id: ''}); }}
+                      >
+                          <Home className="w-4 h-4"/> Immobile
+                      </button>
+                      <button 
+                          className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                          onClick={() => { setTargetType('mobile'); setFormData({...formData, target_id: ''}); }}
+                      >
+                          <Car className="w-4 h-4"/> Veicolo
+                      </button>
+                  </div>
 
-                <div className="grid gap-2">
+                  <div className="grid gap-2">
                     <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
                     <Select value={formData.target_id} onValueChange={v => setFormData({...formData, target_id: v, booking_id: 'none'})}>
-                    <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                    <SelectContent>
+                      <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                      <SelectContent>
                         {targetType === 'real' 
                             ? realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)
                             : mobileProperties?.map(m => <SelectItem key={m.id} value={m.id}>🚗 {m.veicolo} ({m.targa})</SelectItem>)
                         }
-                    </SelectContent>
+                      </SelectContent>
                     </Select>
-                </div>
+                  </div>
 
-                <div className="grid gap-2">
+                  <div className="grid gap-2">
                     <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Assegna al Team</Label>
                     <UserMultiSelect 
                         options={teamMembers} 
@@ -473,61 +482,66 @@ export default function Tickets() {
                         onChange={(selected) => setFormData({...formData, assigned_to: selected})} 
                         placeholder="Seleziona operatori..."
                     />
-                </div>
+                  </div>
 
-                {targetType === 'real' && (
-                    <div className="grid gap-2">
+                  {targetType === 'real' && (
+                      <div className="grid gap-2">
                         <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
                         <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.target_id}>
-                        <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                        <SelectContent>
+                          <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                          <SelectContent>
                             <SelectItem value="none">-- Nessuno --</SelectItem>
                             {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
-                        </SelectContent>
+                          </SelectContent>
                         </Select>
-                    </div>
-                )}
+                      </div>
+                  )}
 
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                        <Label>Titolo</Label>
-                        <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
-                    </div>
-                    <div className="grid gap-2">
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                          <Label>Titolo</Label>
+                          <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
+                      </div>
+                      <div className="grid gap-2">
+                          <Label>Scadenza (Opzionale)</Label>
+                          <Input type="date" value={formData.scadenza} onChange={e => setFormData({...formData, scadenza: e.target.value})} />
+                      </div>
+                  </div>
+
+                  <div className="grid gap-2">
                         <Label>Priorità</Label>
                         <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
                             <SelectItem value="bassa">Bassa</SelectItem>
                             <SelectItem value="media">Media</SelectItem>
                             <SelectItem value="alta">Alta</SelectItem>
                             <SelectItem value="critica">Critica</SelectItem>
-                        </SelectContent>
+                          </SelectContent>
                         </Select>
-                    </div>
-                </div>
-                
-                <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
-                
-                <div className="grid gap-2">
-                    <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
-                    <Input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
-                    {uploadFiles.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1">
-                            {uploadFiles.map((f, i) => (
-                                <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
-                                    {f.name} <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))}/>
-                                </Badge>
-                            ))}
-                        </div>
-                    )}
-                </div>
+                  </div>
+                  
+                  <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
+                  
+                  <div className="grid gap-2">
+                      <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
+                      <Input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
+                      {uploadFiles.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                              {uploadFiles.map((f, i) => (
+                                  <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
+                                      {f.name} <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))}/>
+                                  </Badge>
+                              ))}
+                          </div>
+                      )}
+                  </div>
 
-                <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading || !formData.target_id || !formData.titolo}>
-                    {isUploading ? 'Caricamento...' : 'Crea Ticket'}
-                </Button>
+                  <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading || !formData.target_id || !formData.titolo}>
+                      {isUploading ? 'Caricamento...' : 'Crea Ticket'}
+                  </Button>
                 </div>
-            </DialogContent>
+              </DialogContent>
             </Dialog>
         </div>
       </div>
@@ -566,6 +580,14 @@ export default function Tickets() {
                         
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
                             <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
+                            
+                            {/* BADGE SCADENZA (NUOVO) */}
+                            {ticket.scadenza && (
+                                <Badge variant="secondary" className="flex items-center gap-1 bg-yellow-50 text-yellow-800 border-yellow-200">
+                                    <Clock className="w-3 h-3"/> Scade: {format(new Date(ticket.scadenza), 'dd MMM')}
+                                </Badge>
+                            )}
+
                             <Badge variant="outline" className={getPriorityColor(ticket.priorita)}>{ticket.priorita}</Badge>
                             {ticket.creato_da === 'ospite' && <Badge className="bg-blue-100 text-blue-800 border-blue-200">Ospite</Badge>}
                             {ticket.stato === 'risolto' && <Badge className="bg-green-100 text-green-800 border-green-200">Risolto</Badge>}
