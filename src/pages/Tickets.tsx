@@ -138,7 +138,7 @@ export default function Tickets() {
     refetchInterval: 5000 
   });
 
-  // --- LOGICA IMPORTAZIONE CSV ---
+  // --- LOGICA IMPORTAZIONE CSV (Aggiornata con Data) ---
   const processCSVImport = async () => {
     if (!csvFile) return;
     setImporting(true);
@@ -152,20 +152,20 @@ export default function Tickets() {
             let importedCount = 0;
             const { data: { user } } = await supabase.auth.getUser();
 
-            // Loop dalla seconda riga se c'è intestazione (opzionale, qui assumiamo no header o controlliamo)
+            // Loop dalla seconda riga se c'è intestazione
             for (const row of rows) {
                 // Supporta separatore ; (Excel ITA) o , (Standard)
                 const cols = row.includes(';') ? row.split(';') : row.split(',');
                 
-                // Formato atteso: CODICE; TITOLO; DESCRIZIONE; PRIORITA
+                // Formato atteso: CODICE; TITOLO; DESCRIZIONE; DATA SCADENZA
                 if (cols.length < 2) continue; // Salta righe malformate
 
                 const code = cols[0].trim().toUpperCase();
                 const title = cols[1].trim();
-                const desc = cols[2] ? cols[2].trim() : '';
-                const priority = cols[3] ? cols[3].trim().toLowerCase() : 'media';
+                const rawDesc = cols[2] ? cols[2].trim() : '';
+                const deadline = cols[3] ? cols[3].trim() : ''; // Data scadenza
 
-                if (title.toLowerCase() === 'titolo') continue; // Salta header se presente
+                if (title.toLowerCase() === 'titolo' || title.toLowerCase() === 'attività') continue; // Salta header
 
                 // Trova ID proprietà dal codice
                 const mapping = PROPERTY_SHORTCUTS.find(s => s.code === code);
@@ -175,10 +175,15 @@ export default function Tickets() {
                     if (foundProp) propId = foundProp.id;
                 }
 
+                // Costruisci descrizione arricchita con la scadenza
+                const enrichedDesc = deadline 
+                    ? `${rawDesc}\n\n📅 SCADENZA: ${deadline}` 
+                    : rawDesc;
+
                 await supabase.from('tickets').insert({
                     titolo: title,
-                    descrizione: desc,
-                    priorita: ['bassa', 'media', 'alta', 'critica'].includes(priority) ? priority : 'media',
+                    descrizione: enrichedDesc,
+                    priorita: 'media', // Default media, visto che la data è più importante
                     stato: 'aperto',
                     creato_da: 'manager',
                     user_id: user?.id,
@@ -187,7 +192,7 @@ export default function Tickets() {
                 importedCount++;
             }
 
-            toast({ title: "Importazione Riuscita", description: `${importedCount} ticket creati.` });
+            toast({ title: "Importazione Riuscita", description: `${importedCount} ticket creati con scadenze.` });
             setIsImportOpen(false);
             setCsvFile(null);
             queryClient.invalidateQueries({ queryKey: ['tickets'] });
@@ -372,10 +377,10 @@ export default function Tickets() {
                 </DialogTrigger>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Importazione Massiva</DialogTitle>
+                        <DialogTitle>Importazione Massiva (Excel/CSV)</DialogTitle>
                         <DialogDescription>
-                            Carica un file CSV con formato: <br/>
-                            <code className="bg-slate-100 px-1 rounded">CODICE; TITOLO; DESCRIZIONE; PRIORITÀ</code>
+                            Carica un file con 4 colonne (senza intestazione o con): <br/>
+                            <code className="bg-slate-100 px-1 rounded text-xs font-mono">CODICE; TITOLO; DESCRIZIONE; DATA SCADENZA</code>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
@@ -386,7 +391,7 @@ export default function Tickets() {
                                 onChange={(e) => setCsvFile(e.target.files?.[0] || null)} 
                                 className="cursor-pointer"
                             />
-                            <p className="text-xs text-gray-400 mt-2">Usa punto e virgola (;) come separatore.</p>
+                            <p className="text-xs text-gray-400 mt-2">Formato: M; Guasto Caldaia; Errore A01; 2026-03-15</p>
                         </div>
                         {csvFile && (
                             <div className="flex items-center gap-2 text-sm text-green-600 bg-green-50 p-2 rounded">
