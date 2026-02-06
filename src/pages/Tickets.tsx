@@ -24,16 +24,16 @@ import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer';
 import { TicketDocument } from '@/components/TicketPDF';
 
-// Mappa dei codici rapidi
+// --- MAPPA CORRETTA CON I NOMI DB REALI ---
 const PROPERTY_SHORTCUTS = [
-  { code: 'M', name: 'MENDOLA', color: 'bg-blue-100 text-blue-800' },
-  { code: 'V9', name: 'VERTOVA 703', color: 'bg-green-100 text-green-800' },
-  { code: 'V7', name: 'VERTOVA 704', color: 'bg-emerald-100 text-emerald-800' },
-  { code: 'C', name: 'CASA INDIPENDENTE', search: 'VERDE ZIE', color: 'bg-yellow-100 text-yellow-800' },
-  { code: 'S', name: 'VILLA SARDEGNA', color: 'bg-indigo-100 text-indigo-800' },
-  { code: 'U', name: 'UFFICIO', search: 'EDILVERTOVA', color: 'bg-gray-100 text-gray-800' },
-  { code: 'E', name: 'ENDINE', search: 'GAIANO', color: 'bg-purple-100 text-purple-800' },
-  { code: 'R', name: 'BAITA', search: 'ROVARO', color: 'bg-orange-100 text-orange-800' },
+  { code: 'M', name: 'MENDOLA', search: 'MENDOLA', color: 'bg-blue-100 text-blue-800' },
+  { code: 'V9', name: 'VERTOVA 703', search: '703', color: 'bg-green-100 text-green-800' }, // Cerca "703" nel nome "VERTOVA SUB 703"
+  { code: 'V7', name: 'VERTOVA 704', search: '704', color: 'bg-emerald-100 text-emerald-800' }, // Cerca "704" nel nome "VERTOVA SUB 704"
+  { code: 'C', name: 'CASA ZIE', search: 'ZIE', color: 'bg-yellow-100 text-yellow-800' },
+  { code: 'S', name: 'SARDEGNA', search: 'SARDEGNA', color: 'bg-indigo-100 text-indigo-800' },
+  { code: 'U', name: 'UFFICIO', search: 'UFFICIO', color: 'bg-gray-100 text-gray-800' },
+  { code: 'E', name: 'ENDINE', search: 'ENDINE', color: 'bg-purple-100 text-purple-800' },
+  { code: 'R', name: 'ROVARO', search: 'ROVARO', color: 'bg-orange-100 text-orange-800' },
 ];
 
 const renderTextWithLinks = (text: string) => {
@@ -53,7 +53,7 @@ export default function Tickets() {
   const { data: realProperties = [] } = usePropertiesReal();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [isImportOpen, setIsImportOpen] = useState(false); // Stato Dialog Import
+  const [isImportOpen, setIsImportOpen] = useState(false); 
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
   const [activeTab, setActiveTab] = useState('open'); 
   const [filterType, setFilterType] = useState('all'); 
@@ -138,7 +138,7 @@ export default function Tickets() {
     refetchInterval: 5000 
   });
 
-  // --- LOGICA IMPORTAZIONE CSV (Aggiornata con Data) ---
+  // --- LOGICA IMPORTAZIONE CSV ---
   const processCSVImport = async () => {
     if (!csvFile) return;
     setImporting(true);
@@ -147,35 +147,32 @@ export default function Tickets() {
     reader.onload = async (e) => {
         try {
             const text = e.target?.result as string;
-            // Divide per righe, ignora righe vuote
             const rows = text.split('\n').filter(row => row.trim() !== '');
             let importedCount = 0;
             const { data: { user } } = await supabase.auth.getUser();
 
-            // Loop dalla seconda riga se c'è intestazione
             for (const row of rows) {
-                // Supporta separatore ; (Excel ITA) o , (Standard)
                 const cols = row.includes(';') ? row.split(';') : row.split(',');
                 
-                // Formato atteso: CODICE; TITOLO; DESCRIZIONE; DATA SCADENZA
-                if (cols.length < 2) continue; // Salta righe malformate
+                if (cols.length < 2) continue; 
 
                 const code = cols[0].trim().toUpperCase();
                 const title = cols[1].trim();
                 const rawDesc = cols[2] ? cols[2].trim() : '';
-                const deadline = cols[3] ? cols[3].trim() : ''; // Data scadenza
+                const deadline = cols[3] ? cols[3].trim() : '';
 
-                if (title.toLowerCase() === 'titolo' || title.toLowerCase() === 'attività') continue; // Salta header
+                if (title.toLowerCase() === 'titolo' || title.toLowerCase() === 'attività') continue; 
 
-                // Trova ID proprietà dal codice
+                // FIX: Ricerca migliorata usando il campo "search"
                 const mapping = PROPERTY_SHORTCUTS.find(s => s.code === code);
                 let propId = null;
+                
                 if (mapping) {
-                    const foundProp = realProperties.find(p => p.nome.toUpperCase().includes(mapping.search || mapping.name));
+                    const searchTerm = mapping.search || mapping.name;
+                    const foundProp = realProperties.find(p => p.nome.toUpperCase().includes(searchTerm));
                     if (foundProp) propId = foundProp.id;
                 }
 
-                // Costruisci descrizione arricchita con la scadenza
                 const enrichedDesc = deadline 
                     ? `${rawDesc}\n\n📅 SCADENZA: ${deadline}` 
                     : rawDesc;
@@ -183,7 +180,7 @@ export default function Tickets() {
                 await supabase.from('tickets').insert({
                     titolo: title,
                     descrizione: enrichedDesc,
-                    priorita: 'media', // Default media, visto che la data è più importante
+                    priorita: 'media',
                     stato: 'aperto',
                     creato_da: 'manager',
                     user_id: user?.id,
@@ -192,7 +189,7 @@ export default function Tickets() {
                 importedCount++;
             }
 
-            toast({ title: "Importazione Riuscita", description: `${importedCount} ticket creati con scadenze.` });
+            toast({ title: "Importazione Riuscita", description: `${importedCount} ticket creati.` });
             setIsImportOpen(false);
             setCsvFile(null);
             queryClient.invalidateQueries({ queryKey: ['tickets'] });
