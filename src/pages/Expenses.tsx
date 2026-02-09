@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,15 +9,22 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, User, Car, Home, Ticket, Euro, CreditCard } from 'lucide-react';
+import { Plus, Trash2, Pencil, User, Car, Home, Ticket, Euro, CreditCard, Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
 import { format } from 'date-fns';
+import { it } from 'date-fns/locale';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 
 export default function Expenses() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [filterType, setFilterType] = useState('all'); 
+  
+  // --- NUOVI STATI PER I FILTRI ---
+  const [filterType, setFilterType] = useState('all'); // all, real, mobile
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState<string>(''); // yyyy-MM
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const [formData, setFormData] = useState({
     targetType: 'real' as 'real' | 'mobile',
@@ -31,11 +38,11 @@ export default function Expenses() {
     payment_method: 'da definire'
   });
 
-  const { data: realProperties } = usePropertiesReal();
+  const { data: realProperties = [] } = usePropertiesReal(); // Fix default array
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: mobileProperties } = useQuery({
+  const { data: mobileProperties = [] } = useQuery({
     queryKey: ['mobile-properties'],
     queryFn: async () => {
       const { data } = await supabase.from('properties_mobile').select('id, veicolo, targa').eq('status', 'active');
@@ -43,7 +50,7 @@ export default function Expenses() {
     }
   });
 
-  const { data: expenses = [] } = useQuery({
+  const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['unified-expenses'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -131,53 +138,115 @@ export default function Expenses() {
     });
   };
 
-  const filteredExpenses = expenses.filter((ex: any) => {
-    if (filterType === 'all') return true;
-    if (filterType === 'real') return !!ex.property_real_id;
-    if (filterType === 'mobile') return !!ex.property_mobile_id;
-    return true;
-  });
+  // --- LOGICA FILTRI E PAGINAZIONE ---
+  const filteredExpenses = useMemo(() => {
+    return expenses.filter((ex: any) => {
+      // 1. Filtro Tipo (Immobile/Veicolo)
+      if (filterType === 'real' && !ex.property_real_id) return false;
+      if (filterType === 'mobile' && !ex.property_mobile_id) return false;
+
+      // 2. Filtro Testo (Descrizione, Categoria, Importo)
+      if (searchTerm && !ex.descrizione?.toLowerCase().includes(searchTerm.toLowerCase()) && 
+          !ex.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) &&
+          !ex.importo.toString().includes(searchTerm)) {
+          return false;
+      }
+
+      // 3. Filtro Mese
+      if (selectedMonth) {
+        const exDate = ex.scadenza ? ex.scadenza.substring(0, 7) : '';
+        if (exDate !== selectedMonth) return false;
+      }
+
+      return true;
+    });
+  }, [expenses, filterType, searchTerm, selectedMonth]);
+
+  const totalPages = Math.ceil(filteredExpenses.length / itemsPerPage);
+  const paginatedExpenses = filteredExpenses.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalAmount = filteredExpenses.reduce((acc, curr) => acc + parseFloat(curr.importo || 0), 0);
 
   return (
     <div className="space-y-6 animate-in fade-in pb-20"> 
+      
+      {/* HEADER E KPI */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestione Spese</h1>
           <p className="text-gray-500 text-sm">Uscite immobili e veicoli</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2 bg-white p-1 rounded-lg border shadow-sm w-full md:w-auto">
-            <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="flex-1 md:flex-none text-xs">Tutti</Button>
-            <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="flex-1 md:flex-none text-xs flex gap-1"><Home className="w-3 h-3"/> Immobili</Button>
-            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="flex-1 md:flex-none text-xs flex gap-1"><Car className="w-3 h-3"/> Veicoli</Button>
+
+        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full md:w-auto">
+            {/* KPI Totale Filtrato */}
+            <div className="text-right bg-red-50 px-3 py-1 rounded-lg border border-red-100">
+                <p className="text-[10px] text-red-500 uppercase font-bold tracking-wider">Totale Filtrato</p>
+                <p className="text-lg font-bold text-red-700">- € {totalAmount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
+            </div>
+            
+            <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={openCreate}>
+                <Plus className="w-4 h-4 mr-2" /> Nuova Spesa
+            </Button>
         </div>
-        <Button className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={openCreate}>
-            <Plus className="w-4 h-4 mr-2" /> Nuova Spesa
-        </Button>
       </div>
 
+      {/* --- BARRA FILTRI --- */}
+      <Card className="bg-slate-50 border-slate-200">
+        <CardContent className="p-3 flex flex-wrap gap-3 items-end">
+            
+            {/* Ricerca */}
+            <div className="grid gap-1 min-w-[200px] flex-1">
+                <Label className="text-xs font-semibold text-slate-500">Cerca</Label>
+                <div className="relative">
+                    <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"/>
+                    <Input className="pl-9 h-9 bg-white text-sm" placeholder="Descrizione, categoria..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+                </div>
+            </div>
+
+            {/* Filtro Mese */}
+            <div className="grid gap-1 w-[140px]">
+                <Label className="text-xs font-semibold text-slate-500">Mese</Label>
+                <Input type="month" className="h-9 bg-white text-sm" value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); setCurrentPage(1); }} />
+            </div>
+
+            {/* Toggle Tipo */}
+            <div className="flex bg-white p-1 rounded-md border shadow-sm h-9">
+                <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="flex-1 px-3 text-xs">Tutti</Button>
+                <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="flex-1 px-3 text-xs"><Home className="w-3 h-3"/></Button>
+                <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="flex-1 px-3 text-xs"><Car className="w-3 h-3"/></Button>
+            </div>
+
+            {/* Reset */}
+            <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => { setSearchTerm(''); setSelectedMonth(''); setFilterType('all'); }}>
+                Reset
+            </Button>
+        </CardContent>
+      </Card>
+
+      {/* TABELLA DATI */}
       <Card className="border-t-4 border-t-blue-500 shadow-md overflow-hidden">
         <CardContent className="p-0">
-          {/* WRAPPER SCROLLABILE PER MOBILE */}
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader>
+              <TableHeader className="bg-slate-50">
                 <TableRow>
-                  <TableHead className="w-[90px] whitespace-nowrap">Data</TableHead>
+                  <TableHead className="w-[100px] whitespace-nowrap">Scadenza</TableHead>
                   <TableHead className="min-w-[140px] whitespace-nowrap">Riferimento</TableHead>
-                  <TableHead className="min-w-[180px]">Dettagli</TableHead>
+                  <TableHead className="min-w-[200px]">Descrizione</TableHead>
                   <TableHead className="hidden md:table-cell whitespace-nowrap">Metodo</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Importo</TableHead>
-                  <TableHead className="text-right w-[80px]">Azioni</TableHead>
+                  <TableHead className="text-right w-[90px]">Azioni</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredExpenses.length === 0 ? (
+                {isLoading ? (
+                     <TableRow><TableCell colSpan={6} className="text-center py-8">Caricamento...</TableCell></TableRow>
+                ) : paginatedExpenses.length === 0 ? (
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
                 ) : (
-                  filteredExpenses.map((ex: any) => (
+                  paginatedExpenses.map((ex: any) => (
                     <TableRow key={ex.id} className="hover:bg-slate-50 group transition-colors">
                       <TableCell className="font-mono text-xs text-slate-500 whitespace-nowrap">
-                          {ex.scadenza ? format(new Date(ex.scadenza), 'dd/MM/yy') : '-'}
+                          {ex.scadenza ? format(new Date(ex.scadenza), 'dd MMM yy', { locale: it }) : '-'}
                       </TableCell>
                       <TableCell className="font-medium">
                           {ex.properties_mobile ? (
@@ -191,39 +260,39 @@ export default function Expenses() {
                           ) : (
                               <div className="flex items-center gap-2 text-slate-700">
                                   <span className="bg-orange-100 text-orange-700 p-1 rounded shrink-0"><Home className="w-3 h-3"/></span>
-                                  <span className="text-xs font-bold truncate max-w-[100px]">{ex.properties_real?.nome || 'Generale'}</span>
+                                  <span className="text-xs font-bold truncate max-w-[120px]">{ex.properties_real?.nome || 'Generale'}</span>
                               </div>
                           )}
                       </TableCell>
                       <TableCell>
                           <div className="flex flex-col gap-1">
                               <div className="flex flex-wrap items-center gap-1">
-                                  <span className="capitalize bg-slate-100 px-2 py-0.5 rounded text-[10px] text-slate-600 border border-slate-200 whitespace-nowrap">
+                                  <span className="capitalize bg-slate-100 px-1.5 py-0.5 rounded text-[10px] text-slate-600 border border-slate-200 whitespace-nowrap">
                                       {ex.categoria}
                                   </span>
                                   {ex.ticket_id && (
-                                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-5 gap-1 border-blue-200 text-blue-600 bg-blue-50 whitespace-nowrap">
+                                      <Badge variant="outline" className="text-[10px] px-1 py-0 h-4 gap-1 border-blue-200 text-blue-600 bg-blue-50 whitespace-nowrap">
                                           <Ticket className="w-3 h-3"/> Ticket
                                       </Badge>
                                   )}
                                   {ex.competence === 'tenant' && (
-                                      <Badge className="text-[10px] px-1 py-0 h-5 bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 whitespace-nowrap">
+                                      <Badge className="text-[10px] px-1 py-0 h-4 bg-purple-100 text-purple-700 hover:bg-purple-200 border-purple-200 whitespace-nowrap">
                                           <User className="w-3 h-3 mr-1"/> Inquilino
                                       </Badge>
                                   )}
                               </div>
-                              <span className="text-sm text-slate-700 truncate max-w-[150px] md:max-w-[300px]" title={ex.descrizione}>{ex.descrizione}</span>
+                              <span className="text-sm text-slate-700 font-medium truncate max-w-[180px] md:max-w-[350px]" title={ex.descrizione}>{ex.descrizione}</span>
                           </div>
                       </TableCell>
                       
                       <TableCell className="hidden md:table-cell">
-                          <span className="text-xs text-gray-500 capitalize truncate">{ex.payment_method || '-'}</span>
+                          <span className="text-xs text-gray-500 capitalize truncate block max-w-[100px]">{ex.payment_method || '-'}</span>
                       </TableCell>
 
                       <TableCell className="text-right whitespace-nowrap">
                           <div className="flex flex-col items-end">
                               <span className="font-bold text-red-600 font-mono text-sm">-€{parseFloat(ex.importo).toFixed(2)}</span>
-                              <span className={`px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold uppercase ${ex.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              <span className={`px-1.5 py-0.5 rounded-[2px] text-[9px] font-bold uppercase ${ex.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>
                                   {ex.stato === 'pagato' ? 'PAGATO' : 'DA PAGARE'}
                               </span>
                           </div>
@@ -244,9 +313,27 @@ export default function Expenses() {
               </TableBody>
             </Table>
           </div>
+          
+          {/* PAGINAZIONE */}
+          {filteredExpenses.length > 0 && (
+            <div className="flex items-center justify-between p-3 border-t bg-slate-50">
+                <p className="text-xs text-gray-500 pl-2">
+                    Pagina {currentPage} di {totalPages}
+                </p>
+                <div className="flex gap-2 pr-2">
+                    <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1}>
+                        <ChevronLeft className="w-3 h-3 mr-1"/> Indietro
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages}>
+                        Avanti <ChevronRight className="w-3 h-3 ml-1"/>
+                    </Button>
+                </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
+      {/* DIALOG (Mantenuto intatto dal tuo codice) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -357,7 +444,6 @@ export default function Expenses() {
                     </Select>
                 </div>
             </div>
-
           </div>
 
           <DialogFooter className="flex-col sm:flex-row gap-2"> 
