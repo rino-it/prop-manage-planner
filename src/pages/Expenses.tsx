@@ -19,7 +19,7 @@ export default function Expenses() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
-  // --- NUOVI STATI PER I FILTRI ---
+  // --- STATI PER I FILTRI ---
   const [filterType, setFilterType] = useState('all'); // all, real, mobile
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<string>(''); // yyyy-MM
@@ -38,7 +38,7 @@ export default function Expenses() {
     payment_method: 'da definire'
   });
 
-  const { data: realProperties = [] } = usePropertiesReal(); // Fix default array
+  const { data: realProperties = [] } = usePropertiesReal();
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -145,11 +145,21 @@ export default function Expenses() {
       if (filterType === 'real' && !ex.property_real_id) return false;
       if (filterType === 'mobile' && !ex.property_mobile_id) return false;
 
-      // 2. Filtro Testo (Descrizione, Categoria, Importo)
-      if (searchTerm && !ex.descrizione?.toLowerCase().includes(searchTerm.toLowerCase()) && 
-          !ex.categoria?.toLowerCase().includes(searchTerm.toLowerCase()) &&
-          !ex.importo.toString().includes(searchTerm)) {
-          return false;
+      // 2. Filtro Testo POTENZIATO (Cerca anche nel nome proprietà/veicolo)
+      if (searchTerm) {
+        const lowerSearch = searchTerm.toLowerCase();
+        const matchesDesc = ex.descrizione?.toLowerCase().includes(lowerSearch);
+        const matchesCat = ex.categoria?.toLowerCase().includes(lowerSearch);
+        const matchesAmount = ex.importo.toString().includes(lowerSearch);
+        
+        // Nuova ricerca per proprietà
+        const matchesPropReal = ex.properties_real?.nome?.toLowerCase().includes(lowerSearch);
+        const matchesPropMobile = ex.properties_mobile?.veicolo?.toLowerCase().includes(lowerSearch) || 
+                                  ex.properties_mobile?.targa?.toLowerCase().includes(lowerSearch);
+
+        if (!matchesDesc && !matchesCat && !matchesAmount && !matchesPropReal && !matchesPropMobile) {
+            return false;
+        }
       }
 
       // 3. Filtro Mese
@@ -178,7 +188,7 @@ export default function Expenses() {
 
         <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full md:w-auto">
             {/* KPI Totale Filtrato */}
-            <div className="text-right bg-red-50 px-3 py-1 rounded-lg border border-red-100">
+            <div className="text-right bg-red-50 px-3 py-1 rounded-lg border border-red-100 w-full sm:w-auto">
                 <p className="text-[10px] text-red-500 uppercase font-bold tracking-wider">Totale Filtrato</p>
                 <p className="text-lg font-bold text-red-700">- € {totalAmount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
             </div>
@@ -198,25 +208,25 @@ export default function Expenses() {
                 <Label className="text-xs font-semibold text-slate-500">Cerca</Label>
                 <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"/>
-                    <Input className="pl-9 h-9 bg-white text-sm" placeholder="Descrizione, categoria..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
+                    <Input className="pl-9 h-9 bg-white text-sm" placeholder="Descrizione, proprietà, targa..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
                 </div>
             </div>
 
             {/* Filtro Mese */}
-            <div className="grid gap-1 w-[140px]">
+            <div className="grid gap-1 w-full sm:w-[140px]">
                 <Label className="text-xs font-semibold text-slate-500">Mese</Label>
                 <Input type="month" className="h-9 bg-white text-sm" value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); setCurrentPage(1); }} />
             </div>
 
             {/* Toggle Tipo */}
-            <div className="flex bg-white p-1 rounded-md border shadow-sm h-9">
-                <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="flex-1 px-3 text-xs">Tutti</Button>
-                <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="flex-1 px-3 text-xs"><Home className="w-3 h-3"/></Button>
-                <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="flex-1 px-3 text-xs"><Car className="w-3 h-3"/></Button>
+            <div className="flex bg-white p-1 rounded-md border shadow-sm h-9 w-full sm:w-auto">
+                <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('all'); setCurrentPage(1); }} className="flex-1 px-3 text-xs">Tutti</Button>
+                <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('real'); setCurrentPage(1); }} className="flex-1 px-3 text-xs"><Home className="w-3 h-3"/></Button>
+                <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('mobile'); setCurrentPage(1); }} className="flex-1 px-3 text-xs"><Car className="w-3 h-3"/></Button>
             </div>
 
             {/* Reset */}
-            <Button variant="outline" size="sm" className="h-9 text-xs" onClick={() => { setSearchTerm(''); setSelectedMonth(''); setFilterType('all'); }}>
+            <Button variant="outline" size="sm" className="h-9 text-xs w-full sm:w-auto" onClick={() => { setSearchTerm(''); setSelectedMonth(''); setFilterType('all'); setCurrentPage(1); }}>
                 Reset
             </Button>
         </CardContent>
@@ -333,7 +343,7 @@ export default function Expenses() {
         </CardContent>
       </Card>
 
-      {/* DIALOG (Mantenuto intatto dal tuo codice) */}
+      {/* DIALOG (MODALE PER NUOVA/MODIFICA SPESA) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
           <DialogHeader>
