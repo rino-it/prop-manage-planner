@@ -1,22 +1,23 @@
 import React, { useState, useEffect } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import QueryClient
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { Home, Car, FileText } from 'lucide-react';
+import { Home, Car, FileText, Loader2 } from 'lucide-react';
 
 interface AddPropertyDialogProps {
   isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
+  onOpenChange: (open: boolean) => void; // Standardizzato prop name
+  onSuccess?: () => void; // Opzionale
   propertyToEdit?: any;
 }
 
-export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
+export default function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
   const { toast } = useToast();
+  const queryClient = useQueryClient(); // <--- FONDAMENTALE PER REFRESH
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'real' | 'mobile'>('real');
   
@@ -82,7 +83,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
           user_id: user.id,
           nome: formData.nome,
           indirizzo: formData.indirizzo,
-          stato: 'uso_personale' // CORRETTO: Uso un valore valido per il check constraint
+          stato: 'uso_personale' // Valore default sicuro
         };
 
         if (propertyToEdit) {
@@ -115,11 +116,16 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
         }
       }
 
+      // --- PUNTO CRUCIALE PER IL REFRESH ---
+      // Invalida entrambe le query per sicurezza
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
+      queryClient.invalidateQueries({ queryKey: ['mobile-properties'] }); // Assumo questa key per i veicoli
+
       toast({ title: "Salvato con successo!" });
-      onSuccess();
-      onClose();
+      if (onSuccess) onSuccess();
+      onOpenChange(false); // Chiude il modale
     } catch (error: any) {
-      console.error(error); // Logga l'errore per debug
+      console.error(error);
       toast({ title: "Errore", description: error.message || "Errore durante il salvataggio", variant: "destructive" });
     } finally {
       setLoading(false);
@@ -127,7 +133,7 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
   };
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{propertyToEdit ? 'Modifica Proprietà' : 'Aggiungi Nuova Proprietà'}</DialogTitle>
@@ -215,9 +221,9 @@ export function AddPropertyDialog({ isOpen, onClose, onSuccess, propertyToEdit }
         </div>
 
         <DialogFooter className="mt-4 flex-col sm:flex-row gap-2">
-          <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">Annulla</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">Annulla</Button>
           <Button onClick={handleSave} disabled={loading} className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto">
-            {loading ? 'Salvataggio...' : 'Salva'}
+            {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin"/>Salvataggio...</> : 'Salva'}
           </Button>
         </DialogFooter>
       </DialogContent>
