@@ -8,9 +8,10 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Users, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator
+  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator, Send, User
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -52,15 +53,17 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [costAmount, setCostAmount] = useState(ticket?.cost || '');
   const [costVisible, setCostVisible] = useState(ticket?.spesa_visibile_ospite || false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  
+  const [closingNote, setClosingNote] = useState(''); // Nuovo stato per note finali
+
   const [uploading, setUploading] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
-  // --- NUOVI STATI PER VOCI MULTIPLE ---
+  // --- NUOVI STATI PER VOCI MULTIPLE E DELEGA ---
   const [newQuoteItem, setNewQuoteItem] = useState({ desc: '', amount: '' });
+  const [selectedDelegatePhone, setSelectedDelegatePhone] = useState<string>('');
 
-  // Fetch voci spesa dettagliate
+  // 1. Fetch Voci Spesa Dettagliate
   const { data: ticketExpenses = [] } = useQuery({
     queryKey: ['ticket-expenses', ticket?.id],
     queryFn: async () => {
@@ -72,6 +75,25 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   const totalDetailedQuotes = ticketExpenses.reduce((acc: number, curr: any) => acc + Number(curr.importo), 0);
 
+  // 2. Fetch Colleghi (con Telefono per la delega)
+  const { data: colleagues = [] } = useQuery({
+    queryKey: ['colleagues'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('*');
+      // Mappiamo i dati includendo il telefono per la funzione "Delega"
+      return data?.map(u => ({
+          id: u.id,
+          label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
+          phone: u.phone,
+          first_name: u.first_name,
+          last_name: u.last_name
+      })) || [];
+    }
+  });
+
+  // Filtro i colleghi che sono stati assegnati a questo ticket
+  const assignedTeamMembers = colleagues.filter((c: any) => assignedTo.includes(c.id));
+
   useEffect(() => {
     if(isOpen && ticket) {
         setStatus(ticket.stato);
@@ -79,17 +101,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         setNotes(ticket.admin_notes || '');
     }
   }, [ticket, isOpen]);
-
-  const { data: colleagues = [] } = useQuery({
-    queryKey: ['colleagues'],
-    queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('*');
-      return data?.map(u => ({
-          id: u.id,
-          label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email
-      })) || [];
-    }
-  });
 
   // --- MUTATIONS PER VOCI MULTIPLE ---
   const addQuoteExpense = useMutation({
@@ -142,7 +153,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { 
         toast({ title: "Salvato", description: "Modifiche registrate." }); 
         onUpdate(); 
-        onClose(); // <--- FIX RICHIESTO: AUTO-CHIUSURA
+        onClose(); // AUTO-CHIUSURA
     }
   };
 
@@ -219,7 +230,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         setQuoteStatus(decision);
         setStatus(newState);
         onUpdate();
-        onClose(); // <--- FIX: AUTO-CHIUSURA
+        onClose(); // AUTO-CHIUSURA
       } catch (e: any) {
           toast({ title: "Errore", description: e.message, variant: "destructive" });
       } finally {
@@ -255,7 +266,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         setStatus('in_verifica'); 
         toast({ title: "Inviato", description: "Ticket mandato in verifica amministrazione." });
         onUpdate();
-        onClose(); // <--- FIX: AUTO-CHIUSURA
+        onClose(); // AUTO-CHIUSURA
     } catch (error: any) {
         toast({ title: "Errore", description: error.message, variant: "destructive" });
     } finally { setUploading(false); }
@@ -290,19 +301,29 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   };
 
+  // --- FUNZIONE MANCANTE CHE CAUSAVA IL CRASH ---
+  const attemptClose = () => {
+      setShowCloseConfirm(true);
+      setConfirmText('');
+  };
+
   const handleFinalClose = async () => {
       if (confirmText !== ticket.titolo) {
           toast({ title: "Errore", description: "Il nome del ticket non corrisponde.", variant: "destructive" });
           return;
       }
       try {
-          const { error } = await supabase.from('tickets').update({ stato: 'risolto' }).eq('id', ticket.id);
+          const { error } = await supabase.from('tickets').update({ 
+              stato: 'risolto',
+              admin_notes: closingNote ? `${notes}\n[CHIUSURA]: ${closingNote}` : notes
+          }).eq('id', ticket.id);
+
           if (error) throw error;
           setStatus('risolto'); 
           setShowCloseConfirm(false);
           toast({ title: "Ticket Chiuso" });
           onUpdate();
-          onClose(); // <--- FIX: AUTO-CHIUSURA
+          onClose(); // AUTO-CHIUSURA
       } catch (err: any) {
           toast({ title: "Errore", description: err.message, variant: "destructive" });
       }
@@ -315,10 +336,19 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
           setStatus('in_lavorazione');
           toast({ title: "Riaperto" });
           onUpdate();
-          onClose(); // <--- FIX: AUTO-CHIUSURA
+          onClose(); // AUTO-CHIUSURA
       } catch (err: any) {
           toast({ title: "Errore", description: err.message, variant: "destructive" });
       }
+  };
+
+  const handleDelegate = () => {
+    if (!selectedDelegatePhone) {
+        toast({ title: "Seleziona un tecnico", variant: "destructive" });
+        return;
+    }
+    // Usa la logica di generazione PDF esistente verso il numero selezionato
+    generateAndSharePDF(selectedDelegatePhone);
   };
 
   const headerIcon = ticket.properties_mobile ? <Truck className="w-5 h-5"/> : <Home className="w-5 h-5"/>;
@@ -358,13 +388,14 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         </DialogHeader>
 
         <Tabs defaultValue="management" className="w-full mt-2">
-            <TabsList className="grid w-full grid-cols-3 h-auto">
+            <TabsList className="grid w-full grid-cols-4 h-auto">
                 <TabsTrigger value="management" className="text-xs px-1">1. Gestione</TabsTrigger>
                 <TabsTrigger value="quote" className="text-xs px-1">2. Preventivo</TabsTrigger>
-                <TabsTrigger value="closing" className="text-xs px-1">3. Chiusura</TabsTrigger>
+                <TabsTrigger value="delega" className="text-xs px-1">3. Delega</TabsTrigger>
+                <TabsTrigger value="closing" className="text-xs px-1">4. Chiusura</TabsTrigger>
             </TabsList>
 
-            {/* --- TAB 1: GESTIONE (Con Auto-Chiusura) --- */}
+            {/* --- TAB 1: GESTIONE --- */}
             <TabsContent value="management" className="space-y-4 py-4">
                 {ticket.attachments && ticket.attachments.length > 0 && (
                     <div className="bg-slate-50 p-3 rounded border">
@@ -378,17 +409,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         </div>
                     </div>
                 )}
-
-                <div className="bg-blue-50 border border-blue-100 p-4 rounded-md flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                    <div>
-                        <h4 className="text-sm font-bold text-blue-800">Delega e Condivisione</h4>
-                        <p className="text-xs text-blue-600">Genera PDF con foto e invia su WhatsApp.</p>
-                    </div>
-                    {/* FIX 3: Delega Intelligente (Preseleziona il primo assegnato) */}
-                    <Button onClick={() => generateAndSharePDF(assignedTo.length > 0 ? colleagues.find((c:any) => c.id === assignedTo[0])?.phone : null)} disabled={uploading} className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto text-xs">
-                        {uploading ? 'Generazione...' : <><Share2 className="w-3 h-3 mr-2"/> Invia Delega</>}
-                    </Button>
-                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2"><Label>Data Scadenza</Label><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} /></div>
@@ -416,11 +436,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress} className="w-full sm:w-auto">Salva e Chiudi</Button></div>}
             </TabsContent>
 
-            {/* --- TAB 2: PREVENTIVO (Con Voci Multiple) --- */}
+            {/* --- TAB 2: PREVENTIVO (Voci Multiple + Upload Originale) --- */}
             <TabsContent value="quote" className="space-y-4 py-4">
-                {/* 1. SEZIONE VOCI DETTAGLIATE (NUOVA) */}
+                {/* Voci Multiple */}
                 <div className="bg-slate-50 p-4 rounded-lg border space-y-3">
-                    <Label className="font-bold text-slate-700">Dettaglio Voci Spesa</Label>
+                    <Label className="font-bold text-slate-700">Dettaglio Voci Spesa (Opzionale)</Label>
                     {!isReadOnly && (
                         <div className="flex gap-2 items-end">
                             <Input placeholder="Es. Materiali..." value={newQuoteItem.desc} onChange={e => setNewQuoteItem({...newQuoteItem, desc: e.target.value})} className="bg-white flex-1"/>
@@ -445,7 +465,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     {totalDetailedQuotes > 0 && <div className="text-right font-bold text-blue-700 text-sm">Totale Voci: € {totalDetailedQuotes}</div>}
                 </div>
 
-                {/* 2. SEZIONE UPLOAD E TOTALE (ORIGINALE) */}
+                <div className="border-t my-4"></div>
+
+                {/* Logica Originale Preventivo */}
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
                         <div className="flex justify-between items-center">
@@ -480,7 +502,54 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
             </TabsContent>
 
-            {/* --- TAB 3: CHIUSURA (Con Calcolatrice) --- */}
+            {/* --- TAB 3: DELEGA (Migliorata) --- */}
+            <TabsContent value="delega" className="space-y-4 py-4">
+                <div className="space-y-4">
+                    <Label>Seleziona Tecnico da Contattare</Label>
+                    
+                    {assignedTeamMembers.length > 0 ? (
+                        <div className="grid gap-2">
+                            <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Assegnati al Ticket</p>
+                            {assignedTeamMembers.map((m: any) => (
+                                <div key={m.id} onClick={() => setSelectedDelegatePhone(m.phone || '')} className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${selectedDelegatePhone === m.phone ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'hover:bg-slate-50'}`}>
+                                    <div className="flex items-center gap-3">
+                                        <div className="bg-blue-100 p-2 rounded-full text-blue-600"><User className="w-4 h-4"/></div>
+                                        <div>
+                                            <p className="font-bold text-sm">{m.first_name} {m.last_name}</p>
+                                            <p className="text-xs text-gray-500">{m.phone || 'No telefono'}</p>
+                                        </div>
+                                    </div>
+                                    {selectedDelegatePhone === m.phone && <CheckCircle className="w-5 h-5 text-blue-600"/>}
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="p-4 bg-yellow-50 text-yellow-700 text-sm rounded border border-yellow-200">
+                            Nessun tecnico del team assegnato a questo ticket.
+                        </div>
+                    )}
+                    
+                    <div className="space-y-2">
+                         <Label className="text-xs text-gray-500 uppercase">Tutti i Contatti</Label>
+                         <Select onValueChange={setSelectedDelegatePhone} value={selectedDelegatePhone}>
+                            <SelectTrigger><SelectValue placeholder="Scegli dalla lista completa..."/></SelectTrigger>
+                            <SelectContent>
+                                {colleagues.map((m: any) => (
+                                    <SelectItem key={m.id} value={m.phone || 'nophone'}>
+                                        {m.first_name} {m.last_name}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                         </Select>
+                    </div>
+
+                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" onClick={handleDelegate} disabled={!selectedDelegatePhone || selectedDelegatePhone === 'nophone'}>
+                        <Send className="w-4 h-4"/> Invia Delega WhatsApp
+                    </Button>
+                </div>
+            </TabsContent>
+
+            {/* --- TAB 4: CHIUSURA --- */}
             <TabsContent value="closing" className="space-y-4 py-4">
                 {status === 'in_verifica' && (
                     <div className="bg-orange-50 p-4 rounded text-center space-y-2 border border-orange-200">
@@ -502,6 +571,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                             <div className="flex items-center gap-2"><Switch checked={costVisible} onCheckedChange={setCostVisible} disabled={isReadOnly}/><Label className="text-xs">Addebita Ospite</Label></div>
                         </div>
                         
+                        <div className="mt-4 space-y-2">
+                             <Label className="text-xs">Note Finali</Label>
+                             <Textarea value={closingNote} onChange={(e) => setClosingNote(e.target.value)} placeholder="Descrizione risoluzione..." className="bg-white"/>
+                        </div>
+
                         <div className="mt-4">
                             <Label className="text-xs mb-1 block">Carica Ricevuta/Fattura</Label>
                             <Input type="file" onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="bg-white" disabled={isReadOnly}/>
