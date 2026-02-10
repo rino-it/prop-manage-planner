@@ -1,136 +1,203 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Building2, LogIn, UserPlus, Phone, User } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/hooks/use-toast";
+import { useNavigate } from "react-router-dom";
+import { AlertCircle, Loader2, Eye, EyeOff } from "lucide-react"; // Aggiunte icone Eye
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-const Auth = () => {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  
-  // NUOVI CAMPI OBBLIGATORI
-  const [firstName, setFirstName] = useState('');
-  const [lastName, setLastName] = useState('');
-  const [phone, setPhone] = useState('');
-
+export default function Auth() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const { signIn, signUp, user } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  
+  // Nuovo stato per visibilità password
+  const [showPassword, setShowPassword] = useState(false);
+
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
-    if (user) {
-      navigate('/');
-    }
-  }, [user, navigate]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        navigate("/");
+      }
+    });
 
-  const handleSignIn = async (e: React.FormEvent) => {
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const { error } = await signIn(email, password);
-    if (!error) navigate('/');
-    setLoading(false);
+    setError(null);
+    
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    // Passiamo tutti i dati alla nuova funzione signUp
-    await signUp(email, password, firstName, lastName, phone);
-    setLoading(false);
+    setError(null);
+
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+      toast({
+        title: "Registrazione completata",
+        description: "Controlla la tua email per confermare l'account.",
+      });
+    } catch (error: any) {
+      setError(error.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4 bg-slate-50">
-      <div className="w-full max-w-md">
-        <div className="flex items-center justify-center mb-8">
-          <div className="bg-blue-600 p-3 rounded-xl shadow-lg mr-3">
-             <Building2 className="h-8 w-8 text-white" />
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="space-y-1">
+          <div className="flex justify-center mb-4">
+            <img src="/prop-manager-logo.png" alt="Logo" className="h-12 w-auto" onError={(e) => e.currentTarget.style.display = 'none'} />
           </div>
-          <h1 className="text-2xl font-bold text-slate-800">Prop Manager</h1>
-        </div>
+          <CardTitle className="text-2xl font-bold text-center">Benvenuto</CardTitle>
+          <CardDescription className="text-center">
+            Accedi al gestionale o crea un nuovo account
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Errore</AlertTitle>
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
 
-        <Card className="shadow-xl border-slate-200">
-          <CardHeader className="text-center">
-            <CardTitle>Area Riservata Staff</CardTitle>
-            <CardDescription>
-              Gestione immobiliare professionale
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs defaultValue="signin" className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-4">
-                <TabsTrigger value="signin">
-                  <LogIn className="w-4 h-4 mr-2" /> Accedi
-                </TabsTrigger>
-                <TabsTrigger value="signup">
-                  <UserPlus className="w-4 h-4 mr-2" /> Registrati
-                </TabsTrigger>
-              </TabsList>
-              
-              <TabsContent value="signin">
-                <form onSubmit={handleSignIn} className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-email">Email</Label>
-                    <Input id="signin-email" type="email" placeholder="nome@azienda.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="grid w-full grid-cols-2 mb-4">
+              <TabsTrigger value="login">Accedi</TabsTrigger>
+              <TabsTrigger value="signup">Registrati</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="login">
+              <form onSubmit={handleLogin} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input 
+                    id="email" 
+                    type="email" 
+                    placeholder="m.rossi@example.com" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <div className="relative">
+                    <Input 
+                      id="password" 
+                      type={showPassword ? "text" : "password"} // Tipo dinamico
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="pr-10" // Spazio per l'icona
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1} // Evita il focus col tab
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      )}
+                    </Button>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="signin-password">Password</Label>
-                    <Input id="signin-password" type="password" placeholder="••••••••" value={password} onChange={(e) => setPassword(e.target.value)} required />
+                </div>
+                <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Accedi"}
+                </Button>
+              </form>
+            </TabsContent>
+            
+            <TabsContent value="signup">
+              <form onSubmit={handleSignUp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input 
+                    id="signup-email" 
+                    type="email" 
+                    placeholder="m.rossi@example.com" 
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <div className="relative">
+                    <Input 
+                      id="signup-password" 
+                      type={showPassword ? "text" : "password"} 
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                      tabIndex={-1}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      )}
+                    </Button>
                   </div>
-                  <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700" disabled={loading}>
-                    {loading ? 'Accesso...' : 'Entra'}
-                  </Button>
-                </form>
-              </TabsContent>
-              
-              <TabsContent value="signup">
-                <form onSubmit={handleSignUp} className="space-y-3 animate-in fade-in slide-in-from-bottom-2">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-2">
-                        <Label>Nome *</Label>
-                        <div className="relative">
-                            <User className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400"/>
-                            <Input className="pl-9" placeholder="Mario" value={firstName} onChange={(e) => setFirstName(e.target.value)} required />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Cognome *</Label>
-                        <Input placeholder="Rossi" value={lastName} onChange={(e) => setLastName(e.target.value)} required />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Telefono *</Label>
-                    <div className="relative">
-                        <Phone className="absolute left-2.5 top-2.5 h-4 w-4 text-gray-400"/>
-                        <Input className="pl-9" placeholder="+39 333..." value={phone} onChange={(e) => setPhone(e.target.value)} required />
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label>Email *</Label>
-                    <Input type="email" placeholder="nome@azienda.com" value={email} onChange={(e) => setEmail(e.target.value)} required />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Password *</Label>
-                    <Input type="password" placeholder="Min. 6 caratteri" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
-                  </div>
-                  
-                  <Button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 mt-2" disabled={loading}>
-                    {loading ? 'Registrazione...' : 'Crea Account Staff'}
-                  </Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-      </div>
+                </div>
+                <Button type="submit" className="w-full" disabled={loading}>
+                  {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Crea Account"}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+        <CardFooter className="flex justify-center text-xs text-gray-500">
+          Prop Manage Planner v1.0
+        </CardFooter>
+      </Card>
     </div>
   );
-};
-
-export default Auth;
+}
