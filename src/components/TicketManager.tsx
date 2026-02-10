@@ -8,6 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
+// --- FIX IMPORT: Aggiunto Select e componenti correlati ---
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { 
   CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator, Send, User, Calendar as CalendarIcon
@@ -30,7 +32,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  // --- STATI ORIGINALI ---
+  // --- STATI ---
   const [notes, setNotes] = useState(ticket?.admin_notes || '');
   const [shareNotes, setShareNotes] = useState(ticket?.share_notes || false);
   const [supplier, setSupplier] = useState(ticket?.supplier || '');
@@ -38,6 +40,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [dueDate, setDueDate] = useState(ticket?.data_scadenza || '');
   
   const [status, setStatus] = useState(ticket?.stato || 'aperto');
+  const [priority, setPriority] = useState(ticket?.priorita || 'media'); // Aggiunto stato priorità
   const [quoteStatus, setQuoteStatus] = useState(ticket?.quote_status || 'none');
 
   const [assignedTo, setAssignedTo] = useState<string[]>(
@@ -58,14 +61,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
-  // --- NUOVI STATI ---
   const [newQuoteItem, setNewQuoteItem] = useState({ desc: '', amount: '' });
   const [selectedDelegatePhone, setSelectedDelegatePhone] = useState<string>('');
   
-  // Data schedulazione approvazione (Default: Oggi)
   const [approvalDate, setApprovalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
-  // 1. Fetch Voci Spesa Dettagliate
+  // 1. Fetch Voci Spesa
   const { data: ticketExpenses = [] } = useQuery({
     queryKey: ['ticket-expenses', ticket?.id],
     queryFn: async () => {
@@ -97,19 +98,18 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   useEffect(() => {
     if(isOpen && ticket) {
         setStatus(ticket.stato);
+        setPriority(ticket.priorita || 'media');
         setQuoteStatus(ticket.quote_status || 'none');
         setNotes(ticket.admin_notes || '');
     }
   }, [ticket, isOpen]);
 
-  // --- MUTATIONS CORRETTE ---
+  // --- MUTATIONS ---
 
-  // FIX: Ora prende l'utente corrente per evitare errori RLS o null
   const addQuoteExpense = useMutation({
     mutationFn: async () => {
       if (!newQuoteItem.amount || !newQuoteItem.desc) throw new Error("Inserisci descrizione e importo");
-      
-      const { data: { user } } = await supabase.auth.getUser(); // Ottieni utente corrente
+      const { data: { user } } = await supabase.auth.getUser();
 
       const { error } = await supabase.from('payments').insert({
         ticket_id: ticket.id,
@@ -120,8 +120,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         categoria: 'manutenzione',
         stato: 'da_pagare',
         tipo: 'uscita',
-        scadenza: approvalDate, // Usa la data schedulata anche qui
-        user_id: user?.id // Usa l'ID dell'utente loggato
+        scadenza: approvalDate,
+        user_id: user?.id
       });
       if (error) throw error;
     },
@@ -141,8 +141,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ticket-expenses'] })
   });
 
-  // --- FUNZIONI DI GESTIONE ---
-
   const saveProgress = async () => {
     const primaryAssignee = assignedTo.length > 0 ? assignedTo[0] : null;
     const { error } = await supabase.from('tickets').update({ 
@@ -153,7 +151,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         assigned_to: assignedTo, 
         assigned_partner_id: primaryAssignee,
         data_scadenza: dueDate || null,
-        stato: status 
+        stato: status,
+        priorita: priority // Aggiorna anche la priorità
       }).eq('id', ticket.id);
 
     if (error) toast({ title: "Errore", description: error.message, variant: "destructive" });
@@ -203,7 +202,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   };
 
-  // FIX: Schedulazione Accettazione
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
@@ -215,14 +213,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         if (ticketError) throw new Error("Errore ticket: " + ticketError.message);
 
         if (decision === 'approved') {
-            // Se ci sono voci dettagliate, aggiorniamo la loro data di scadenza alla data schedulata
             if (ticketExpenses.length > 0) {
                 const { error: updateExpError } = await supabase.from('payments')
-                    .update({ scadenza: approvalDate }) // <--- SCHEDULAZIONE QUI
+                    .update({ scadenza: approvalDate })
                     .eq('ticket_id', ticket.id);
                 if (updateExpError) throw updateExpError;
             } else {
-                // Se non ci sono voci, creiamo una macro spesa
                 const entityData = ticket.property_real_id 
                     ? { property_real_id: ticket.property_real_id } 
                     : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
@@ -232,7 +228,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                     descrizione: `Spesa Ticket: ${ticket.titolo}`,
                     importo: importo,
                     importo_originale: importo,
-                    scadenza: approvalDate, // <--- SCHEDULAZIONE QUI
+                    scadenza: approvalDate,
                     stato: 'da_pagare', 
                     ticket_id: ticket.id,
                     user_id: user?.id,
@@ -319,7 +315,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   };
 
-  // Funzione che mancava
   const attemptClose = () => {
       setShowCloseConfirm(true);
       setConfirmText('');
@@ -412,7 +407,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <TabsTrigger value="closing" className="text-xs px-1">4. Chiusura</TabsTrigger>
             </TabsList>
 
-            {/* --- TAB 1: GESTIONE --- */}
             <TabsContent value="management" className="space-y-4 py-4">
                 {ticket.attachments && ticket.attachments.length > 0 && (
                     <div className="bg-slate-50 p-3 rounded border">
@@ -426,6 +420,33 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                         </div>
                     </div>
                 )}
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid gap-2">
+                        <Label>Stato</Label>
+                        <Select value={status} onValueChange={setStatus} disabled={isReadOnly}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="aperto">🟡 Aperto</SelectItem>
+                                <SelectItem value="in_corso">🔵 In Corso</SelectItem>
+                                <SelectItem value="in_attesa">🟠 In Attesa</SelectItem>
+                                <SelectItem value="risolto">🟢 Risolto</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                    <div className="grid gap-2">
+                        <Label>Priorità</Label>
+                        <Select value={priority} onValueChange={setPriority} disabled={isReadOnly}>
+                            <SelectTrigger><SelectValue /></SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="bassa">Bassa</SelectItem>
+                                <SelectItem value="media">Media</SelectItem>
+                                <SelectItem value="alta">Alta</SelectItem>
+                                <SelectItem value="critica">Critica</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="grid gap-2"><Label>Data Scadenza</Label><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} /></div>
@@ -453,9 +474,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress} className="w-full sm:w-auto">Salva e Chiudi</Button></div>}
             </TabsContent>
 
-            {/* --- TAB 2: PREVENTIVO (VOCI + SCHEDULAZIONE) --- */}
             <TabsContent value="quote" className="space-y-4 py-4">
-                {/* 1. SEZIONE VOCI DETTAGLIATE */}
                 <div className="bg-slate-50 p-4 rounded-lg border space-y-3">
                     <Label className="font-bold text-slate-700">Dettaglio Voci Spesa (Opzionale)</Label>
                     {!isReadOnly && (
@@ -484,7 +503,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
                 <div className="border-t my-4"></div>
 
-                {/* 2. GESTIONE APPROVAZIONE CON SCHEDULAZIONE */}
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
                         <div className="flex justify-between items-center">
@@ -525,11 +543,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
             </TabsContent>
 
-            {/* --- TAB 3: DELEGA --- */}
             <TabsContent value="delega" className="space-y-4 py-4">
                 <div className="space-y-4">
                     <Label>Seleziona Tecnico da Contattare</Label>
-                    
                     {assignedTeamMembers.length > 0 ? (
                         <div className="grid gap-2">
                             <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Assegnati al Ticket</p>
@@ -572,7 +588,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 </div>
             </TabsContent>
 
-            {/* --- TAB 4: CHIUSURA --- */}
             <TabsContent value="closing" className="space-y-4 py-4">
                 {status === 'in_verifica' && (
                     <div className="bg-orange-50 p-4 rounded text-center space-y-2 border border-orange-200">
