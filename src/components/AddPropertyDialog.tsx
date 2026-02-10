@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Home, Car, FileText, Loader2 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query'; // <--- AGGIUNTO
+import { useQueryClient } from '@tanstack/react-query'; // <--- 1. IMPORT AGGIUNTO
 
 interface AddPropertyDialogProps {
   isOpen: boolean;
@@ -16,10 +16,10 @@ interface AddPropertyDialogProps {
   propertyToEdit?: any;
 }
 
-// CORRETTO: Export named function per matchare l'import in Properties.tsx
+// 2. EXPORT NAMED CORRETTO
 export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
   const { toast } = useToast();
-  const queryClient = useQueryClient(); // <--- PER IL REFRESH
+  const queryClient = useQueryClient(); // <--- 3. HOOK AGGIUNTO
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'real' | 'mobile'>('real');
   
@@ -118,9 +118,13 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
         }
       }
 
-      // --- INVALIDA LA CACHE PER AGGIORNAMENTO IMMEDIATO ---
-      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
-      queryClient.invalidateQueries({ queryKey: ['mobile-properties'] });
+      // --- 4. PUNTO CHIAVE PER IL REFRESH ---
+      // Invalidiamo tutte le query rilevanti per forzare il ricaricamento
+      await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['properties_real'] }),
+          queryClient.invalidateQueries({ queryKey: ['mobile-properties'] }),
+          queryClient.invalidateQueries({ queryKey: ['mobile-properties-ticket'] })
+      ]);
 
       toast({ title: "Salvato con successo!" });
       if (onSuccess) onSuccess();

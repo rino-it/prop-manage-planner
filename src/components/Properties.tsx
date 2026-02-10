@@ -13,7 +13,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
 import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, X } from 'lucide-react';
-import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import TicketManager from '@/components/TicketManager';
@@ -43,8 +42,21 @@ const Properties = () => {
   const [isExpense, setIsExpense] = useState(false);
   const [smartData, setSmartData] = useState({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
 
-  const { data: propertiesReal = [] } = usePropertiesReal();
-  const queryClient = useQueryClient(); // <--- FONDAMENTALE PER REFRESH
+  // SOSTITUZIONE HOOK: Query diretta per garantire il refresh sulla chiave 'properties_real'
+  const { data: propertiesReal = [], isLoading } = useQuery({
+    queryKey: ['properties_real'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('properties_real')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  const queryClient = useQueryClient(); 
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
 
@@ -74,7 +86,7 @@ const Properties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // <--- REFRESH
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // REFRESH AGGIUNTO
       setEditOpen(null);
       toast({ title: "Proprietà aggiornata" });
     },
@@ -88,7 +100,7 @@ const Properties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // <--- REFRESH
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // REFRESH AGGIUNTO
       setDeleteOpen(null);
       toast({ title: "Proprietà eliminata" });
     },
@@ -272,7 +284,7 @@ const Properties = () => {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['property-docs-full'] })
   });
 
-  const filteredPropertiesReal = propertiesReal.filter(p => 
+  const filteredPropertiesReal = propertiesReal.filter((p: any) => 
     p.nome.toLowerCase().includes(searchTerm.toLowerCase()) && (filterType === 'all' || filterType === 'real')
   );
 
@@ -292,15 +304,15 @@ const Properties = () => {
 
       <AddPropertyDialog 
         isOpen={isAddOpen} 
-        onOpenChange={(open) => setIsAddOpen(open)} // FIX: Adatta la prop
+        onOpenChange={(open) => setIsAddOpen(open)} 
+        // MODIFICA CRUCIALE: Callback onSuccess che invalida la query giusta
         onSuccess={() => {
-            setIsAddOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // FIX: Refresh
+            queryClient.invalidateQueries({ queryKey: ['properties_real'] });
         }} 
       />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {filteredPropertiesReal.map(prop => (
+        {filteredPropertiesReal.map((prop: any) => (
             <Card key={prop.id} className="group hover:shadow-lg transition-all relative border-t-4 border-t-blue-500">
                 <div className="h-32 bg-slate-100 relative overflow-hidden">
                     {prop.immagine_url ? (
@@ -503,14 +515,12 @@ const Properties = () => {
                                                 </Button>
                                             </div>
                                             
-                                            {/* Badge Inquilino */}
                                             {doc.type === 'tenant' && doc.bookings && (
                                                 <span className="text-[10px] text-purple-700 bg-purple-50 px-1 rounded truncate block w-fit mb-0.5">
                                                     {doc.bookings.nome_ospite}
                                                 </span>
                                             )}
 
-                                            {/* Badge Spesa */}
                                             {doc.payments && (
                                                 <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded truncate block w-fit mb-0.5">
                                                     € {doc.payments.importo} - {doc.payments.categoria}
