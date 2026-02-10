@@ -1,5 +1,5 @@
 import { AddPropertyDialog } from './AddPropertyDialog';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-// FIX: Aggiunto import di Switch che mancava
 import { Switch } from '@/components/ui/switch';
 import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, X } from 'lucide-react';
 import { usePropertiesReal } from '@/hooks/useProperties';
@@ -45,7 +44,7 @@ const Properties = () => {
   const [smartData, setSmartData] = useState({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
 
   const { data: propertiesReal = [] } = usePropertiesReal();
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient(); // <--- FONDAMENTALE PER REFRESH
   const { toast } = useToast();
   const [uploading, setUploading] = useState(false);
 
@@ -75,7 +74,7 @@ const Properties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // <--- REFRESH
       setEditOpen(null);
       toast({ title: "Proprietà aggiornata" });
     },
@@ -89,7 +88,7 @@ const Properties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // <--- REFRESH
       setDeleteOpen(null);
       toast({ title: "Proprietà eliminata" });
     },
@@ -293,10 +292,10 @@ const Properties = () => {
 
       <AddPropertyDialog 
         isOpen={isAddOpen} 
-        onClose={() => setIsAddOpen(false)} 
+        onOpenChange={(open) => setIsAddOpen(open)} // FIX: Adatta la prop
         onSuccess={() => {
             setIsAddOpen(false);
-            queryClient.invalidateQueries({ queryKey: ['properties_real'] });
+            queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // FIX: Refresh
         }} 
       />
 
@@ -453,17 +452,17 @@ const Properties = () => {
                             </div>
                             {isExpense && (
                                 <>
-                                  <div className="grid gap-1">
-                                      <Label className="text-xs">Importo (€)</Label>
-                                      <div className="relative">
-                                          <Euro className="absolute left-2 top-2.5 w-3 h-3 text-gray-400"/>
-                                          <Input className="pl-7 h-8" type="number" value={smartData.amount} onChange={e => setSmartData({...smartData, amount: e.target.value})} />
-                                      </div>
-                                  </div>
-                                  <div className="grid gap-1">
-                                      <Label className="text-xs">Data Rif.</Label>
-                                      <Input className="h-8" type="date" value={smartData.date} onChange={e => setSmartData({...smartData, date: e.target.value})} />
-                                  </div>
+                                    <div className="grid gap-1">
+                                        <Label className="text-xs">Importo (€)</Label>
+                                        <div className="relative">
+                                            <Euro className="absolute left-2 top-2.5 w-3 h-3 text-gray-400"/>
+                                            <Input className="pl-7 h-8" type="number" value={smartData.amount} onChange={e => setSmartData({...smartData, amount: e.target.value})} />
+                                        </div>
+                                    </div>
+                                    <div className="grid gap-1">
+                                        <Label className="text-xs">Data Rif.</Label>
+                                        <Input className="h-8" type="date" value={smartData.date} onChange={e => setSmartData({...smartData, date: e.target.value})} />
+                                    </div>
                                 </>
                             )}
                             <div className="grid gap-1">

@@ -1,23 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import QueryClient
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Home, Car, FileText, Loader2 } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query'; // <--- AGGIUNTO
 
 interface AddPropertyDialogProps {
   isOpen: boolean;
-  onOpenChange: (open: boolean) => void; // Standardizzato prop name
-  onSuccess?: () => void; // Opzionale
+  onOpenChange: (open: boolean) => void;
+  onSuccess?: () => void;
   propertyToEdit?: any;
 }
 
-export default function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
+// CORRETTO: Export named function per matchare l'import in Properties.tsx
+export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
   const { toast } = useToast();
-  const queryClient = useQueryClient(); // <--- FONDAMENTALE PER REFRESH
+  const queryClient = useQueryClient(); // <--- PER IL REFRESH
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'real' | 'mobile'>('real');
   
@@ -27,7 +29,7 @@ export default function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, pro
     indirizzo: '', // Solo Real
     veicolo: '',   // Solo Mobile
     targa: '',     // Solo Mobile
-    proprietario: '', // Nuovo campo intestatario
+    proprietario: '', 
     scadenza_bollo: '', 
     scadenza_assicurazione: '',
     scadenza_revisione: ''
@@ -83,7 +85,7 @@ export default function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, pro
           user_id: user.id,
           nome: formData.nome,
           indirizzo: formData.indirizzo,
-          stato: 'uso_personale' // Valore default sicuro
+          stato: 'uso_personale'
         };
 
         if (propertyToEdit) {
@@ -116,14 +118,13 @@ export default function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, pro
         }
       }
 
-      // --- PUNTO CRUCIALE PER IL REFRESH ---
-      // Invalida entrambe le query per sicurezza
+      // --- INVALIDA LA CACHE PER AGGIORNAMENTO IMMEDIATO ---
       queryClient.invalidateQueries({ queryKey: ['properties_real'] });
-      queryClient.invalidateQueries({ queryKey: ['mobile-properties'] }); // Assumo questa key per i veicoli
+      queryClient.invalidateQueries({ queryKey: ['mobile-properties'] });
 
       toast({ title: "Salvato con successo!" });
       if (onSuccess) onSuccess();
-      onOpenChange(false); // Chiude il modale
+      onOpenChange(false);
     } catch (error: any) {
       console.error(error);
       toast({ title: "Errore", description: error.message || "Errore durante il salvataggio", variant: "destructive" });
