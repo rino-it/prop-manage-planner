@@ -8,10 +8,9 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator, Send, User
+  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator, Send, User, Calendar as CalendarIcon
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -53,15 +52,18 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [costAmount, setCostAmount] = useState(ticket?.cost || '');
   const [costVisible, setCostVisible] = useState(ticket?.spesa_visibile_ospite || false);
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [closingNote, setClosingNote] = useState(''); // Nuovo stato per note finali
+  const [closingNote, setClosingNote] = useState('');
 
   const [uploading, setUploading] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
-  // --- NUOVI STATI PER VOCI MULTIPLE E DELEGA ---
+  // --- NUOVI STATI ---
   const [newQuoteItem, setNewQuoteItem] = useState({ desc: '', amount: '' });
   const [selectedDelegatePhone, setSelectedDelegatePhone] = useState<string>('');
+  
+  // Data schedulazione approvazione (Default: Oggi)
+  const [approvalDate, setApprovalDate] = useState(format(new Date(), 'yyyy-MM-dd'));
 
   // 1. Fetch Voci Spesa Dettagliate
   const { data: ticketExpenses = [] } = useQuery({
@@ -75,12 +77,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   const totalDetailedQuotes = ticketExpenses.reduce((acc: number, curr: any) => acc + Number(curr.importo), 0);
 
-  // 2. Fetch Colleghi (con Telefono per la delega)
+  // 2. Fetch Colleghi
   const { data: colleagues = [] } = useQuery({
     queryKey: ['colleagues'],
     queryFn: async () => {
       const { data } = await supabase.from('profiles').select('*');
-      // Mappiamo i dati includendo il telefono per la funzione "Delega"
       return data?.map(u => ({
           id: u.id,
           label: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email,
@@ -91,7 +92,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   });
 
-  // Filtro i colleghi che sono stati assegnati a questo ticket
   const assignedTeamMembers = colleagues.filter((c: any) => assignedTo.includes(c.id));
 
   useEffect(() => {
@@ -102,10 +102,15 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   }, [ticket, isOpen]);
 
-  // --- MUTATIONS PER VOCI MULTIPLE ---
+  // --- MUTATIONS CORRETTE ---
+
+  // FIX: Ora prende l'utente corrente per evitare errori RLS o null
   const addQuoteExpense = useMutation({
     mutationFn: async () => {
-      if (!newQuoteItem.amount || !newQuoteItem.desc) throw new Error("Dati mancanti");
+      if (!newQuoteItem.amount || !newQuoteItem.desc) throw new Error("Inserisci descrizione e importo");
+      
+      const { data: { user } } = await supabase.auth.getUser(); // Ottieni utente corrente
+
       const { error } = await supabase.from('payments').insert({
         ticket_id: ticket.id,
         property_real_id: ticket.property_real_id,
@@ -115,7 +120,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         categoria: 'manutenzione',
         stato: 'da_pagare',
         tipo: 'uscita',
-        scadenza: format(new Date(), 'yyyy-MM-dd')
+        scadenza: approvalDate, // Usa la data schedulata anche qui
+        user_id: user?.id // Usa l'ID dell'utente loggato
       });
       if (error) throw error;
     },
@@ -123,7 +129,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       queryClient.invalidateQueries({ queryKey: ['ticket-expenses'] });
       setNewQuoteItem({ desc: '', amount: '' });
       toast({ title: "Voce aggiunta" });
-    }
+    },
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
 
   const deleteExpense = useMutation({
@@ -134,7 +141,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['ticket-expenses'] })
   });
 
-  // --- FUNZIONI ORIGINALI ---
+  // --- FUNZIONI DI GESTIONE ---
 
   const saveProgress = async () => {
     const primaryAssignee = assignedTo.length > 0 ? assignedTo[0] : null;
@@ -153,7 +160,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     else { 
         toast({ title: "Salvato", description: "Modifiche registrate." }); 
         onUpdate(); 
-        onClose(); // AUTO-CHIUSURA
+        onClose(); 
     }
   };
 
@@ -168,7 +175,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
            quoteUrl = fileName;
         }
 
-        // Se non c'è importo manuale ma ci sono voci, usa la somma delle voci
         const finalAmount = quoteAmount ? parseFloat(quoteAmount.toString().replace(',', '.')) : (totalDetailedQuotes > 0 ? totalDetailedQuotes : null);
 
         const { error } = await supabase.from('tickets').update({
@@ -197,40 +203,52 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   };
 
+  // FIX: Schedulazione Accettazione
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
       setUploading(true);
       try {
+        const { data: { user } } = await supabase.auth.getUser();
         const newState = decision === 'approved' ? 'in_corso' : 'aperto';
+        
         const { error: ticketError } = await supabase.from('tickets')
             .update({ quote_status: decision, stato: newState }).eq('id', ticket.id);
         if (ticketError) throw new Error("Errore ticket: " + ticketError.message);
 
-        // Se approvato e non ci sono voci dettagliate, crea una spesa macro
-        if (decision === 'approved' && totalDetailedQuotes === 0) {
-            const expenseDate = ticket.data_scadenza || new Date(new Date().setDate(new Date().getDate() + 30)).toISOString().split('T')[0];
-            const entityData = ticket.property_real_id 
-                ? { property_real_id: ticket.property_real_id } 
-                : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
-            const importo = ticket.quote_amount || 0;
+        if (decision === 'approved') {
+            // Se ci sono voci dettagliate, aggiorniamo la loro data di scadenza alla data schedulata
+            if (ticketExpenses.length > 0) {
+                const { error: updateExpError } = await supabase.from('payments')
+                    .update({ scadenza: approvalDate }) // <--- SCHEDULAZIONE QUI
+                    .eq('ticket_id', ticket.id);
+                if (updateExpError) throw updateExpError;
+            } else {
+                // Se non ci sono voci, creiamo una macro spesa
+                const entityData = ticket.property_real_id 
+                    ? { property_real_id: ticket.property_real_id } 
+                    : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
+                const importo = ticket.quote_amount || 0;
 
-            const { error: expenseError } = await supabase.from('payments').insert({
-                descrizione: `Spesa Ticket: ${ticket.titolo}`,
-                importo: importo,
-                importo_originale: importo,
-                scadenza: expenseDate,
-                stato: 'da_pagare', 
-                ticket_id: ticket.id,
-                user_id: ticket.user_id,
-                ...entityData
-            });
-            if (expenseError) throw new Error("Errore creazione spesa: " + expenseError.message);
+                const { error: expenseError } = await supabase.from('payments').insert({
+                    descrizione: `Spesa Ticket: ${ticket.titolo}`,
+                    importo: importo,
+                    importo_originale: importo,
+                    scadenza: approvalDate, // <--- SCHEDULAZIONE QUI
+                    stato: 'da_pagare', 
+                    ticket_id: ticket.id,
+                    user_id: user?.id,
+                    ...entityData
+                });
+                if (expenseError) throw new Error("Errore creazione spesa: " + expenseError.message);
+            }
+            toast({ title: "Approvato & Schedulato", description: `Scadenza impostata al ${format(new Date(approvalDate), 'dd/MM/yyyy')}` });
+        } else {
+            toast({ title: "Rifiutato" });
         }
         
-        toast({ title: decision === 'approved' ? "Approvato" : "Rifiutato" });
         setQuoteStatus(decision);
         setStatus(newState);
         onUpdate();
-        onClose(); // AUTO-CHIUSURA
+        onClose();
       } catch (e: any) {
           toast({ title: "Errore", description: e.message, variant: "destructive" });
       } finally {
@@ -266,7 +284,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         setStatus('in_verifica'); 
         toast({ title: "Inviato", description: "Ticket mandato in verifica amministrazione." });
         onUpdate();
-        onClose(); // AUTO-CHIUSURA
+        onClose();
     } catch (error: any) {
         toast({ title: "Errore", description: error.message, variant: "destructive" });
     } finally { setUploading(false); }
@@ -301,7 +319,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     }
   };
 
-  // --- FUNZIONE MANCANTE CHE CAUSAVA IL CRASH ---
+  // Funzione che mancava
   const attemptClose = () => {
       setShowCloseConfirm(true);
       setConfirmText('');
@@ -323,7 +341,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
           setShowCloseConfirm(false);
           toast({ title: "Ticket Chiuso" });
           onUpdate();
-          onClose(); // AUTO-CHIUSURA
+          onClose();
       } catch (err: any) {
           toast({ title: "Errore", description: err.message, variant: "destructive" });
       }
@@ -336,7 +354,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
           setStatus('in_lavorazione');
           toast({ title: "Riaperto" });
           onUpdate();
-          onClose(); // AUTO-CHIUSURA
+          onClose();
       } catch (err: any) {
           toast({ title: "Errore", description: err.message, variant: "destructive" });
       }
@@ -347,7 +365,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         toast({ title: "Seleziona un tecnico", variant: "destructive" });
         return;
     }
-    // Usa la logica di generazione PDF esistente verso il numero selezionato
     generateAndSharePDF(selectedDelegatePhone);
   };
 
@@ -436,9 +453,9 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress} className="w-full sm:w-auto">Salva e Chiudi</Button></div>}
             </TabsContent>
 
-            {/* --- TAB 2: PREVENTIVO (Voci Multiple + Upload Originale) --- */}
+            {/* --- TAB 2: PREVENTIVO (VOCI + SCHEDULAZIONE) --- */}
             <TabsContent value="quote" className="space-y-4 py-4">
-                {/* Voci Multiple */}
+                {/* 1. SEZIONE VOCI DETTAGLIATE */}
                 <div className="bg-slate-50 p-4 rounded-lg border space-y-3">
                     <Label className="font-bold text-slate-700">Dettaglio Voci Spesa (Opzionale)</Label>
                     {!isReadOnly && (
@@ -467,7 +484,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
                 <div className="border-t my-4"></div>
 
-                {/* Logica Originale Preventivo */}
+                {/* 2. GESTIONE APPROVAZIONE CON SCHEDULAZIONE */}
                 {(ticket.quote_amount || ticket.quote_url) && (
                     <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
                         <div className="flex justify-between items-center">
@@ -484,9 +501,15 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
 
                 {quoteStatus === 'pending' && !isReadOnly && (
-                      <div className="grid grid-cols-2 gap-2 mt-2">
-                        <Button className="bg-green-600" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>Approva</Button>
-                        <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>Rifiuta</Button>
+                      <div className="space-y-3 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <Label className="text-blue-800 font-bold flex items-center gap-2"><CalendarIcon className="w-4 h-4"/> Schedula Conferma / Lavori</Label>
+                        <Input type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} className="bg-white border-blue-300"/>
+                        <p className="text-[10px] text-blue-600">Imposta la data in cui il pagamento/lavoro apparirà in dashboard.</p>
+                        
+                        <div className="grid grid-cols-2 gap-2 mt-2">
+                            <Button className="bg-green-600 hover:bg-green-700" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>Approva e Schedula</Button>
+                            <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>Rifiuta</Button>
+                        </div>
                     </div>
                 )}
                 
@@ -502,7 +525,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 )}
             </TabsContent>
 
-            {/* --- TAB 3: DELEGA (Migliorata) --- */}
+            {/* --- TAB 3: DELEGA --- */}
             <TabsContent value="delega" className="space-y-4 py-4">
                 <div className="space-y-4">
                     <Label>Seleziona Tecnico da Contattare</Label>
