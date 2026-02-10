@@ -14,7 +14,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { 
   Calendar, UserCog, Plus, RotateCcw, 
   Eye, Home, User, AlertCircle, StickyNote, 
-  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, Info, Upload, FileSpreadsheet, Trash2, Clock
+  Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter, 
+  Info, Upload, FileSpreadsheet, Trash2, Clock // ICONE AGGIUNTE
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
@@ -27,8 +28,8 @@ import { TicketDocument } from '@/components/TicketPDF';
 // --- MAPPING ESATTO PER IL TUO DB ---
 const PROPERTY_SHORTCUTS = [
   { code: 'M', name: 'MENDOLA', search: 'MENDOLA', color: 'bg-blue-100 text-blue-800' },
-  { code: 'V9', name: 'VERTOVA SUB 703', search: '703', color: 'bg-green-100 text-green-800' }, 
-  { code: 'V7', name: 'VERTOVA SUB 704', search: '704', color: 'bg-emerald-100 text-emerald-800' },
+  { code: 'V9', name: 'VERTOVA SUB 703', search: 'SUB 703', color: 'bg-green-100 text-green-800' }, 
+  { code: 'V7', name: 'VERTOVA SUB 704', search: 'SUB 704', color: 'bg-emerald-100 text-emerald-800' },
   { code: 'C', name: 'CASA ZIE', search: 'ZIE', color: 'bg-yellow-100 text-yellow-800' },
   { code: 'S', name: 'SARDEGNA', search: 'SARDEGNA', color: 'bg-indigo-100 text-indigo-800' },
   { code: 'U', name: 'UFFICIO', search: 'UFFICIO', color: 'bg-gray-100 text-gray-800' },
@@ -137,8 +138,7 @@ export default function Tickets() {
     refetchInterval: 5000 
   });
 
-  // --- FUNZIONI AGGIUNTIVE RICHIESTE (DATA, CLEANUP, IMPORT) ---
-
+  // --- FUNZIONE: CORREZIONE DATE (AAAA-MM-GG) ---
   const sanitizeDate = (dateStr: string | null) => {
       if (!dateStr || dateStr.trim() === '' || dateStr.toLowerCase().includes('mensile')) return null;
       let clean = dateStr.trim();
@@ -152,6 +152,7 @@ export default function Tickets() {
       return null;
   };
 
+  // --- FUNZIONE: ELIMINA ORFANI ---
   const deleteOrphans = async () => {
       if(!confirm("Vuoi eliminare i ticket non assegnati a nessuna proprietà?")) return;
       setIsProcessing(true);
@@ -171,10 +172,12 @@ export default function Tickets() {
       }
   };
 
+  // --- FUNZIONE: IMPORT CSV ---
   const processCSVImport = async () => {
     if (!csvFile) return;
     setIsProcessing(true);
     const reader = new FileReader();
+    
     reader.onload = async (e) => {
         try {
             const text = e.target?.result as string;
@@ -226,8 +229,6 @@ export default function Tickets() {
     reader.readAsText(csvFile);
   };
 
-  // --- FINE FUNZIONI AGGIUNTIVE ---
-
   const handleFileUpload = async (files: File[]) => {
     const uploadedUrls: string[] = [];
     for (const file of files) {
@@ -243,11 +244,8 @@ export default function Tickets() {
     mutationFn: async (newTicket: typeof formData) => {
       setIsUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
       let attachments: string[] = [];
-      if (uploadFiles.length > 0) {
-          attachments = await handleFileUpload(uploadFiles);
-      }
+      if (uploadFiles.length > 0) attachments = await handleFileUpload(uploadFiles);
 
       const payload: any = {
         titolo: newTicket.titolo,
@@ -259,7 +257,7 @@ export default function Tickets() {
         booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id,
         assigned_to: newTicket.assigned_to,
         attachments: attachments,
-        scadenza: newTicket.scadenza || null // NUOVO
+        scadenza: newTicket.scadenza || null
       };
 
       if (targetType === 'real') {
@@ -498,8 +496,6 @@ export default function Tickets() {
                           <Label>Titolo</Label>
                           <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
                       </div>
-                      
-                      {/* NUOVO: CAMPO SCADENZA */}
                       <div className="grid gap-2">
                           <Label>Scadenza (Opzionale)</Label>
                           <Input type="date" value={formData.scadenza} onChange={e => setFormData({...formData, scadenza: e.target.value})} />
