@@ -12,7 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, 
   Calendar as CalendarIcon, ArrowRight, MapPin, User, Wrench, 
-  Wallet, LogOut, Bell, Truck, Circle, Filter, LayoutGrid, List
+  Wallet, LogOut, Bell, Truck, Circle, Filter, LayoutGrid, List, 
+  ExternalLink, ClipboardList // <--- FIX: AGGIUNTE LE ICONE MANCANTI
 } from 'lucide-react';
 import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -45,7 +46,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
 
-  // --- FETCH DATI (Logica invariata per non perdere dati) ---
+  // --- FETCH DATI ---
   const { data: rawData } = useQuery({
     queryKey: ['dashboard-full-data'],
     queryFn: async () => {
@@ -221,7 +222,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
-      {/* KPI CARDS (Restyling Moderno) */}
+      {/* KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card className="bg-white border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all">
           <CardContent className="p-4 flex justify-between items-center">
