@@ -1,17 +1,18 @@
 import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, 
   Calendar as CalendarIcon, ArrowRight, MapPin, User, Wrench, 
-  Wallet, LogOut, Bell, Truck, Circle, ExternalLink, ClipboardList
+  Wallet, LogOut, Bell, Truck, Circle, Filter, LayoutGrid, List
 } from 'lucide-react';
 import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -37,12 +38,14 @@ interface DashboardEvent {
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false);
+  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false); // Apre Sheet Urgenze
+  const [isAgendaOpen, setIsAgendaOpen] = useState(false); // Apre Dialog Agenda Completa
+  const [agendaFilter, setAgendaFilter] = useState('all'); // Filtro Agenda
   
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
 
-  // --- FETCH DATI (MANTENUTO ORIGINALE) ---
+  // --- FETCH DATI (Logica invariata per non perdere dati) ---
   const { data: rawData } = useQuery({
     queryKey: ['dashboard-full-data'],
     queryFn: async () => {
@@ -71,7 +74,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
   });
 
-  // --- MOTORE EVENTI (MANTENUTO ORIGINALE) ---
+  // --- MOTORE EVENTI ---
   const dashboardData = useMemo(() => {
     if (!rawData) return { events: [], kpi: { incassato: 0, atteso: 0, uscite: 0 }, urgencies: [] };
 
@@ -119,9 +122,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     // D. Ticket
     rawData.tickets.forEach(t => {
-      // Usa scadenza se c'è, altrimenti created_at
       const ticketDate = t.scadenza ? new Date(t.scadenza) : new Date(t.created_at);
-      
       events.push({
         id: `tick-${t.id}`, date: ticketDate, type: 'maintenance',
         title: `Ticket: ${t.titolo}`, subtitle: t.properties_real?.nome || 'Generale',
@@ -180,9 +181,18 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     .filter(e => selectedDate && isSameDay(e.date, selectedDate))
     .sort((a, b) => (a.priority === 'alta' ? -1 : 1));
 
-  const monthlyEvents = dashboardData.events
-    .filter(e => selectedDate && isSameMonth(e.date, selectedDate))
-    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  // --- FILTRO AGENDA COMPLETA ---
+  const filteredAgendaEvents = useMemo(() => {
+      const monthEvents = dashboardData.events.filter(e => selectedDate && isSameMonth(e.date, selectedDate));
+      
+      if (agendaFilter === 'all') return monthEvents;
+      if (agendaFilter === 'hospitality') return monthEvents.filter(e => e.type === 'checkin' || e.type === 'checkout');
+      if (agendaFilter === 'finance') return monthEvents.filter(e => e.type === 'payment' || e.type === 'expense');
+      if (agendaFilter === 'maintenance') return monthEvents.filter(e => e.type === 'maintenance' || e.type === 'deadline');
+      if (agendaFilter === 'activity') return monthEvents.filter(e => e.type === 'activity');
+      
+      return monthEvents;
+  }, [dashboardData.events, selectedDate, agendaFilter]);
 
   const modifiers = {
     hasCheckin: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'checkin' || e.type === 'payment')),
@@ -211,150 +221,264 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         </div>
       </div>
 
-      {/* KPI */}
+      {/* KPI CARDS (Restyling Moderno) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-green-50 border-green-200 cursor-pointer hover:bg-green-100" onClick={() => onNavigate('revenue')}>
-          <CardContent className="p-4 md:p-6 flex justify-between items-center">
-            <div><p className="text-xs font-bold text-green-700 uppercase">Incassato (Mese)</p><h2 className="text-xl md:text-2xl font-bold text-green-900">€ {dashboardData.kpi.incassato.toLocaleString()}</h2></div>
-            <TrendingUp className="text-green-600 w-6 h-6 md:w-8 md:h-8" />
+        <Card className="bg-white border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all">
+          <CardContent className="p-4 flex justify-between items-center">
+            <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Incassato (Mese)</p>
+                <h2 className="text-2xl font-bold text-green-600">€ {dashboardData.kpi.incassato.toLocaleString()}</h2>
+            </div>
+            <div className="h-10 w-10 bg-green-50 rounded-full flex items-center justify-center text-green-600">
+                <TrendingUp className="w-6 h-6" />
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-blue-50 border-blue-200 cursor-pointer hover:bg-blue-100" onClick={() => onNavigate('revenue')}>
-          <CardContent className="p-4 md:p-6 flex justify-between items-center">
-            <div><p className="text-xs font-bold text-blue-700 uppercase">Da Incassare</p><h2 className="text-xl md:text-2xl font-bold text-blue-900">€ {dashboardData.kpi.atteso.toLocaleString()}</h2></div>
-            <Clock className="text-blue-600 w-6 h-6 md:w-8 md:h-8" />
+        
+        <Card className="bg-white border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-all">
+          <CardContent className="p-4 flex justify-between items-center">
+            <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Previsione</p>
+                <h2 className="text-2xl font-bold text-blue-600">€ {dashboardData.kpi.atteso.toLocaleString()}</h2>
+            </div>
+            <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
+                <Clock className="w-6 h-6" />
+            </div>
           </CardContent>
         </Card>
-        <Card className="bg-red-50 border-red-200 cursor-pointer hover:bg-red-100" onClick={() => onNavigate('expenses')}>
-          <CardContent className="p-4 md:p-6 flex justify-between items-center">
-            <div><p className="text-xs font-bold text-red-700 uppercase">Uscite (Mese)</p><h2 className="text-xl md:text-2xl font-bold text-red-900">€ {dashboardData.kpi.uscite.toLocaleString()}</h2></div>
-            <TrendingDown className="text-red-600 w-6 h-6 md:w-8 md:h-8" />
+
+        <Card className="bg-white border-l-4 border-l-red-500 shadow-sm hover:shadow-md transition-all">
+          <CardContent className="p-4 flex justify-between items-center">
+            <div>
+                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Uscite (Mese)</p>
+                <h2 className="text-2xl font-bold text-red-600">€ {dashboardData.kpi.uscite.toLocaleString()}</h2>
+            </div>
+            <div className="h-10 w-10 bg-red-50 rounded-full flex items-center justify-center text-red-600">
+                <TrendingDown className="w-6 h-6" />
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ALERT URGENZE */}
-      {dashboardData.urgencies.length > 0 && (
-        <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900">
-          <AlertTriangle className="h-5 w-5" />
-          <AlertTitle className="font-bold ml-2 flex justify-between items-center text-sm md:text-base">
-             <span>Attenzione: {dashboardData.urgencies.length} attività critiche</span>
-             <Button variant="link" className="text-red-900 underline h-auto p-0 text-xs md:text-sm" onClick={() => setIsUrgencyOpen(true)}>
-                Vedi elenco
-             </Button>
-          </AlertTitle>
-        </Alert>
-      )}
-
-      {/* LAYOUT AGENDA E CALENDARIO */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-[600px] h-auto">
+      {/* GRIGLIA PRINCIPALE */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        {/* SX: AGENDA GIORNALIERA */}
-        <Card className="flex flex-col shadow-md border-l-4 border-l-blue-500 h-[500px] lg:h-full">
-            <CardHeader className="bg-slate-50 border-b py-4">
-                <CardTitle className="flex items-center gap-2 text-lg md:text-xl">
-                    <CalendarIcon className="w-5 h-5 md:w-6 md:h-6 text-blue-600"/>
-                    Agenda del Giorno
-                </CardTitle>
-                <p className="text-xs md:text-sm text-gray-500 font-medium">
-                    {selectedDate ? format(selectedDate, 'd MMMM yyyy', { locale: it }) : 'Seleziona una data'}
-                </p>
-            </CardHeader>
-            <ScrollArea className="flex-1 p-0">
-                {dailyEvents.length > 0 ? (
-                    <div className="divide-y divide-slate-100">
-                        {dailyEvents.map((evt) => (
-                            <div key={evt.id} className="p-4 hover:bg-slate-50 transition-colors flex items-start gap-4 group cursor-pointer" onClick={() => onNavigate(evt.targetTab)}>
-                                <div className={`mt-1 p-2 rounded-full shrink-0 ${evt.isCompleted ? 'bg-slate-100 opacity-50' : 'bg-blue-50 text-blue-700'}`}>
-                                    {getIcon(evt.type)}
-                                </div>
-                                <div className={`flex-1 min-w-0 ${evt.isCompleted ? 'opacity-60 grayscale' : ''}`}>
-                                    <div className="flex justify-between items-start">
-                                        <h4 className={`text-sm font-bold truncate pr-2 ${evt.isCompleted ? 'line-through text-slate-500' : 'text-gray-900'}`}>{evt.title}</h4>
-                                        {evt.amount && <span className={`text-xs font-mono font-bold whitespace-nowrap ${evt.type === 'expense' ? 'text-red-600' : 'text-green-600'}`}>{evt.type === 'expense' ? '-' : '+'}€{evt.amount}</span>}
+        {/* COLONNA SX: CALENDARIO E EVENTI GIORNO */}
+        <div className="lg:col-span-1 space-y-6">
+            <Card className="shadow-sm border-slate-200">
+                <div className="p-4 flex justify-center">
+                    <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={setSelectedDate}
+                        locale={it}
+                        modifiers={modifiers}
+                        modifiersStyles={modifiersStyles}
+                        className="rounded-md border shadow-sm w-full max-w-[320px]" 
+                    />
+                </div>
+            </Card>
+            
+            <Card className="shadow-sm border-l-4 border-l-blue-600 h-[300px] flex flex-col">
+                <CardHeader className="py-3 border-b bg-slate-50/50">
+                    <CardTitle className="text-base flex items-center gap-2">
+                        <CalendarIcon className="w-4 h-4 text-blue-600"/> {selectedDate ? format(selectedDate, 'd MMMM', { locale: it }) : 'Oggi'}
+                    </CardTitle>
+                </CardHeader>
+                <ScrollArea className="flex-1">
+                    {dailyEvents.length > 0 ? (
+                        <div className="divide-y divide-slate-100">
+                            {dailyEvents.map((evt) => (
+                                <div key={evt.id} className="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer" onClick={() => onNavigate(evt.targetTab)}>
+                                    <div className="flex items-center gap-3">
+                                        <div className={`p-1.5 rounded-full ${evt.isCompleted ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600'}`}>
+                                            {getIcon(evt.type)}
+                                        </div>
+                                        <div>
+                                            <p className={`text-sm font-semibold ${evt.isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>{evt.title}</p>
+                                            <p className="text-[10px] text-slate-500">{evt.subtitle}</p>
+                                        </div>
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1 truncate"><MapPin className="w-3 h-3 inline mr-1"/>{evt.subtitle}</p>
+                                    {evt.amount && <span className={`text-xs font-bold ${evt.type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>€{evt.amount}</span>}
                                 </div>
-                                <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-blue-500 self-center hidden sm:block" />
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="flex flex-col items-center justify-center h-full text-slate-300">
+                            <CheckCircle className="w-8 h-8 mb-2 opacity-20"/>
+                            <p className="text-xs">Nessun evento oggi.</p>
+                        </div>
+                    )}
+                </ScrollArea>
+            </Card>
+        </div>
+
+        {/* COLONNA DX: CENTRO NOTIFICHE E AGENDA COMPLETA */}
+        <div className="lg:col-span-2 space-y-6">
+            
+            {/* CARD 1: URGENZE (CENTRO NOTIFICHE) */}
+            <Card className="shadow-md border-t-4 border-t-red-500 bg-white">
+                <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-red-100 p-2 rounded-full text-red-600"><AlertTriangle className="w-5 h-5"/></div>
+                        <div>
+                            <CardTitle className="text-lg">Centro Notifiche</CardTitle>
+                            <CardDescription className="text-xs">{dashboardData.urgencies.length} attività richiedono attenzione</CardDescription>
+                        </div>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setIsUrgencyOpen(true)} className="text-xs">
+                        Vedi Tutte ({dashboardData.urgencies.length})
+                    </Button>
+                </CardHeader>
+                <CardContent className="p-0">
+                    <div className="divide-y divide-slate-100">
+                        {dashboardData.urgencies.slice(0, 3).map((u) => (
+                            <div key={u.id} className="p-4 flex items-center justify-between hover:bg-red-50/30 transition-colors cursor-pointer" onClick={() => onNavigate(u.targetTab)}>
+                                <div className="flex items-start gap-3">
+                                    <div className="mt-0.5 text-red-500">{getIcon(u.type)}</div>
+                                    <div>
+                                        <h4 className="text-sm font-bold text-slate-800">{u.title}</h4>
+                                        <p className="text-xs text-slate-500 flex items-center gap-1">
+                                            <Clock className="w-3 h-3"/> Scadenza: {format(u.date, 'dd MMM yyyy')}
+                                        </p>
+                                    </div>
+                                </div>
+                                <ArrowRight className="w-4 h-4 text-slate-300"/>
                             </div>
                         ))}
+                        {dashboardData.urgencies.length === 0 && (
+                            <div className="p-6 text-center text-slate-400 text-sm">Nessuna urgenza attiva. Ottimo lavoro! 🚀</div>
+                        )}
                     </div>
-                ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
-                        <CheckCircle className="w-12 h-12 mb-3 opacity-10" />
-                        <p className="text-sm">Nessuna attività.</p>
-                        <Button variant="link" onClick={() => setSelectedDate(new Date())}>Vai a Oggi</Button>
-                    </div>
-                )}
-            </ScrollArea>
-        </Card>
+                </CardContent>
+            </Card>
 
-        {/* DX: CALENDARIO E RIEPILOGO MESE */}
-        <Card className="flex flex-col shadow-md h-auto lg:h-full">
-            <div className="p-2 md:p-4 flex justify-center bg-white border-b">
-                <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    locale={it}
-                    modifiers={modifiers}
-                    modifiersStyles={modifiersStyles}
-                    className="rounded-md border shadow-sm w-full max-w-[350px]" 
-                />
-            </div>
-            
-            <div className="bg-slate-50 px-4 py-2 border-b flex justify-between items-center">
-                <span className="text-xs font-bold uppercase text-slate-500">Mese</span>
-                <Badge variant="outline" className="bg-white">{monthlyEvents.length} Eventi</Badge>
-            </div>
-
-            <ScrollArea className="flex-1 h-[250px] lg:h-auto"> 
-                <div className="divide-y">
-                    {monthlyEvents.map(evt => (
-                        <div key={evt.id} className="p-3 flex items-center justify-between hover:bg-slate-50 cursor-pointer group" onClick={() => onNavigate(evt.targetTab)}>
-                            <div className="flex items-center gap-3 overflow-hidden">
-                                {evt.isCompleted ? <CheckCircle className="w-4 h-4 text-green-500 shrink-0"/> : <Circle className="w-4 h-4 text-slate-300 shrink-0"/>}
-                                <div className="min-w-0">
-                                    <p className={`text-sm font-medium truncate ${evt.isCompleted ? 'text-slate-400 line-through' : 'text-slate-700'}`}>
-                                        <span className="font-mono text-xs text-slate-400 mr-2">{format(evt.date, 'dd/MM')}</span>
-                                        {evt.title}
-                                    </p>
-                                </div>
-                            </div>
+            {/* CARD 2: AGENDA MENSILE (SECONDO LIVELLO) */}
+            <Card className="shadow-md border-t-4 border-t-indigo-500 bg-white">
+                <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
+                    <div className="flex items-center gap-2">
+                        <div className="bg-indigo-100 p-2 rounded-full text-indigo-600"><LayoutGrid className="w-5 h-5"/></div>
+                        <div>
+                            <CardTitle className="text-lg">Panoramica {selectedDate ? format(selectedDate, 'MMMM') : 'Mese'}</CardTitle>
+                            <CardDescription className="text-xs">Prossimi eventi in programma</CardDescription>
                         </div>
-                    ))}
-                    {monthlyEvents.length === 0 && <p className="text-center text-xs text-gray-400 py-8">Nessun dato.</p>}
-                </div>
-            </ScrollArea>
-        </Card>
+                    </div>
+                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-xs" size="sm" onClick={() => setIsAgendaOpen(true)}>
+                        <List className="w-3 h-3 mr-2"/> Apri Agenda Completa
+                    </Button>
+                </CardHeader>
+                <CardContent className="p-4">
+                    {/* Anteprima Prossimi 3 Eventi */}
+                    <div className="space-y-2">
+                        {dashboardData.events
+                            .filter(e => isBefore(new Date(), e.date) && !e.isCompleted) // Solo futuri
+                            .slice(0, 3)
+                            .map((e) => (
+                                <div key={e.id} className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100">
+                                    <div className="bg-white p-1 rounded text-slate-500 shadow-sm text-xs font-bold w-10 text-center">
+                                        {format(e.date, 'dd')}
+                                        <span className="block text-[8px] uppercase">{format(e.date, 'MMM')}</span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold truncate">{e.title}</p>
+                                        <p className="text-[10px] text-slate-500 truncate">{e.subtitle}</p>
+                                    </div>
+                                    <Badge variant="secondary" className="text-[10px] bg-white border-slate-200 text-slate-600">{e.type}</Badge>
+                                </div>
+                            ))
+                        }
+                        {dashboardData.events.filter(e => isBefore(new Date(), e.date) && !e.isCompleted).length === 0 && (
+                            <p className="text-center text-xs text-slate-400">Nessun evento futuro imminente.</p>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
+
+        </div>
       </div>
 
-      {/* DIALOG "TUTTE LE URGENZE" */}
-      <Dialog open={isUrgencyOpen} onOpenChange={setIsUrgencyOpen}>
-        <DialogContent className="sm:max-w-2xl w-[95vw] max-h-[80vh] flex flex-col">
-            <DialogHeader>
-                <DialogTitle className="flex items-center gap-2 text-red-600">
-                    <AlertTriangle className="w-5 h-5"/> Centro Notifiche ({dashboardData.urgencies.length})
-                </DialogTitle>
-                <DialogDescription>Attività scadute o ad alta priorità.</DialogDescription>
-            </DialogHeader>
-            <ScrollArea className="flex-1 pr-2">
-                <div className="space-y-2 mt-2">
-                    {dashboardData.urgencies.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-3 md:p-4 border rounded-lg bg-red-50/50 hover:bg-red-50 cursor-pointer transition-colors" onClick={() => { setIsUrgencyOpen(false); onNavigate(u.targetTab); }}>
-                            <div className="flex gap-3 items-start overflow-hidden">
-                                <div className="mt-1 bg-white p-1.5 rounded border shadow-sm text-red-600 shrink-0">{getIcon(u.type)}</div>
-                                <div className="min-w-0">
-                                    <h4 className="font-bold text-gray-900 text-sm truncate">{u.title}</h4>
-                                    <p className="text-xs text-gray-600 truncate">{u.subtitle}</p>
-                                    <p className="text-xs text-red-500 font-medium mt-1">Scadenza: {format(u.date, 'dd MMM yyyy')}</p>
-                                </div>
-                            </div>
-                            <Button size="sm" variant="ghost" className="shrink-0"><ArrowRight className="w-4 h-4"/></Button>
+      {/* --- SHEET 1: CENTRO NOTIFICHE (SIDEBAR DESTRA) --- */}
+      <Sheet open={isUrgencyOpen} onOpenChange={setIsUrgencyOpen}>
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+            <SheetHeader className="mb-4">
+                <SheetTitle className="flex items-center gap-2 text-red-600">
+                    <AlertTriangle className="w-5 h-5"/> Centro Notifiche
+                </SheetTitle>
+                <SheetDescription>Tutte le attività scadute o con priorità alta.</SheetDescription>
+            </SheetHeader>
+            <div className="space-y-3">
+                {dashboardData.urgencies.map((u) => (
+                    <div key={u.id} className="p-3 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate(u.targetTab)}>
+                        <div className="flex justify-between items-start mb-1">
+                            <h4 className="font-bold text-sm text-red-900">{u.title}</h4>
+                            <Badge variant="destructive" className="text-[10px]">URGENTE</Badge>
                         </div>
-                    ))}
-                </div>
-            </ScrollArea>
+                        <p className="text-xs text-red-700 mb-2">{u.subtitle}</p>
+                        <div className="flex items-center gap-2 text-xs text-red-500 font-medium">
+                            <Clock className="w-3 h-3"/> Scadenza: {format(u.date, 'dd MMMM yyyy')}
+                        </div>
+                    </div>
+                ))}
+            </div>
+        </SheetContent>
+      </Sheet>
+
+      {/* --- DIALOG 2: AGENDA COMPLETA (SECONDO LIVELLO) --- */}
+      <Dialog open={isAgendaOpen} onOpenChange={setIsAgendaOpen}>
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col">
+            <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                    <CalendarIcon className="w-5 h-5 text-indigo-600"/> Agenda Mensile: {selectedDate ? format(selectedDate, 'MMMM yyyy') : ''}
+                </DialogTitle>
+                <DialogDescription>Gestione completa degli eventi del mese.</DialogDescription>
+            </DialogHeader>
+
+            <Tabs defaultValue="all" className="flex-1 flex flex-col overflow-hidden" onValueChange={setAgendaFilter}>
+                <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-slate-100 p-1">
+                    <TabsTrigger value="all" className="text-xs">Tutti</TabsTrigger>
+                    <TabsTrigger value="hospitality" className="text-xs">🏠 Ospitalità</TabsTrigger>
+                    <TabsTrigger value="finance" className="text-xs">💶 Finanze</TabsTrigger>
+                    <TabsTrigger value="maintenance" className="text-xs">🔧 Manutenzione</TabsTrigger>
+                    <TabsTrigger value="activity" className="text-xs">📝 Attività</TabsTrigger>
+                </TabsList>
+                
+                <ScrollArea className="flex-1 mt-2 pr-2 border rounded-md bg-slate-50/30 p-2">
+                    <div className="space-y-1">
+                        {filteredAgendaEvents.length === 0 ? (
+                            <div className="text-center py-20 text-slate-400">
+                                <Filter className="w-12 h-12 mx-auto mb-2 opacity-20"/>
+                                <p>Nessun evento trovato per questo filtro.</p>
+                            </div>
+                        ) : (
+                            filteredAgendaEvents.map((evt) => (
+                                <div key={evt.id} className="flex items-center gap-4 p-3 bg-white border border-slate-100 rounded-lg hover:shadow-sm transition-all cursor-pointer group" onClick={() => onNavigate(evt.targetTab)}>
+                                    <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg font-bold ${evt.isCompleted ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600'}`}>
+                                        <span className="text-lg leading-none">{format(evt.date, 'dd')}</span>
+                                        <span className="text-[9px] uppercase leading-none">{format(evt.date, 'MMM')}</span>
+                                    </div>
+                                    
+                                    <div className={`flex-1 ${evt.isCompleted ? 'opacity-50' : ''}`}>
+                                        <div className="flex justify-between">
+                                            <h4 className="font-semibold text-sm text-slate-800">{evt.title}</h4>
+                                            {evt.amount && <span className={`text-xs font-mono font-bold ${evt.type === 'expense' ? 'text-red-600' : 'text-green-600'}`}>€{evt.amount}</span>}
+                                        </div>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <Badge variant="outline" className="text-[9px] bg-slate-50">{evt.type}</Badge>
+                                            <span className="text-xs text-slate-500 truncate flex items-center gap-1">
+                                                <MapPin className="w-3 h-3"/> {evt.subtitle}
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div className="text-slate-300 group-hover:text-blue-500">
+                                        <ExternalLink className="w-4 h-4"/>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </ScrollArea>
+            </Tabs>
         </DialogContent>
       </Dialog>
 
