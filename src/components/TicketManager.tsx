@@ -8,7 +8,6 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
-// --- FIX IMPORT: Aggiunto Select e componenti correlati ---
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { 
@@ -40,7 +39,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const [dueDate, setDueDate] = useState(ticket?.data_scadenza || '');
   
   const [status, setStatus] = useState(ticket?.stato || 'aperto');
-  const [priority, setPriority] = useState(ticket?.priorita || 'media'); // Aggiunto stato priorità
+  const [priority, setPriority] = useState(ticket?.priorita || 'media'); 
   const [quoteStatus, setQuoteStatus] = useState(ticket?.quote_status || 'none');
 
   const [assignedTo, setAssignedTo] = useState<string[]>(
@@ -109,18 +108,22 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   const addQuoteExpense = useMutation({
     mutationFn: async () => {
       if (!newQuoteItem.amount || !newQuoteItem.desc) throw new Error("Inserisci descrizione e importo");
-      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { data: { user } } = await supabase.auth.getUser(); // Ottieni utente
+      const amountVal = parseFloat(newQuoteItem.amount); // Parsifica valore
 
+      // FIX ERRORE 400: Aggiunto importo_originale
       const { error } = await supabase.from('payments').insert({
         ticket_id: ticket.id,
         property_real_id: ticket.property_real_id,
         property_mobile_id: ticket.property_mobile_id,
-        importo: parseFloat(newQuoteItem.amount),
+        importo: amountVal,
+        importo_originale: amountVal, // <--- CAMPO MANCANTE AGGIUNTO
         descrizione: `[Preventivo] ${newQuoteItem.desc}`,
         categoria: 'manutenzione',
         stato: 'da_pagare',
         tipo: 'uscita',
-        scadenza: approvalDate,
+        scadenza: approvalDate, // Usa la data schedulata
         user_id: user?.id
       });
       if (error) throw error;
@@ -152,7 +155,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         assigned_partner_id: primaryAssignee,
         data_scadenza: dueDate || null,
         stato: status,
-        priorita: priority // Aggiorna anche la priorità
+        priorita: priority
       }).eq('id', ticket.id);
 
     if (error) toast({ title: "Errore", description: error.message, variant: "destructive" });
@@ -546,6 +549,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             <TabsContent value="delega" className="space-y-4 py-4">
                 <div className="space-y-4">
                     <Label>Seleziona Tecnico da Contattare</Label>
+                    
                     {assignedTeamMembers.length > 0 ? (
                         <div className="grid gap-2">
                             <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Assegnati al Ticket</p>
@@ -582,7 +586,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                          </Select>
                     </div>
 
-                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" onClick={handleDelegate} disabled={!selectedDelegatePhone || selectedDelegatePhone === 'nophone'}>
+                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" onClick={() => generateAndSharePDF(selectedDelegatePhone)} disabled={!selectedDelegatePhone || selectedDelegatePhone === 'nophone'}>
                         <Send className="w-4 h-4"/> Invia Delega WhatsApp
                     </Button>
                 </div>
