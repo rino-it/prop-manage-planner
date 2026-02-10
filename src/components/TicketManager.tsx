@@ -109,21 +109,20 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
     mutationFn: async () => {
       if (!newQuoteItem.amount || !newQuoteItem.desc) throw new Error("Inserisci descrizione e importo");
       
-      const { data: { user } } = await supabase.auth.getUser(); // Ottieni utente
-      const amountVal = parseFloat(newQuoteItem.amount); // Parsifica valore
+      const { data: { user } } = await supabase.auth.getUser(); 
+      const amountVal = parseFloat(newQuoteItem.amount); 
 
-      // FIX ERRORE 400: Aggiunto importo_originale
+      // FIX: Rimosso 'tipo', aggiunto 'importo_originale'
       const { error } = await supabase.from('payments').insert({
         ticket_id: ticket.id,
         property_real_id: ticket.property_real_id,
         property_mobile_id: ticket.property_mobile_id,
         importo: amountVal,
-        importo_originale: amountVal, // <--- CAMPO MANCANTE AGGIUNTO
+        importo_originale: amountVal, 
         descrizione: `[Preventivo] ${newQuoteItem.desc}`,
         categoria: 'manutenzione',
         stato: 'da_pagare',
-        tipo: 'uscita',
-        scadenza: approvalDate, // Usa la data schedulata
+        scadenza: approvalDate, 
         user_id: user?.id
       });
       if (error) throw error;
@@ -217,11 +216,13 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
         if (decision === 'approved') {
             if (ticketExpenses.length > 0) {
+                // Aggiorna data scadenza voci esistenti
                 const { error: updateExpError } = await supabase.from('payments')
                     .update({ scadenza: approvalDate })
                     .eq('ticket_id', ticket.id);
                 if (updateExpError) throw updateExpError;
             } else {
+                // Crea macro voce se non ne esistono
                 const entityData = ticket.property_real_id 
                     ? { property_real_id: ticket.property_real_id } 
                     : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
@@ -586,7 +587,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                          </Select>
                     </div>
 
-                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" onClick={() => generateAndSharePDF(selectedDelegatePhone)} disabled={!selectedDelegatePhone || selectedDelegatePhone === 'nophone'}>
+                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" onClick={handleDelegate} disabled={!selectedDelegatePhone || selectedDelegatePhone === 'nophone'}>
                         <Send className="w-4 h-4"/> Invia Delega WhatsApp
                     </Button>
                 </div>
