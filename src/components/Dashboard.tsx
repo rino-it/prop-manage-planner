@@ -42,7 +42,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
 
-  // --- FETCH DATI ---
+  // --- FETCH DATI (MANTENUTO ORIGINALE) ---
   const { data: rawData } = useQuery({
     queryKey: ['dashboard-full-data'],
     queryFn: async () => {
@@ -71,7 +71,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
   });
 
-  // --- MOTORE EVENTI ---
+  // --- MOTORE EVENTI (MANTENUTO ORIGINALE) ---
   const dashboardData = useMemo(() => {
     if (!rawData) return { events: [], kpi: { incassato: 0, atteso: 0, uscite: 0 }, urgencies: [] };
 
@@ -119,12 +119,13 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     // D. Ticket
     rawData.tickets.forEach(t => {
-      const ticketDate = t.data_scadenza ? new Date(t.data_scadenza) : new Date(t.created_at);
+      // Usa scadenza se c'è, altrimenti created_at
+      const ticketDate = t.scadenza ? new Date(t.scadenza) : new Date(t.created_at);
       
       events.push({
         id: `tick-${t.id}`, date: ticketDate, type: 'maintenance',
         title: `Ticket: ${t.titolo}`, subtitle: t.properties_real?.nome || 'Generale',
-        priority: t.priorita === 'alta' ? 'alta' : 'media', status: t.stato, targetTab: 'tickets', // Changed targetTab to 'tickets'
+        priority: t.priorita === 'alta' ? 'alta' : 'media', status: t.stato, targetTab: 'tickets', 
         isCompleted: t.stato === 'risolto'
       });
     });
@@ -237,25 +238,15 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <Alert variant="destructive" className="bg-red-50 border-red-200 text-red-900">
           <AlertTriangle className="h-5 w-5" />
           <AlertTitle className="font-bold ml-2 flex justify-between items-center text-sm md:text-base">
-             <span>Attenzione ({dashboardData.urgencies.length})</span>
+             <span>Attenzione: {dashboardData.urgencies.length} attività critiche</span>
              <Button variant="link" className="text-red-900 underline h-auto p-0 text-xs md:text-sm" onClick={() => setIsUrgencyOpen(true)}>
-                Vedi tutte
+                Vedi elenco
              </Button>
           </AlertTitle>
-          <AlertDescription className="mt-2 hidden md:block">
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2">
-                {dashboardData.urgencies.slice(0, 4).map((u, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-sm bg-white/60 p-1.5 rounded cursor-pointer hover:bg-white" onClick={() => onNavigate(u.targetTab)}>
-                        <ArrowRight className="w-3 h-3 shrink-0"/> <span className="truncate">{u.title}</span>
-                    </div>
-                ))}
-             </div>
-          </AlertDescription>
         </Alert>
       )}
 
       {/* LAYOUT AGENDA E CALENDARIO */}
-      {/* Mobile: Stack (col-1), Desktop: Side-by-Side (col-2) */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:h-[600px] h-auto">
         
         {/* SX: AGENDA GIORNALIERA */}
@@ -308,7 +299,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     locale={it}
                     modifiers={modifiers}
                     modifiersStyles={modifiersStyles}
-                    className="rounded-md border shadow-sm w-full max-w-[350px]" // Fit mobile width
+                    className="rounded-md border shadow-sm w-full max-w-[350px]" 
                 />
             </div>
             
@@ -317,7 +308,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <Badge variant="outline" className="bg-white">{monthlyEvents.length} Eventi</Badge>
             </div>
 
-            <ScrollArea className="flex-1 h-[250px] lg:h-auto"> {/* Altezza fissa su mobile per scroll */}
+            <ScrollArea className="flex-1 h-[250px] lg:h-auto"> 
                 <div className="divide-y">
                     {monthlyEvents.map(evt => (
                         <div key={evt.id} className="p-3 flex items-center justify-between hover:bg-slate-50 cursor-pointer group" onClick={() => onNavigate(evt.targetTab)}>
@@ -343,9 +334,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         <DialogContent className="sm:max-w-2xl w-[95vw] max-h-[80vh] flex flex-col">
             <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-red-600">
-                    <AlertTriangle className="w-5 h-5"/> Centro Notifiche
+                    <AlertTriangle className="w-5 h-5"/> Centro Notifiche ({dashboardData.urgencies.length})
                 </DialogTitle>
-                <DialogDescription>Attività che richiedono attenzione.</DialogDescription>
+                <DialogDescription>Attività scadute o ad alta priorità.</DialogDescription>
             </DialogHeader>
             <ScrollArea className="flex-1 pr-2">
                 <div className="space-y-2 mt-2">
