@@ -1,145 +1,141 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2, 
-  CheckCircle, FileText, CreditCard, Calendar, Clock, ShieldCheck, UploadCloud, Send, UserCog, AlertTriangle
-} from 'lucide-react';
+import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useNavigate } from 'react-router-dom';
 
 export default function TenantPortal() {
-  const { id } = useParams();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   
-  const [contactForm, setContactForm] = useState({ email: '', phone: '' });
-  const [ticketForm, setTicketForm] = useState({ titolo: '', descrizione: '' });
-  
-  // Stato per Ticket Pagamento
+  const [newTicketOpen, setNewTicketOpen] = useState(false);
+  const [ticketData, setTicketData] = useState({ titolo: '', descrizione: '', priorita: 'bassa' });
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  const [isUploading, setIsUploading] = useState(false);
-  const [isSavingContact, setIsSavingContact] = useState(false);
-
-  // --- QUERIES (uguali a prima) ---
-  const { data: booking, isLoading } = useQuery({
-    queryKey: ['tenant-booking', id],
+  // 1. Sessione & Booking (Logica Autenticata per Inquilini)
+  const { data: sessionData, isLoading: sessionLoading } = useQuery({
+    queryKey: ['tenant-session'],
     queryFn: async () => {
-      const { data } = await supabase.from('bookings').select('*, properties_real(*)').eq('id', id).single();
-      return data;
-    },
-    enabled: !!id,
-    refetchInterval: 5000 
-  });
-
-  const { data: documents } = useQuery({
-    queryKey: ['tenant-docs', id],
-    queryFn: async () => {
-      const { data } = await supabase.from('booking_documents').select('*').eq('booking_id', id).order('uploaded_at', { ascending: false });
-      return data || [];
-    },
-    enabled: !!id
-  });
-
-  const { data: payments } = useQuery({
-    queryKey: ['tenant-payments', id],
-    queryFn: async () => {
-      const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', id).order('data_scadenza', { ascending: true });
-      return data || [];
-    },
-    enabled: !!id
-  });
-
-  const { data: myTickets } = useQuery({
-    queryKey: ['tenant-tickets', id],
-    queryFn: async () => {
-      const { data } = await supabase.from('tickets').select('*').eq('booking_id', id).order('created_at', { ascending: false });
-      return data || [];
-    },
-    enabled: !!id
-  });
-
-  // --- LOGICA ---
-  const hasContactInfo = booking?.guest_phone && booking?.guest_email;
-  const hasDocuments = documents && documents.length > 0;
-  const isApproved = booking?.documents_approved === true;
-  
-  let currentStep = 1;
-  if (hasContactInfo) currentStep = 2;
-  if (hasContactInfo && hasDocuments) currentStep = 3; 
-  if (isApproved) currentStep = 4; 
-
-  const isCheckinUnlocked = currentStep === 4;
-  const isPendingApproval = currentStep === 3;
-
-  // --- AZIONI ---
-  const saveContactInfo = async () => {
-    if (!contactForm.email || !contactForm.phone) return;
-    setIsSavingContact(true);
-    try {
-        await supabase.from('bookings').update({ guest_email: contactForm.email, guest_phone: contactForm.phone }).eq('id', id);
-        toast({ title: "Contatti Salvati" });
-        queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
-    } catch (e) { toast({ title: "Errore", variant: "destructive" }); } 
-    finally { setIsSavingContact(false); }
-  };
-
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    try {
-      const file = event.target.files?.[0];
-      if (!file || !booking) return;
-      setIsUploading(true);
-      const fileName = `doc_${booking.id}_${Date.now()}.${file.name.split('.').pop()}`;
-      const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
-      if (upError) throw upError;
-
-      await supabase.from('booking_documents').insert({
-        booking_id: booking.id, filename: file.name, file_url: fileName, status: 'in_revisione'
-      });
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non autenticato");
       
-      toast({ title: "Caricato!", description: "Documento in verifica." });
-      queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
-    } catch (error: any) { toast({ title: "Errore upload", variant: "destructive" }); } 
-    finally { setIsUploading(false); }
-  };
+      const today = new Date().toISOString().split('T')[0];
+      const { data: booking, error } = await supabase
+        .from('bookings')
+        .select(`
+            *,
+            properties_real(id, nome, indirizzo, immagine_url, wifi_ssid, wifi_password),
+            properties_mobile(id, veicolo, targa, immagine_url)
+        `)
+        .eq('email', user.email)
+        .lte('data_inizio', today)
+        .gte('data_fine', today)
+        .maybeSingle();
 
-  const createTicket = useMutation({
-    mutationFn: async () => {
-      if (!booking) return;
-      await supabase.from('tickets').insert({
-        booking_id: booking.id, property_real_id: booking.property_id, titolo: ticketForm.titolo, descrizione: ticketForm.descrizione, stato: 'aperto', creato_da: 'ospite'
-      });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-      toast({ title: "Richiesta inviata" });
-      setTicketForm({ titolo: '', descrizione: '' });
+      if (error) console.error(error);
+      return { user, booking };
     }
   });
 
-  // FIX: Creazione Ticket Pagamento
+  const booking = sessionData?.booking;
+  const property = booking?.properties_real || booking?.properties_mobile;
+  const isReal = !!booking?.properties_real;
+
+  // 2. Pagamenti
+  const { data: payments = [] } = useQuery({
+    queryKey: ['tenant-payments', booking?.id],
+    queryFn: async () => {
+      if (!booking) return [];
+      const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', booking.id).order('data_scadenza', { ascending: true });
+      return data || [];
+    },
+    enabled: !!booking
+  });
+
+  // 3. Ticket
+  const { data: tickets = [] } = useQuery({
+    queryKey: ['tenant-tickets', booking?.id],
+    queryFn: async () => {
+      if (!booking) return [];
+      const { data } = await supabase.from('tickets').select('*').eq('booking_id', booking.id).order('created_at', { ascending: false });
+      return data || [];
+    },
+    enabled: !!booking
+  });
+
+  // 4. DOCUMENTI CONDIVISI (NUOVO - Come GuestPortal)
+  const { data: documents = [] } = useQuery({
+    queryKey: ['tenant-documents', booking?.id],
+    queryFn: async () => {
+      if (!booking) return [];
+      const { data } = await supabase.from('booking_documents').select('*').eq('booking_id', booking.id).order('uploaded_at', { ascending: false });
+      return data || [];
+    },
+    enabled: !!booking
+  });
+
+  // 5. ESPERIENZE / SERVIZI (NUOVO - Come GuestPortal)
+  const { data: services } = useQuery({
+    queryKey: ['guest-services'],
+    queryFn: async () => {
+        const { data } = await supabase.from('services').select('*').eq('active', true);
+        return data || [];
+    }
+  });
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate('/auth');
+  };
+
+  const handleCreateTicket = useMutation({
+    mutationFn: async () => {
+      if (!booking) throw new Error("Nessuna prenotazione attiva");
+      const { error } = await supabase.from('tickets').insert({
+        booking_id: booking.id,
+        user_id: sessionData?.user.id,
+        property_real_id: isReal ? property.id : null,
+        property_mobile_id: !isReal ? property.id : null,
+        titolo: ticketData.titolo,
+        descrizione: ticketData.descrizione,
+        priorita: ticketData.priorita,
+        stato: 'aperto',
+        source: 'tenant_portal'
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
+      setNewTicketOpen(false);
+      setTicketData({ titolo: '', descrizione: '', priorita: 'bassa' });
+      toast({ title: "Ticket inviato" });
+    },
+    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
+  });
+
   const sendPaymentNotice = useMutation({
       mutationFn: async () => {
           if (!booking || !paymentTicketOpen) return;
           await supabase.from('tickets').insert({
               booking_id: booking.id,
-              property_real_id: booking.property_id,
+              property_real_id: isReal ? property.id : null,
               titolo: `Pagamento: ${paymentTicketOpen.tipo}`,
               descrizione: `L'inquilino prevede di pagare il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
               stato: 'aperto',
-              creato_da: 'ospite',
+              source: 'tenant_portal',
               related_payment_id: paymentTicketOpen.id,
               promised_payment_date: payPromise.date,
               promised_payment_method: payPromise.method
@@ -153,160 +149,167 @@ export default function TenantPortal() {
       }
   });
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({ title: "Copiato!", duration: 1500 });
+  const downloadDoc = async (path: string) => {
+    try {
+        const { data, error } = await supabase.storage.from('documents').createSignedUrl(path, 60);
+        if (error) throw error;
+        if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    } catch (e: any) {
+        toast({ title: "Impossibile aprire", description: "File non trovato.", variant: "destructive" });
+    }
   };
 
-  const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast({ title: "Copiato!" });
+  };
 
-  if (isLoading || !booking) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-slate-400"/></div>;
+  if (sessionLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600"/></div>;
+
+  if (!booking) {
+    return (
+      <div className="flex flex-col h-screen items-center justify-center p-4 text-center bg-slate-50">
+        <Home className="w-16 h-16 text-slate-300 mb-4"/>
+        <h1 className="text-2xl font-bold text-slate-800">Nessuna Locazione Attiva</h1>
+        <p className="text-slate-500 max-w-md mt-2">Non risultano contratti attivi per ({sessionData?.user.email}).</p>
+        <Button variant="outline" className="mt-6" onClick={handleLogout}>Esci</Button>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-50 font-sans pb-20">
-      
-      {/* HEADER */}
-      <div className="bg-white border-b sticky top-0 z-10 shadow-sm px-4 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-             <img src="/prop-manager-logo.svg" alt="Logo" className="h-8 w-auto object-contain" />
-          </div>
-          <div className="text-right">
-             <p className="text-sm font-bold text-slate-900 truncate max-w-[150px]">{booking.properties_real?.nome}</p>
-             <p className="text-xs text-slate-500">Portale Inquilino</p>
-          </div>
-      </div>
-
-      <div className="max-w-xl mx-auto p-4 space-y-6 mt-2">
-
-        {/* TIMELINE */}
-        <div className="flex justify-between items-center px-4 py-2 bg-white rounded-full border shadow-sm mx-2">
-            {[{ s: 1, l: 'Contatti' }, { s: 2, l: 'Documenti' }, { s: 3, l: 'Verifica' }, { s: 4, l: 'Accesso' }].map((step) => (
-                <div key={step.s} className="flex flex-col items-center gap-1">
-                    <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${currentStep >= step.s ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-300'}`}>
-                        {currentStep > step.s ? <CheckCircle className="w-4 h-4"/> : step.s}
-                    </div>
-                    <span className={`text-[9px] uppercase font-bold ${currentStep >= step.s ? 'text-slate-900' : 'text-slate-300'}`}>{step.l}</span>
-                </div>
-            ))}
+    <div className="min-h-screen bg-slate-50 pb-20">
+      <header className="bg-white border-b sticky top-0 z-10 px-4 h-16 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2">
+            <div className="bg-blue-100 p-2 rounded-lg"><Home className="w-5 h-5 text-blue-600"/></div>
+            <div>
+                <h1 className="font-bold text-sm sm:text-base text-slate-900 truncate max-w-[150px]">{isReal ? property.nome : property.veicolo}</h1>
+                <p className="text-[10px] sm:text-xs text-slate-500 truncate">{isReal ? property.indirizzo : property.targa}</p>
+            </div>
         </div>
+        <Button variant="ghost" size="icon" onClick={handleLogout}><LogOut className="w-5 h-5 text-slate-400"/></Button>
+      </header>
 
-        {/* SMART CARD */}
-        <Card className={`border-2 overflow-hidden shadow-lg transition-all duration-500 ${isCheckinUnlocked ? 'border-green-400 bg-white' : isPendingApproval ? 'border-yellow-400 bg-yellow-50' : 'border-red-200 bg-white'}`}>
-            <CardHeader className="pb-2 border-b border-black/5">
-                <CardTitle className="flex justify-between items-center text-lg">
-                    {isCheckinUnlocked ? <span className="text-green-700">Accesso Attivo</span> : isPendingApproval ? <span className="text-yellow-700">Verifica in corso...</span> : <span className="text-red-700">Azione Richiesta</span>}
-                    {isCheckinUnlocked ? <Unlock className="text-green-600 w-6 h-6"/> : isPendingApproval ? <Clock className="text-yellow-600 w-6 h-6"/> : <Lock className="text-red-500 w-6 h-6"/>}
-                </CardTitle>
+      <main className="max-w-5xl mx-auto p-4 space-y-6">
+        <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-none shadow-lg">
+            <CardHeader>
+                <CardTitle className="text-xl">Ciao, {booking.nome_ospite.split(' ')[0]} 👋</CardTitle>
+                <CardDescription className="text-blue-100">Scadenza contratto: <strong>{format(new Date(booking.data_fine), 'dd MMM yyyy')}</strong></CardDescription>
             </CardHeader>
-            <CardContent className="pt-6 space-y-6">
-                
-                {currentStep === 1 && (
-                    <div className="space-y-4 animate-in fade-in">
-                        <p className="text-sm text-slate-600 text-center">Inserisci i tuoi recapiti per iniziare.</p>
-                        <div className="space-y-3">
-                            <div><Label className="text-xs uppercase text-slate-500">Email</Label><Input placeholder="tua@email.com" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
-                            <div><Label className="text-xs uppercase text-slate-500">Telefono</Label><Input placeholder="+39 ..." value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
-                        </div>
-                        <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact}>{isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : "Salva e Procedi"}</Button>
+            {isReal && property.wifi_password && (
+                <CardFooter>
+                    <div className="bg-white/10 p-3 rounded-lg flex items-center gap-3 w-full cursor-pointer hover:bg-white/20 transition-colors" onClick={() => copyToClipboard(property.wifi_password)}>
+                        <div className="bg-white p-2 rounded-full text-blue-600"><Home className="w-4 h-4"/></div>
+                        <div className="flex-1"><p className="text-[10px] uppercase font-bold text-blue-200">WiFi Password</p><p className="font-mono font-bold text-sm">{property.wifi_password}</p></div>
+                        <Copy className="w-4 h-4 text-white/50"/>
                     </div>
-                )}
-
-                {(currentStep === 2 || currentStep === 3) && (
-                    <div className="space-y-4 animate-in fade-in">
-                         <div className="text-center mb-4">
-                            {isPendingApproval ? (
-                                <><ShieldCheck className="w-12 h-12 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900">Documenti ricevuti!</h3><p className="text-sm text-yellow-700">L'host sta controllando i file.</p></>
-                            ) : (
-                                <><UploadCloud className="w-12 h-12 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900">Carica i Documenti</h3><p className="text-sm text-slate-500">Carica foto del documento d'identità e contratto.</p></>
-                            )}
-                         </div>
-                         {!isPendingApproval && (
-                             <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors relative">
-                                <Input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} disabled={isUploading} />
-                                {isUploading ? <Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-600"/> : <p className="text-blue-600 font-bold">Clicca per caricare</p>}
-                             </div>
-                         )}
-                         <div className="space-y-2">{documents?.map(doc => (<div key={doc.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm"><div className="flex items-center gap-3"><FileText className="w-4 h-4 text-blue-500" /><span className="text-sm font-medium truncate max-w-[200px]">{doc.filename}</span></div><div className="flex items-center gap-2"><Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Copy className="w-4 h-4"/></Button><Badge variant="secondary">In Attesa</Badge></div></div>))}</div>
-                    </div>
-                )}
-
-                {/* STEP 4: ACCESSO SBLOCCATO (NO KEYBOX PER TENANT) */}
-                {isCheckinUnlocked && (
-                    <div className="space-y-6 animate-in fade-in">
-                        <div className="p-4 bg-blue-50 rounded-xl cursor-pointer text-center" onClick={() => copyToClipboard(booking.properties_real?.wifi_password || "")}>
-                            <Wifi className="w-8 h-8 text-blue-500 mx-auto mb-2"/>
-                            <p className="text-[10px] uppercase font-bold text-blue-400">Password WiFi</p>
-                            <p className="text-lg font-bold text-blue-700 flex items-center justify-center gap-2">
-                                {booking.properties_real?.wifi_ssid ? 'Copia Password' : 'N/A'} <Copy className="w-3 h-3"/>
-                            </p>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                            {booking.properties_real?.checkin_video_url && (
-                                <Button variant="outline" className="h-14" onClick={() => window.open(booking.properties_real.checkin_video_url, '_blank')}>
-                                    <Youtube className="w-4 h-4 mr-2 text-red-600"/> Video Guida
-                                </Button>
-                            )}
-                            <Button variant="outline" className="h-14" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent((booking.properties_real?.indirizzo || '') + ' ' + (booking.properties_real?.citta || ''))}`, '_blank')}>
-                                <MapPin className="w-4 h-4 mr-2 text-blue-600"/> Mappa
-                            </Button>
-                        </div>
-                    </div>
-                )}
-            </CardContent>
+                </CardFooter>
+            )}
         </Card>
 
-        {/* TABS */}
-        {(isCheckinUnlocked || payments?.length > 0 || myTickets?.length > 0) && (
-            <Tabs defaultValue="payments" className="w-full">
-                <TabsList className="w-full grid grid-cols-2">
-                    <TabsTrigger value="payments">Pagamenti</TabsTrigger>
-                    <TabsTrigger value="support">Assistenza</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="payments" className="space-y-4">
-                    <Card>
-                        <CardHeader><CardTitle>Piano Pagamenti</CardTitle><CardDescription>Affitti e spese registrate.</CardDescription></CardHeader>
-                        <CardContent>
-                            {payments?.map((pay) => (
-                                <div key={pay.id} className="flex justify-between items-center p-3 border-b last:border-0">
-                                    <div><p className="font-medium capitalize">{pay.tipo?.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(new Date(pay.data_scadenza), 'dd MMM')}</p></div>
-                                    <div className="text-right">
-                                        <p className="font-bold">€{pay.importo}</p>
-                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-800">Pagato</Badge> : 
-                                            <Button size="sm" variant="outline" className="h-7 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>Avvisa</Button>
-                                        }
-                                    </div>
-                                </div>
-                            ))}
-                            {payments?.length === 0 && <p className="text-center text-gray-400 py-4">Nessun pagamento.</p>}
-                        </CardContent>
-                    </Card>
-                </TabsContent>
+        <Tabs defaultValue="status" className="w-full">
+            <TabsList className="grid w-full grid-cols-4 mb-4">
+                <TabsTrigger value="status">Stato</TabsTrigger>
+                <TabsTrigger value="services">Servizi</TabsTrigger>
+                <TabsTrigger value="documents">Documenti</TabsTrigger>
+                <TabsTrigger value="support">Assistenza</TabsTrigger>
+            </TabsList>
 
-                <TabsContent value="support" className="space-y-6">
-                    <Card>
-                        <CardHeader><CardTitle>Apri Segnalazione</CardTitle><CardDescription>Guasti o richieste.</CardDescription></CardHeader>
-                        <CardContent className="space-y-4">
-                            <Input placeholder="Oggetto" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
-                            <Textarea placeholder="Descrizione..." value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} />
-                            <Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4 mr-2" /> Invia</Button>
-                        </CardContent>
-                    </Card>
+            {/* TAB STATO (PAGAMENTI) */}
+            <TabsContent value="status" className="space-y-4">
+                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-5 h-5"/> Pagamenti</h3>
+                {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Tutto in regola!</p> : (
                     <div className="space-y-3">
-                        {myTickets?.map(t => (
-                            <div key={t.id} className="bg-white p-4 rounded-lg border shadow-sm">
-                                <div className="flex justify-between items-center mb-2"><p className="font-medium">{t.titolo}</p><Badge variant={t.stato === 'risolto' ? 'default' : 'secondary'}>{t.stato}</Badge></div>
-                                <p className="text-sm text-gray-600 mb-2">"{t.descrizione}"</p>
-                                {t.admin_notes && <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md"><p className="text-xs font-bold text-blue-700 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1" /> Risposta Staff:</p><p className="text-sm text-blue-900">{t.admin_notes}</p></div>}
-                            </div>
+                        {payments.map((pay: any) => {
+                            const isOverdue = new Date(pay.data_scadenza) < new Date() && pay.stato !== 'pagato';
+                            return (
+                                <Card key={pay.id} className={`border-l-4 ${pay.stato === 'pagato' ? 'border-l-green-500' : isOverdue ? 'border-l-red-500' : 'border-l-orange-500'}`}>
+                                    <CardContent className="p-4 flex justify-between items-center">
+                                        <div><p className="font-bold text-sm capitalize">{pay.tipo.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(new Date(pay.data_scadenza), 'dd MMM')}</p>{isOverdue && <span className="text-[10px] text-red-600 font-bold flex items-center gap-1"><AlertTriangle className="w-3 h-3"/> Scaduto</span>}</div>
+                                        <div className="text-right"><p className="font-bold text-lg">€ {pay.importo}</p><Badge variant={pay.stato === 'pagato' ? 'default' : 'outline'} className={pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'text-orange-600'}>{pay.stato === 'pagato' ? 'Pagato' : 'Da Pagare'}</Badge></div>
+                                        {pay.stato !== 'pagato' && <Button size="sm" variant="outline" className="ml-2 h-8 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>Avvisa</Button>}
+                                    </CardContent>
+                                </Card>
+                            )
+                        })}
+                    </div>
+                )}
+            </TabsContent>
+
+            {/* TAB SERVIZI / ESPERIENZE (AGGIUNTA) */}
+            <TabsContent value="services" className="space-y-4">
+                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Utensils className="w-5 h-5"/> Servizi Extra</h3>
+                <div className="grid gap-3">
+                    {services?.map((svc) => (
+                        <Card key={svc.id} className="overflow-hidden border-0 shadow-md">
+                            <div className="h-32 bg-cover bg-center" style={{ backgroundImage: `url(${svc.image_url || '/placeholder.svg'})` }} />
+                            <CardContent className="p-4">
+                                <div className="flex justify-between items-start mb-2"><h3 className="font-bold text-lg">{svc.title}</h3><Badge className="bg-green-100 text-green-800">Consigliato</Badge></div>
+                                <p className="text-sm text-slate-600 line-clamp-2">{svc.description}</p>
+                                <div className="mt-4 flex justify-between items-center">
+                                    <span className="font-bold text-blue-600">€{svc.price}</span>
+                                    <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({ titolo: `Prenotazione: ${svc.title}`, descrizione: "Vorrei prenotare questo servizio.", priorita: 'bassa' }); }}>Prenota</Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    ))}
+                    {services?.length === 0 && <p className="text-center text-gray-400 py-8">Nessun servizio disponibile.</p>}
+                </div>
+            </TabsContent>
+
+            {/* TAB DOCUMENTI (AGGIORNATA) */}
+            <TabsContent value="documents" className="space-y-4">
+                <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText className="w-5 h-5"/> Documenti Condivisi</h3>
+                {documents.length === 0 ? <div className="text-center py-12 bg-white rounded-lg border border-dashed"><FileQuestion className="w-10 h-10 text-slate-300 mx-auto mb-2"/><p className="text-slate-500">Nessun documento.</p></div> : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {documents.map((doc: any) => (
+                            <Card key={doc.id} className="hover:shadow-md transition-shadow group">
+                                <CardContent className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-3 overflow-hidden"><div className="bg-slate-100 p-2 rounded text-slate-600"><FileText className="w-6 h-6"/></div><div className="min-w-0"><p className="font-semibold text-sm truncate" title={doc.filename}>{doc.filename}</p><p className="text-xs text-gray-400">{format(new Date(doc.uploaded_at), 'dd MMM')}</p></div></div>
+                                    <Button size="icon" variant="ghost" onClick={() => downloadDoc(doc.file_url)}><Download className="w-4 h-4 text-blue-600"/></Button>
+                                </CardContent>
+                            </Card>
                         ))}
                     </div>
-                </TabsContent>
-            </Tabs>
-        )}
+                )}
+            </TabsContent>
 
-        {/* DIALOG PAGAMENTO */}
-        <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
+            {/* TAB ASSISTENZA */}
+            <TabsContent value="support" className="space-y-4">
+                <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700 flex items-center gap-2"><Wrench className="w-5 h-5"/> Segnalazioni</h3><Button size="sm" onClick={() => setNewTicketOpen(true)} className="bg-blue-600"><Plus className="w-4 h-4 mr-2"/> Nuova</Button></div>
+                <div className="space-y-3">
+                    {tickets.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Nessuna segnalazione.</p> : (
+                        tickets.map((ticket: any) => (
+                            <Card key={ticket.id} className="bg-white">
+                                <CardContent className="p-4">
+                                    <div className="flex justify-between items-start mb-2"><h4 className="font-bold text-sm">{ticket.titolo}</h4><Badge variant="outline">{ticket.stato}</Badge></div>
+                                    <p className="text-xs text-gray-600 line-clamp-2 mb-2">{ticket.descrizione}</p>
+                                    {ticket.admin_notes && <div className="bg-blue-50 p-2 rounded text-xs text-blue-800 mb-2 border border-blue-100"><strong>Staff:</strong> {ticket.admin_notes}</div>}
+                                    <p className="text-[10px] text-gray-400 text-right">{format(new Date(ticket.created_at), 'dd/MM HH:mm')}</p>
+                                </CardContent>
+                            </Card>
+                        ))
+                    )}
+                </div>
+            </TabsContent>
+        </Tabs>
+      </main>
+
+      {/* DIALOG NUOVO TICKET */}
+      <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
+        <DialogContent className="w-[95vw] sm:max-w-md">
+            <DialogHeader><DialogTitle>Nuova Segnalazione</DialogTitle></DialogHeader>
+            <div className="space-y-4 py-2">
+                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia / Prenotazione Pulizie" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Descrizione</Label><Textarea placeholder="Dettagli..." value={ticketData.descrizione} onChange={e => setTicketData({...ticketData, descrizione: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Urgenza</Label><Select value={ticketData.priorita} onValueChange={(val) => setTicketData({...ticketData, priorita: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bassa">Bassa</SelectItem><SelectItem value="media">Media</SelectItem><SelectItem value="alta">Alta</SelectItem></SelectContent></Select></div>
+            </div>
+            <DialogFooter><Button variant="outline" onClick={() => setNewTicketOpen(false)}>Annulla</Button><Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600">Invia</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* DIALOG PAGAMENTO */}
+      <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
@@ -316,9 +319,7 @@ export default function TenantPortal() {
                 </div>
                 <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">Invia Avviso</Button></DialogFooter>
             </DialogContent>
-        </Dialog>
-
-      </div>
+      </Dialog>
     </div>
   );
 }
