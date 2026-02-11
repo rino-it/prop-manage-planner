@@ -25,7 +25,7 @@ export default function TenantPortal() {
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  // 1. Sessione & Booking (Logica ROBUSTA + FIX guest_email)
+  // 1. Sessione & Booking
   const { data: sessionData, isLoading: sessionLoading } = useQuery({
     queryKey: ['tenant-session'],
     queryFn: async () => {
@@ -34,6 +34,7 @@ export default function TenantPortal() {
       
       const today = new Date().toISOString().split('T')[0];
       
+      // Query robusta: cerca per email e date
       const { data: booking, error } = await supabase
         .from('bookings')
         .select(`
@@ -45,11 +46,13 @@ export default function TenantPortal() {
         .gte('data_fine', today)
         .maybeSingle();
 
-      if (error) console.error("Errore fetch booking:", error);
+      if (error) {
+          console.error("Errore fetch booking:", error);
+      }
 
       if (!booking) return { user, booking: null };
 
-      // Fallback per proprietà mobile (veicolo)
+      // Fallback per proprietà mobile (veicolo) se properties_real è vuoto
       let mobileProp = null;
       if (!booking.properties_real && booking.property_mobile_id) {
           const { data: mp } = await supabase
@@ -90,7 +93,7 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 4. DOCUMENTI (TAB AGGIUNTA)
+  // 4. Documenti
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
@@ -101,16 +104,20 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 5. SERVIZI (TAB AGGIUNTA - Con gestione errore)
+  // 5. Servizi (Gestione errore silenziosa)
   const { data: services = [] } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
         try {
             const { data, error } = await supabase.from('services').select('*').eq('active', true);
-            if (error) return [];
+            if (error) {
+                console.warn("Errore caricamento servizi:", error.message);
+                return [];
+            }
             return data || [];
         } catch { return []; }
-    }
+    },
+    retry: false
   });
 
   const handleLogout = async () => {
@@ -189,7 +196,7 @@ export default function TenantPortal() {
         <Home className="w-16 h-16 text-slate-300 mb-4"/>
         <h1 className="text-2xl font-bold text-slate-800">Nessuna Locazione Attiva</h1>
         <p className="text-slate-500 max-w-md mt-2">Non risultano contratti attivi in data odierna per {sessionData?.user.email}.</p>
-        <p className="text-xs text-gray-400 mt-2">Controlla che la data di inizio del contratto sia valida.</p>
+        <p className="text-xs text-gray-400 mt-2">Controlla che la tua email corrisponda a quella nel contratto.</p>
         <Button variant="outline" className="mt-6" onClick={handleLogout}>Esci</Button>
       </div>
     );
@@ -233,7 +240,6 @@ export default function TenantPortal() {
                 <TabsTrigger value="support">Assistenza</TabsTrigger>
             </TabsList>
 
-            {/* TAB STATO (PAGAMENTI) */}
             <TabsContent value="status" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-5 h-5"/> Pagamenti</h3>
                 {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Tutto in regola!</p> : (
@@ -254,7 +260,6 @@ export default function TenantPortal() {
                 )}
             </TabsContent>
 
-            {/* TAB SERVIZI */}
             <TabsContent value="services" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Utensils className="w-5 h-5"/> Servizi Extra</h3>
                 <div className="grid gap-3">
@@ -275,7 +280,6 @@ export default function TenantPortal() {
                 </div>
             </TabsContent>
 
-            {/* TAB DOCUMENTI */}
             <TabsContent value="documents" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText className="w-5 h-5"/> Documenti Condivisi</h3>
                 {documents.length === 0 ? <div className="text-center py-12 bg-white rounded-lg border border-dashed"><FileQuestion className="w-10 h-10 text-slate-300 mx-auto mb-2"/><p className="text-slate-500">Nessun documento.</p></div> : (
@@ -292,7 +296,6 @@ export default function TenantPortal() {
                 )}
             </TabsContent>
 
-            {/* TAB ASSISTENZA */}
             <TabsContent value="support" className="space-y-4">
                 <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700 flex items-center gap-2"><Wrench className="w-5 h-5"/> Segnalazioni</h3><Button size="sm" onClick={() => setNewTicketOpen(true)} className="bg-blue-600"><Plus className="w-4 h-4 mr-2"/> Nuova</Button></div>
                 <div className="space-y-3">
@@ -313,7 +316,6 @@ export default function TenantPortal() {
         </Tabs>
       </main>
 
-      {/* DIALOG NUOVO TICKET */}
       <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
         <DialogContent className="w-[95vw] sm:max-w-md">
             <DialogHeader><DialogTitle>Nuova Segnalazione</DialogTitle></DialogHeader>
@@ -326,7 +328,6 @@ export default function TenantPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG PAGAMENTO */}
       <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
