@@ -10,9 +10,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+// FIX: Aggiunto 'Key' agli import mancanti
 import { 
   Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2, 
-  CheckCircle, FileText, Calendar, Clock, ShieldCheck, UploadCloud, Send, UserCog, AlertTriangle, Download, Utensils
+  CheckCircle, FileText, Calendar, Clock, ShieldCheck, UploadCloud, Send, UserCog, AlertTriangle, Download, Utensils, Key
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -52,7 +53,7 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
-  // Query per Esperienze (REINSERITA)
+  // Query per Esperienze
   const { data: services } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
@@ -232,7 +233,7 @@ export default function GuestPortal() {
                     <div className="space-y-4 animate-in fade-in">
                           <div className="text-center mb-4">
                             {isPendingApproval ? (
-                                <><ShieldCheck className="w-12 h-12 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900">Documenti ricevuti!</h3><p className="text-sm text-yellow-700">Stiamo controllando i documenti. Riceverai i codici a breve.</p></>
+                                <><ShieldCheck className="w-12 h-12 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900">Documenti ricevuti!</h3><p className="text-sm text-yellow-700">L'host sta controllando i file.</p></>
                             ) : (
                                 <><UploadCloud className="w-12 h-12 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900">Carica i Documenti</h3><p className="text-sm text-slate-500">Carica foto del documento d'identità e contratto.</p></>
                             )}
@@ -295,7 +296,7 @@ export default function GuestPortal() {
                     <TabsTrigger value="support" className="text-xs">Help</TabsTrigger>
                 </TabsList>
                 
-                {/* TAB ESPERIENZE (REINSERITA) */}
+                {/* TAB ESPERIENZE */}
                 <TabsContent value="experiences" className="space-y-4">
                     <div className="grid gap-3">
                         {services?.map((svc) => (
@@ -341,7 +342,7 @@ export default function GuestPortal() {
                     </Card>
                 </TabsContent>
 
-                {/* TAB DOCUMENTI AGGIUNTA */}
+                {/* TAB DOCUMENTI */}
                 <TabsContent value="docs" className="space-y-4">
                      <Card>
                         <CardHeader><CardTitle>Documenti Condivisi</CardTitle><CardDescription>Contratti e info utili.</CardDescription></CardHeader>
