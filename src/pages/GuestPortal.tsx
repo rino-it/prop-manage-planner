@@ -11,8 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { 
-  Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2, CheckCircle, FileText, 
-  CreditCard, Clock, ShieldCheck, UploadCloud, Send, UserCog, Key, Star, Utensils
+  Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2, 
+  CheckCircle, FileText, Calendar, Clock, ShieldCheck, UploadCloud, Send, UserCog, AlertTriangle, Download, Utensils
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
@@ -25,23 +25,26 @@ export default function GuestPortal() {
   
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [ticketForm, setTicketForm] = useState({ titolo: '', descrizione: '' });
+  
+  // Stato per Ticket Pagamento
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
+
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
 
+  // --- QUERIES ---
   const { data: booking, isLoading } = useQuery({
-    queryKey: ['guest-booking', id],
+    queryKey: ['tenant-booking', id],
     queryFn: async () => {
       const { data } = await supabase.from('bookings').select('*, properties_real(*)').eq('id', id).single();
       return data;
     },
-    enabled: !!id,
-    refetchInterval: 5000 
+    enabled: !!id
   });
 
   const { data: documents } = useQuery({
-    queryKey: ['guest-docs', id],
+    queryKey: ['tenant-docs', id],
     queryFn: async () => {
       const { data } = await supabase.from('booking_documents').select('*').eq('booking_id', id).order('uploaded_at', { ascending: false });
       return data || [];
@@ -49,7 +52,7 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
-  // Query per Esperienze
+  // Query per Esperienze (REINSERITA)
   const { data: services } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
@@ -59,7 +62,7 @@ export default function GuestPortal() {
   });
 
   const { data: payments } = useQuery({
-    queryKey: ['guest-payments', id],
+    queryKey: ['tenant-payments', id],
     queryFn: async () => {
       const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', id).order('data_scadenza', { ascending: true });
       return data || [];
@@ -68,7 +71,7 @@ export default function GuestPortal() {
   });
 
   const { data: myTickets } = useQuery({
-    queryKey: ['guest-tickets', id],
+    queryKey: ['tenant-tickets', id],
     queryFn: async () => {
       const { data } = await supabase.from('tickets').select('*').eq('booking_id', id).order('created_at', { ascending: false });
       return data || [];
@@ -76,6 +79,7 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
+  // --- LOGICA ---
   const hasContactInfo = booking?.guest_phone && booking?.guest_email;
   const hasDocuments = documents && documents.length > 0;
   const isApproved = booking?.documents_approved === true;
@@ -88,13 +92,14 @@ export default function GuestPortal() {
   const isCheckinUnlocked = currentStep === 4;
   const isPendingApproval = currentStep === 3;
 
+  // --- AZIONI ---
   const saveContactInfo = async () => {
     if (!contactForm.email || !contactForm.phone) return;
     setIsSavingContact(true);
     try {
         await supabase.from('bookings').update({ guest_email: contactForm.email, guest_phone: contactForm.phone }).eq('id', id);
         toast({ title: "Contatti Salvati" });
-        queryClient.invalidateQueries({ queryKey: ['guest-booking'] });
+        queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
     } catch (e) { toast({ title: "Errore", variant: "destructive" }); } 
     finally { setIsSavingContact(false); }
   };
@@ -113,7 +118,7 @@ export default function GuestPortal() {
       });
       
       toast({ title: "Caricato!", description: "Documento in verifica." });
-      queryClient.invalidateQueries({ queryKey: ['guest-docs'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
     } catch (error: any) { toast({ title: "Errore upload", variant: "destructive" }); } 
     finally { setIsUploading(false); }
   };
@@ -126,7 +131,7 @@ export default function GuestPortal() {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['guest-tickets'] });
+      queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
       toast({ title: "Richiesta inviata" });
       setTicketForm({ titolo: '', descrizione: '' });
     }
@@ -139,7 +144,7 @@ export default function GuestPortal() {
               booking_id: booking.id,
               property_real_id: booking.property_id,
               titolo: `Pagamento: ${paymentTicketOpen.tipo}`,
-              descrizione: `L'ospite prevede di pagare il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
+              descrizione: `L'inquilino prevede di pagare il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
               stato: 'aperto',
               creato_da: 'ospite',
               related_payment_id: paymentTicketOpen.id,
@@ -148,8 +153,8 @@ export default function GuestPortal() {
           });
       },
       onSuccess: () => {
-          queryClient.invalidateQueries({ queryKey: ['guest-tickets'] });
-          toast({ title: "Host avvisato" });
+          queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
+          toast({ title: "Amministrazione avvisata" });
           setPaymentTicketOpen(null);
           setPayPromise({ date: '', method: '' });
       }
@@ -162,25 +167,37 @@ export default function GuestPortal() {
 
   const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
+  const downloadDoc = async (path: string) => {
+    try {
+        const { data, error } = await supabase.storage.from('documents').createSignedUrl(path, 60);
+        if (error) throw error;
+        if (data?.signedUrl) window.open(data.signedUrl, '_blank');
+    } catch (e: any) {
+        toast({ title: "Impossibile aprire", description: "File non trovato.", variant: "destructive" });
+    }
+  };
+
   if (isLoading || !booking) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-slate-400"/></div>;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
       
+      {/* HEADER */}
       <div className="bg-white border-b sticky top-0 z-10 shadow-sm px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
              <img src="/prop-manager-logo.svg" alt="Logo" className="h-8 w-auto object-contain" />
           </div>
           <div className="text-right">
              <p className="text-sm font-bold text-slate-900 truncate max-w-[150px]">{booking.properties_real?.nome}</p>
-             <p className="text-xs text-slate-500">Welcome Guest</p>
+             <p className="text-xs text-slate-500">Portale Ospite</p>
           </div>
       </div>
 
       <div className="max-w-xl mx-auto p-4 space-y-6 mt-2">
 
+        {/* TIMELINE */}
         <div className="flex justify-between items-center px-4 py-2 bg-white rounded-full border shadow-sm mx-2">
-            {[{ s: 1, l: 'Contatti' }, { s: 2, l: 'Documenti' }, { s: 3, l: 'Verifica' }, { s: 4, l: 'Chiavi' }].map((step) => (
+            {[{ s: 1, l: 'Contatti' }, { s: 2, l: 'Documenti' }, { s: 3, l: 'Verifica' }, { s: 4, l: 'Accesso' }].map((step) => (
                 <div key={step.s} className="flex flex-col items-center gap-1">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${currentStep >= step.s ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-300'}`}>
                         {currentStep > step.s ? <CheckCircle className="w-4 h-4"/> : step.s}
@@ -190,10 +207,11 @@ export default function GuestPortal() {
             ))}
         </div>
 
+        {/* SMART CARD */}
         <Card className={`border-2 overflow-hidden shadow-lg transition-all duration-500 ${isCheckinUnlocked ? 'border-green-400 bg-white' : isPendingApproval ? 'border-yellow-400 bg-yellow-50' : 'border-red-200 bg-white'}`}>
             <CardHeader className="pb-2 border-b border-black/5">
                 <CardTitle className="flex justify-between items-center text-lg">
-                    {isCheckinUnlocked ? <span className="text-green-700">Check-in Completato</span> : isPendingApproval ? <span className="text-yellow-700">Verifica in corso...</span> : <span className="text-red-700">Check-in Online</span>}
+                    {isCheckinUnlocked ? <span className="text-green-700">Accesso Attivo</span> : isPendingApproval ? <span className="text-yellow-700">Verifica in corso...</span> : <span className="text-red-700">Check-in Online</span>}
                     {isCheckinUnlocked ? <Unlock className="text-green-600 w-6 h-6"/> : isPendingApproval ? <Clock className="text-yellow-600 w-6 h-6"/> : <Lock className="text-red-500 w-6 h-6"/>}
                 </CardTitle>
             </CardHeader>
@@ -201,7 +219,7 @@ export default function GuestPortal() {
                 
                 {currentStep === 1 && (
                     <div className="space-y-4 animate-in fade-in">
-                        <p className="text-sm text-slate-600 text-center">Inserisci i tuoi recapiti per ricevere i codici.</p>
+                        <p className="text-sm text-slate-600 text-center">Inserisci i tuoi recapiti per iniziare.</p>
                         <div className="space-y-3">
                             <div><Label className="text-xs uppercase text-slate-500">Email</Label><Input placeholder="tua@email.com" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
                             <div><Label className="text-xs uppercase text-slate-500">Telefono</Label><Input placeholder="+39 ..." value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
@@ -212,11 +230,11 @@ export default function GuestPortal() {
 
                 {(currentStep === 2 || currentStep === 3) && (
                     <div className="space-y-4 animate-in fade-in">
-                         <div className="text-center mb-4">
+                          <div className="text-center mb-4">
                             {isPendingApproval ? (
                                 <><ShieldCheck className="w-12 h-12 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900">Documenti ricevuti!</h3><p className="text-sm text-yellow-700">Stiamo controllando i documenti. Riceverai i codici a breve.</p></>
                             ) : (
-                                <><UploadCloud className="w-12 h-12 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900">Foto Documenti</h3><p className="text-sm text-slate-500">Per legge dobbiamo registrare gli ospiti.</p></>
+                                <><UploadCloud className="w-12 h-12 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900">Carica i Documenti</h3><p className="text-sm text-slate-500">Carica foto del documento d'identità e contratto.</p></>
                             )}
                          </div>
                          {!isPendingApproval && (
@@ -225,15 +243,21 @@ export default function GuestPortal() {
                                 {isUploading ? <Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-600"/> : <p className="text-blue-600 font-bold">Scatta Foto</p>}
                              </div>
                          )}
-                         <div className="space-y-2">{documents?.map(doc => (<div key={doc.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm"><div className="flex items-center gap-3"><FileText className="w-4 h-4 text-blue-500" /><span className="text-sm font-medium truncate max-w-[200px]">{doc.filename}</span></div><Badge variant="secondary">Inviato</Badge></div>))}</div>
+                         <div className="space-y-2">
+                             {documents?.filter((d:any) => d.status === 'in_revisione').map((doc: any) => (
+                                 <div key={doc.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
+                                     <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-blue-500" /><span className="text-sm font-medium truncate max-w-[200px]">{doc.filename}</span></div>
+                                     <Badge variant="secondary">In Revisione</Badge>
+                                 </div>
+                             ))}
+                         </div>
                     </div>
                 )}
 
-                {/* STEP 4: CON KEYBOX PER GUEST */}
                 {isCheckinUnlocked && (
                     <div className="space-y-6 animate-in fade-in">
                         <div className="grid grid-cols-2 gap-4 text-center">
-                            <div className="p-4 bg-slate-900 text-white rounded-xl">
+                             <div className="p-4 bg-slate-900 text-white rounded-xl">
                                 <Key className="w-6 h-6 mx-auto mb-2 text-yellow-400"/>
                                 <p className="text-[10px] uppercase font-bold text-slate-400">Codice Keybox</p>
                                 <p className="text-2xl font-mono font-bold tracking-widest">{booking.properties_real?.keybox_code || '---'}</p>
@@ -252,7 +276,7 @@ export default function GuestPortal() {
                                     <Youtube className="w-4 h-4 mr-2 text-red-600"/> Video
                                 </Button>
                             )}
-                            <Button variant="outline" className="h-14" onClick={() => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent((booking.properties_real?.indirizzo || '') + ' ' + (booking.properties_real?.citta || ''))}`, '_blank')}>
+                            <Button variant="outline" className="h-14" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent((booking.properties_real?.indirizzo || '') + ' ' + (booking.properties_real?.citta || ''))}`, '_blank')}>
                                 <MapPin className="w-4 h-4 mr-2 text-blue-600"/> Naviga
                             </Button>
                         </div>
@@ -261,16 +285,17 @@ export default function GuestPortal() {
             </CardContent>
         </Card>
 
-        {/* TABS (CON ESPERIENZE) */}
-        {(isCheckinUnlocked || payments?.length > 0) && (
+        {/* TABS (Visibili dopo sblocco o se ci sono dati) */}
+        {(isCheckinUnlocked || payments?.length > 0 || myTickets?.length > 0) && (
             <Tabs defaultValue="experiences" className="w-full">
-                <TabsList className="w-full grid grid-cols-3">
-                    <TabsTrigger value="experiences">Esperienze</TabsTrigger>
-                    <TabsTrigger value="payments">Extra</TabsTrigger>
-                    <TabsTrigger value="support">Help</TabsTrigger>
+                <TabsList className="w-full grid grid-cols-4">
+                    <TabsTrigger value="experiences" className="text-xs">Esperienze</TabsTrigger>
+                    <TabsTrigger value="payments" className="text-xs">Extra</TabsTrigger>
+                    <TabsTrigger value="docs" className="text-xs">Documenti</TabsTrigger>
+                    <TabsTrigger value="support" className="text-xs">Help</TabsTrigger>
                 </TabsList>
                 
-                {/* TAB ESPERIENZE */}
+                {/* TAB ESPERIENZE (REINSERITA) */}
                 <TabsContent value="experiences" className="space-y-4">
                     <div className="grid gap-3">
                         {services?.map((svc) => (
@@ -285,14 +310,14 @@ export default function GuestPortal() {
                                     <div className="mt-4 flex justify-between items-center">
                                         <span className="font-bold text-blue-600">€{svc.price}</span>
                                         <Button size="sm" onClick={() => {
-                                            setTicketForm({ titolo: `Info: ${svc.title}`, descrizione: "Vorrei prenotare questa esperienza." });
+                                            setTicketForm({ titolo: `Prenotazione: ${svc.title}`, descrizione: "Vorrei prenotare questa esperienza." });
                                             document.querySelector('[value="support"]')?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
                                         }}>Prenota</Button>
                                     </div>
                                 </CardContent>
                             </Card>
                         ))}
-                        {services?.length === 0 && <p className="text-center text-gray-400 py-8">Nessuna esperienza disponibile al momento.</p>}
+                        {services?.length === 0 && <p className="text-center text-gray-400 py-8">Nessuna esperienza disponibile.</p>}
                     </div>
                 </TabsContent>
 
@@ -314,6 +339,27 @@ export default function GuestPortal() {
                             {payments?.length === 0 && <p className="text-center text-gray-400 py-4">Nessun extra.</p>}
                         </CardContent>
                     </Card>
+                </TabsContent>
+
+                {/* TAB DOCUMENTI AGGIUNTA */}
+                <TabsContent value="docs" className="space-y-4">
+                     <Card>
+                        <CardHeader><CardTitle>Documenti Condivisi</CardTitle><CardDescription>Contratti e info utili.</CardDescription></CardHeader>
+                        <CardContent className="space-y-2">
+                             {documents?.filter((d:any) => d.status !== 'in_revisione').map((doc: any) => (
+                                 <div key={doc.id} className="flex justify-between items-center p-3 bg-slate-50 rounded border">
+                                     <div className="flex items-center gap-2 overflow-hidden">
+                                         <FileText className="w-4 h-4 text-blue-500"/>
+                                         <span className="text-sm truncate max-w-[180px]">{doc.filename}</span>
+                                     </div>
+                                     <Button size="sm" variant="ghost" onClick={() => downloadDoc(doc.file_url)}>
+                                         <Download className="w-4 h-4"/>
+                                     </Button>
+                                 </div>
+                             ))}
+                             {documents?.length === 0 && <p className="text-center text-gray-400 py-4">Nessun documento.</p>}
+                        </CardContent>
+                     </Card>
                 </TabsContent>
 
                 <TabsContent value="support" className="space-y-6">
@@ -338,13 +384,14 @@ export default function GuestPortal() {
             </Tabs>
         )}
 
+        {/* DIALOG PAGAMENTO */}
         <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
-                    <p className="text-sm text-gray-500">Comunica all'host come pagherai <strong>€{paymentTicketOpen?.importo}</strong>.</p>
+                    <p className="text-sm text-gray-500">Comunica all'amministrazione quando e come pagherai <strong>€{paymentTicketOpen?.importo}</strong> per {paymentTicketOpen?.tipo}.</p>
                     <div className="space-y-2"><Label>Data Prevista</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
-                    <div className="space-y-2"><Label>Metodo</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder="Seleziona..."/></SelectTrigger><SelectContent><SelectItem value="contanti">Contanti</SelectItem><SelectItem value="bonifico">Bonifico</SelectItem><SelectItem value="altro">Altro</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-2"><Label>Metodo</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder="Seleziona..."/></SelectTrigger><SelectContent><SelectItem value="bonifico">Bonifico</SelectItem><SelectItem value="contanti">Contanti</SelectItem><SelectItem value="altro">Altro</SelectItem></SelectContent></Select></div>
                 </div>
                 <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">Invia Avviso</Button></DialogFooter>
             </DialogContent>
