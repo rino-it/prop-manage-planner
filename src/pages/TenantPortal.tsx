@@ -25,7 +25,7 @@ export default function TenantPortal() {
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  // 1. Sessione & Booking (Logica Autenticata per Inquilini)
+  // 1. Sessione & Booking
   const { data: sessionData, isLoading: sessionLoading } = useQuery({
     queryKey: ['tenant-session'],
     queryFn: async () => {
@@ -34,13 +34,14 @@ export default function TenantPortal() {
       
       const today = new Date().toISOString().split('T')[0];
       
-      // FIX QUERY: Rimossa join problematica su properties_mobile se non configurata FK
-      // Recuperiamo prima il booking e poi i dettagli della proprietà se servono
+      // FIX: Rimossa colonna 'immagine_url' che non esiste in properties_real
+      // Se properties_mobile la possiede, la richiediamo solo lì.
       const { data: booking, error } = await supabase
         .from('bookings')
         .select(`
             *,
-            properties_real(id, nome, indirizzo, immagine_url, wifi_ssid, wifi_password)
+            properties_real(id, nome, indirizzo, wifi_ssid, wifi_password),
+            properties_mobile(id, veicolo, targa, immagine_url)
         `)
         .eq('email', user.email)
         .lte('data_inizio', today)
@@ -48,20 +49,11 @@ export default function TenantPortal() {
         .maybeSingle();
 
       if (error) console.error("Errore fetch booking:", error);
-      
-      // Se è mobile, recuperiamo a parte (fallback)
-      let mobileProp = null;
-      if (booking && !booking.properties_real && booking.property_mobile_id) {
-          const { data: mp } = await supabase.from('properties_mobile').select('*').eq('id', booking.property_mobile_id).single();
-          mobileProp = mp;
-      }
-
-      return { user, booking: booking ? {...booking, properties_mobile: mobileProp} : null };
+      return { user, booking };
     }
   });
 
   const booking = sessionData?.booking;
-  // Gestione sicura delle proprietà (fallback)
   const property = booking?.properties_real || booking?.properties_mobile;
   const isReal = !!booking?.properties_real;
 
@@ -87,7 +79,7 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 4. DOCUMENTI CONDIVISI
+  // 4. Documenti
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
@@ -98,14 +90,13 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 5. ESPERIENZE / SERVIZI
+  // 5. Servizi (Gestione errore se tabella non esiste)
   const { data: services } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
-        // FIX: Gestione errore se tabella services non esiste o RLS blocca
         try {
             const { data, error } = await supabase.from('services').select('*').eq('active', true);
-            if(error) return [];
+            if (error) return []; // Ritorna array vuoto se errore (es. tabella mancante)
             return data || [];
         } catch { return []; }
     }
@@ -230,7 +221,7 @@ export default function TenantPortal() {
                 <TabsTrigger value="support">Assistenza</TabsTrigger>
             </TabsList>
 
-            {/* TAB STATO (PAGAMENTI) */}
+            {/* TAB PAGAMENTI */}
             <TabsContent value="status" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-5 h-5"/> Pagamenti</h3>
                 {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Tutto in regola!</p> : (
@@ -251,11 +242,11 @@ export default function TenantPortal() {
                 )}
             </TabsContent>
 
-            {/* TAB SERVIZI / ESPERIENZE (AGGIUNTA) */}
+            {/* TAB SERVIZI */}
             <TabsContent value="services" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Utensils className="w-5 h-5"/> Servizi Extra</h3>
                 <div className="grid gap-3">
-                    {services?.map((svc) => (
+                    {services?.map((svc: any) => (
                         <Card key={svc.id} className="overflow-hidden border-0 shadow-md">
                             <div className="h-32 bg-cover bg-center" style={{ backgroundImage: `url(${svc.image_url || '/placeholder.svg'})` }} />
                             <CardContent className="p-4">
@@ -272,7 +263,7 @@ export default function TenantPortal() {
                 </div>
             </TabsContent>
 
-            {/* TAB DOCUMENTI (AGGIORNATA) */}
+            {/* TAB DOCUMENTI */}
             <TabsContent value="documents" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText className="w-5 h-5"/> Documenti Condivisi</h3>
                 {documents.length === 0 ? <div className="text-center py-12 bg-white rounded-lg border border-dashed"><FileQuestion className="w-10 h-10 text-slate-300 mx-auto mb-2"/><p className="text-slate-500">Nessun documento.</p></div> : (
@@ -310,12 +301,12 @@ export default function TenantPortal() {
         </Tabs>
       </main>
 
-      {/* DIALOG NUOVO TICKET */}
+      {/* DIALOGS */}
       <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
         <DialogContent className="w-[95vw] sm:max-w-md">
             <DialogHeader><DialogTitle>Nuova Segnalazione</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
-                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia / Prenotazione Pulizie" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Descrizione</Label><Textarea placeholder="Dettagli..." value={ticketData.descrizione} onChange={e => setTicketData({...ticketData, descrizione: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Urgenza</Label><Select value={ticketData.priorita} onValueChange={(val) => setTicketData({...ticketData, priorita: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bassa">Bassa</SelectItem><SelectItem value="media">Media</SelectItem><SelectItem value="alta">Alta</SelectItem></SelectContent></Select></div>
             </div>
@@ -323,12 +314,11 @@ export default function TenantPortal() {
         </DialogContent>
       </Dialog>
 
-      {/* DIALOG PAGAMENTO */}
       <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
-                    <p className="text-sm text-gray-500">Comunica all'amministrazione quando e come pagherai <strong>€{paymentTicketOpen?.importo}</strong> per {paymentTicketOpen?.tipo}.</p>
+                    <p className="text-sm text-gray-500">Comunica all'amministrazione quando e come pagherai <strong>€{paymentTicketOpen?.importo}</strong>.</p>
                     <div className="space-y-2"><Label>Data Prevista</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
                     <div className="space-y-2"><Label>Metodo</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder="Seleziona..."/></SelectTrigger><SelectContent><SelectItem value="bonifico">Bonifico</SelectItem><SelectItem value="contanti">Contanti</SelectItem><SelectItem value="altro">Altro</SelectItem></SelectContent></Select></div>
                 </div>
