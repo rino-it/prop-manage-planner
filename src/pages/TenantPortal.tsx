@@ -25,7 +25,7 @@ export default function TenantPortal() {
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  // 1. Sessione & Booking
+  // 1. Sessione & Booking (Logica ROBUSTA)
   const { data: sessionData, isLoading: sessionLoading } = useQuery({
     queryKey: ['tenant-session'],
     queryFn: async () => {
@@ -34,22 +34,43 @@ export default function TenantPortal() {
       
       const today = new Date().toISOString().split('T')[0];
       
-      // FIX: Rimossa colonna 'immagine_url' che non esiste in properties_real
-      // Se properties_mobile la possiede, la richiediamo solo lì.
+      // FIX CRITICO: Non chiediamo properties_mobile nella join per evitare crash PGRST200
       const { data: booking, error } = await supabase
         .from('bookings')
         .select(`
             *,
-            properties_real(id, nome, indirizzo, wifi_ssid, wifi_password),
-            properties_mobile(id, veicolo, targa, immagine_url)
+            properties_real(id, nome, indirizzo, wifi_ssid, wifi_password)
         `)
         .eq('email', user.email)
         .lte('data_inizio', today)
         .gte('data_fine', today)
         .maybeSingle();
 
-      if (error) console.error("Errore fetch booking:", error);
-      return { user, booking };
+      if (error) console.error("Errore booking:", error);
+
+      // Se c'è un errore o non troviamo booking, ritorniamo null
+      if (!booking) return { user, booking: null };
+
+      // Se è un immobile, properties_real è già popolato.
+      // Se è un veicolo (property_mobile_id esiste), lo recuperiamo a mano.
+      let mobileProp = null;
+      if (!booking.properties_real && booking.property_mobile_id) {
+          const { data: mp } = await supabase
+            .from('properties_mobile')
+            .select('id, veicolo, targa, immagine_url')
+            .eq('id', booking.property_mobile_id)
+            .single();
+          mobileProp = mp;
+      }
+
+      // Uniamo i dati per l'interfaccia
+      return { 
+          user, 
+          booking: { 
+              ...booking, 
+              properties_mobile: mobileProp 
+          } 
+      };
     }
   });
 
@@ -79,7 +100,7 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 4. Documenti
+  // 4. DOCUMENTI
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
@@ -90,13 +111,13 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 5. Servizi (Gestione errore se tabella non esiste)
+  // 5. SERVIZI (Con gestione errore se tabella manca)
   const { data: services } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
         try {
             const { data, error } = await supabase.from('services').select('*').eq('active', true);
-            if (error) return []; // Ritorna array vuoto se errore (es. tabella mancante)
+            if (error) return [];
             return data || [];
         } catch { return []; }
     }
@@ -177,7 +198,8 @@ export default function TenantPortal() {
       <div className="flex flex-col h-screen items-center justify-center p-4 text-center bg-slate-50">
         <Home className="w-16 h-16 text-slate-300 mb-4"/>
         <h1 className="text-2xl font-bold text-slate-800">Nessuna Locazione Attiva</h1>
-        <p className="text-slate-500 max-w-md mt-2">Non risultano contratti attivi per ({sessionData?.user.email}).</p>
+        <p className="text-slate-500 max-w-md mt-2">Non risultano contratti attivi in data odierna per {sessionData?.user.email}.</p>
+        <p className="text-xs text-gray-400 mt-2">Controlla che la data di inizio del contratto sia già passata.</p>
         <Button variant="outline" className="mt-6" onClick={handleLogout}>Esci</Button>
       </div>
     );
@@ -189,8 +211,8 @@ export default function TenantPortal() {
         <div className="flex items-center gap-2">
             <div className="bg-blue-100 p-2 rounded-lg"><Home className="w-5 h-5 text-blue-600"/></div>
             <div>
-                <h1 className="font-bold text-sm sm:text-base text-slate-900 truncate max-w-[150px]">{isReal ? property.nome : property.veicolo}</h1>
-                <p className="text-[10px] sm:text-xs text-slate-500 truncate">{isReal ? property.indirizzo : property.targa}</p>
+                <h1 className="font-bold text-sm sm:text-base text-slate-900 truncate max-w-[150px]">{isReal ? property.nome : property?.veicolo}</h1>
+                <p className="text-[10px] sm:text-xs text-slate-500 truncate">{isReal ? property.indirizzo : property?.targa}</p>
             </div>
         </div>
         <Button variant="ghost" size="icon" onClick={handleLogout}><LogOut className="w-5 h-5 text-slate-400"/></Button>
@@ -221,7 +243,7 @@ export default function TenantPortal() {
                 <TabsTrigger value="support">Assistenza</TabsTrigger>
             </TabsList>
 
-            {/* TAB PAGAMENTI */}
+            {/* TAB STATO (PAGAMENTI) */}
             <TabsContent value="status" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-5 h-5"/> Pagamenti</h3>
                 {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Tutto in regola!</p> : (
@@ -301,12 +323,12 @@ export default function TenantPortal() {
         </Tabs>
       </main>
 
-      {/* DIALOGS */}
+      {/* DIALOG NUOVO TICKET */}
       <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
         <DialogContent className="w-[95vw] sm:max-w-md">
             <DialogHeader><DialogTitle>Nuova Segnalazione</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
-                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia / Prenotazione Pulizie" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Descrizione</Label><Textarea placeholder="Dettagli..." value={ticketData.descrizione} onChange={e => setTicketData({...ticketData, descrizione: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Urgenza</Label><Select value={ticketData.priorita} onValueChange={(val) => setTicketData({...ticketData, priorita: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bassa">Bassa</SelectItem><SelectItem value="media">Media</SelectItem><SelectItem value="alta">Alta</SelectItem></SelectContent></Select></div>
             </div>
@@ -314,6 +336,7 @@ export default function TenantPortal() {
         </DialogContent>
       </Dialog>
 
+      {/* DIALOG PAGAMENTO */}
       <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
