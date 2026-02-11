@@ -25,7 +25,7 @@ export default function TenantPortal() {
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  // 1. Sessione & Booking (Logica ROBUSTA)
+  // 1. Sessione & Booking (Logica ROBUSTA + FIX guest_email)
   const { data: sessionData, isLoading: sessionLoading } = useQuery({
     queryKey: ['tenant-session'],
     queryFn: async () => {
@@ -34,47 +34,33 @@ export default function TenantPortal() {
       
       const today = new Date().toISOString().split('T')[0];
       
-      // FIX CRITICO 1: Usiamo 'guest_email' invece di 'email'
-      // FIX CRITICO 2: Non chiediamo properties_mobile nella join per evitare crash PGRST200
       const { data: booking, error } = await supabase
         .from('bookings')
         .select(`
             *,
             properties_real(id, nome, indirizzo, wifi_ssid, wifi_password)
         `)
-        .eq('guest_email', user.email) // <--- CORRETTO QUI
+        .eq('guest_email', user.email)
         .lte('data_inizio', today)
         .gte('data_fine', today)
         .maybeSingle();
 
-      if (error) {
-          console.error("Errore fetch booking:", error);
-          // Se l'errore è bloccante, ritorniamo null ma logghiamo
-      }
+      if (error) console.error("Errore fetch booking:", error);
 
-      // Se non troviamo booking, ritorniamo null
       if (!booking) return { user, booking: null };
 
-      // Se è un immobile, properties_real è già popolato.
-      // Se è un veicolo (property_mobile_id esiste), lo recuperiamo a mano.
+      // Fallback per proprietà mobile (veicolo)
       let mobileProp = null;
       if (!booking.properties_real && booking.property_mobile_id) {
           const { data: mp } = await supabase
             .from('properties_mobile')
             .select('id, veicolo, targa, immagine_url')
             .eq('id', booking.property_mobile_id)
-            .single();
+            .maybeSingle();
           mobileProp = mp;
       }
 
-      // Uniamo i dati per l'interfaccia
-      return { 
-          user, 
-          booking: { 
-              ...booking, 
-              properties_mobile: mobileProp 
-          } 
-      };
+      return { user, booking: { ...booking, properties_mobile: mobileProp } };
     }
   });
 
@@ -104,7 +90,7 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 4. DOCUMENTI
+  // 4. DOCUMENTI (TAB AGGIUNTA)
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
@@ -115,8 +101,8 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 5. SERVIZI (Con gestione errore se tabella manca)
-  const { data: services } = useQuery({
+  // 5. SERVIZI (TAB AGGIUNTA - Con gestione errore)
+  const { data: services = [] } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
         try {
@@ -247,7 +233,7 @@ export default function TenantPortal() {
                 <TabsTrigger value="support">Assistenza</TabsTrigger>
             </TabsList>
 
-            {/* TAB PAGAMENTI */}
+            {/* TAB STATO (PAGAMENTI) */}
             <TabsContent value="status" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-5 h-5"/> Pagamenti</h3>
                 {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Tutto in regola!</p> : (
