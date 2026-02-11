@@ -34,21 +34,25 @@ export default function TenantPortal() {
       
       const today = new Date().toISOString().split('T')[0];
       
-      // FIX CRITICO: Non chiediamo properties_mobile nella join per evitare crash PGRST200
+      // FIX CRITICO 1: Usiamo 'guest_email' invece di 'email'
+      // FIX CRITICO 2: Non chiediamo properties_mobile nella join per evitare crash PGRST200
       const { data: booking, error } = await supabase
         .from('bookings')
         .select(`
             *,
             properties_real(id, nome, indirizzo, wifi_ssid, wifi_password)
         `)
-        .eq('email', user.email)
+        .eq('guest_email', user.email) // <--- CORRETTO QUI
         .lte('data_inizio', today)
         .gte('data_fine', today)
         .maybeSingle();
 
-      if (error) console.error("Errore booking:", error);
+      if (error) {
+          console.error("Errore fetch booking:", error);
+          // Se l'errore è bloccante, ritorniamo null ma logghiamo
+      }
 
-      // Se c'è un errore o non troviamo booking, ritorniamo null
+      // Se non troviamo booking, ritorniamo null
       if (!booking) return { user, booking: null };
 
       // Se è un immobile, properties_real è già popolato.
@@ -199,7 +203,7 @@ export default function TenantPortal() {
         <Home className="w-16 h-16 text-slate-300 mb-4"/>
         <h1 className="text-2xl font-bold text-slate-800">Nessuna Locazione Attiva</h1>
         <p className="text-slate-500 max-w-md mt-2">Non risultano contratti attivi in data odierna per {sessionData?.user.email}.</p>
-        <p className="text-xs text-gray-400 mt-2">Controlla che la data di inizio del contratto sia già passata.</p>
+        <p className="text-xs text-gray-400 mt-2">Controlla che la data di inizio del contratto sia valida.</p>
         <Button variant="outline" className="mt-6" onClick={handleLogout}>Esci</Button>
       </div>
     );
@@ -243,7 +247,7 @@ export default function TenantPortal() {
                 <TabsTrigger value="support">Assistenza</TabsTrigger>
             </TabsList>
 
-            {/* TAB STATO (PAGAMENTI) */}
+            {/* TAB PAGAMENTI */}
             <TabsContent value="status" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-5 h-5"/> Pagamenti</h3>
                 {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Tutto in regola!</p> : (
