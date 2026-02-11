@@ -33,24 +33,35 @@ export default function TenantPortal() {
       if (!user) throw new Error("Non autenticato");
       
       const today = new Date().toISOString().split('T')[0];
+      
+      // FIX QUERY: Rimossa join problematica su properties_mobile se non configurata FK
+      // Recuperiamo prima il booking e poi i dettagli della proprietà se servono
       const { data: booking, error } = await supabase
         .from('bookings')
         .select(`
             *,
-            properties_real(id, nome, indirizzo, immagine_url, wifi_ssid, wifi_password),
-            properties_mobile(id, veicolo, targa, immagine_url)
+            properties_real(id, nome, indirizzo, immagine_url, wifi_ssid, wifi_password)
         `)
         .eq('email', user.email)
         .lte('data_inizio', today)
         .gte('data_fine', today)
         .maybeSingle();
 
-      if (error) console.error(error);
-      return { user, booking };
+      if (error) console.error("Errore fetch booking:", error);
+      
+      // Se è mobile, recuperiamo a parte (fallback)
+      let mobileProp = null;
+      if (booking && !booking.properties_real && booking.property_mobile_id) {
+          const { data: mp } = await supabase.from('properties_mobile').select('*').eq('id', booking.property_mobile_id).single();
+          mobileProp = mp;
+      }
+
+      return { user, booking: booking ? {...booking, properties_mobile: mobileProp} : null };
     }
   });
 
   const booking = sessionData?.booking;
+  // Gestione sicura delle proprietà (fallback)
   const property = booking?.properties_real || booking?.properties_mobile;
   const isReal = !!booking?.properties_real;
 
@@ -76,7 +87,7 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 4. DOCUMENTI CONDIVISI (NUOVO - Come GuestPortal)
+  // 4. DOCUMENTI CONDIVISI
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
@@ -87,12 +98,16 @@ export default function TenantPortal() {
     enabled: !!booking
   });
 
-  // 5. ESPERIENZE / SERVIZI (NUOVO - Come GuestPortal)
+  // 5. ESPERIENZE / SERVIZI
   const { data: services } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
-        const { data } = await supabase.from('services').select('*').eq('active', true);
-        return data || [];
+        // FIX: Gestione errore se tabella services non esiste o RLS blocca
+        try {
+            const { data, error } = await supabase.from('services').select('*').eq('active', true);
+            if(error) return [];
+            return data || [];
+        } catch { return []; }
     }
   });
 
@@ -196,7 +211,7 @@ export default function TenantPortal() {
                 <CardTitle className="text-xl">Ciao, {booking.nome_ospite.split(' ')[0]} 👋</CardTitle>
                 <CardDescription className="text-blue-100">Scadenza contratto: <strong>{format(new Date(booking.data_fine), 'dd MMM yyyy')}</strong></CardDescription>
             </CardHeader>
-            {isReal && property.wifi_password && (
+            {isReal && property?.wifi_password && (
                 <CardFooter>
                     <div className="bg-white/10 p-3 rounded-lg flex items-center gap-3 w-full cursor-pointer hover:bg-white/20 transition-colors" onClick={() => copyToClipboard(property.wifi_password)}>
                         <div className="bg-white p-2 rounded-full text-blue-600"><Home className="w-4 h-4"/></div>
