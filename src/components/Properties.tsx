@@ -38,11 +38,17 @@ const Properties = () => {
   const [selectedTenant, setSelectedTenant] = useState<any>(null); 
   const [managingTicket, setManagingTicket] = useState<any>(null); 
 
+  // --- STATI UPLOAD POTENZIATI ---
   const [smartFile, setSmartFile] = useState<File | null>(null);
   const [isExpense, setIsExpense] = useState(false);
+  const [shareWithTenant, setShareWithTenant] = useState(false); // <--- NUOVO
   const [smartData, setSmartData] = useState({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
+  const [uploading, setUploading] = useState(false);
 
-  // SOSTITUZIONE HOOK: Query diretta per garantire il refresh sulla chiave 'properties_real'
+  const queryClient = useQueryClient(); 
+  const { toast } = useToast();
+
+  // MANTENIAMO LA QUERY DIRETTA PER IL REFRESH SICURO
   const { data: propertiesReal = [], isLoading } = useQuery({
     queryKey: ['properties_real'],
     queryFn: async () => {
@@ -56,10 +62,6 @@ const Properties = () => {
     }
   });
 
-  const queryClient = useQueryClient(); 
-  const { toast } = useToast();
-  const [uploading, setUploading] = useState(false);
-
   useEffect(() => {
     if (editOpen) {
       setEditFormData({
@@ -70,12 +72,19 @@ const Properties = () => {
     }
   }, [editOpen]);
 
-  // Gestione apertura dialog rinomina
   useEffect(() => {
     if (renamingDoc) {
         setNewName(renamingDoc.nome);
     }
   }, [renamingDoc]);
+
+  // RESETTA GLI SWITCH QUANDO CAMBI FILE
+  useEffect(() => {
+    if (!smartFile) {
+        setIsExpense(false);
+        setShareWithTenant(false);
+    }
+  }, [smartFile, docsOpen]);
 
   const updateProperty = useMutation({
     mutationFn: async () => {
@@ -86,7 +95,7 @@ const Properties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // REFRESH AGGIUNTO
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
       setEditOpen(null);
       toast({ title: "Proprietà aggiornata" });
     },
@@ -100,7 +109,7 @@ const Properties = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['properties_real'] }); // REFRESH AGGIUNTO
+      queryClient.invalidateQueries({ queryKey: ['properties_real'] });
       setDeleteOpen(null);
       toast({ title: "Proprietà eliminata" });
     },
@@ -212,6 +221,7 @@ const Properties = () => {
     enabled: !!selectedTenant
   });
 
+  // --- LOGICA UPLOAD AGGIORNATA ---
   const handleSmartUpload = async () => {
       if (!docsOpen || !smartFile) return;
       setUploading(true);
@@ -224,43 +234,75 @@ const Properties = () => {
           const { error: upError } = await supabase.storage.from('documents').upload(fileName, smartFile);
           if (upError) throw upError;
 
-          let generatedExpenseId = null;
+          // SE E' CONDIVISO CON INQUILINO
+          if (shareWithTenant) {
+              // Trova l'inquilino ATTIVO oggi
+              const today = new Date().toISOString().split('T')[0];
+              const { data: activeBooking, error: bookingError } = await supabase
+                  .from('bookings')
+                  .select('id, nome_ospite')
+                  .eq('property_id', docsOpen.id)
+                  .lte('data_inizio', today)
+                  .gte('data_fine', today)
+                  .maybeSingle();
 
-          if (isExpense && smartData.amount) {
-              const { data: expenseData, error: expError } = await supabase.from('payments').insert({
+              if (bookingError) throw bookingError;
+
+              if (!activeBooking) {
+                  toast({ title: "Attenzione", description: "Nessun inquilino attivo trovato oggi per condividere il file.", variant: "destructive" });
+                  setUploading(false);
+                  return;
+              }
+
+              const { error: shareError } = await supabase.from('booking_documents').insert({
+                  booking_id: activeBooking.id,
+                  filename: smartData.description || smartFile.name,
+                  file_url: fileName
+              });
+
+              if (shareError) throw shareError;
+              toast({ title: "Condiviso", description: `File inviato a ${activeBooking.nome_ospite}` });
+
+          } else {
+              // SE E' INTERNO (O SPESA)
+              let generatedExpenseId = null;
+
+              if (isExpense && smartData.amount) {
+                  const { data: expenseData, error: expError } = await supabase.from('payments').insert({
+                      user_id: user?.id,
+                      property_real_id: docsOpen.id,
+                      categoria: 'manutenzione', 
+                      importo: parseFloat(smartData.amount),
+                      importo_originale: parseFloat(smartData.amount),
+                      descrizione: smartData.description || `Spesa da Doc: ${smartFile.name}`,
+                      scadenza: smartData.date,
+                      stato: 'pagato',
+                      ricorrenza_tipo: 'nessuna'
+                  }).select().single();
+
+                  if (expError) throw expError;
+                  generatedExpenseId = expenseData.id;
+              }
+
+              const { error: docError } = await supabase.from('documents').insert({
                   user_id: user?.id,
                   property_real_id: docsOpen.id,
-                  categoria: 'manutenzione', 
-                  importo: parseFloat(smartData.amount),
-                  importo_originale: parseFloat(smartData.amount),
-                  descrizione: smartData.description || `Spesa da Doc: ${smartFile.name}`,
-                  scadenza: smartData.date,
-                  stato: 'pagato',
-                  ricorrenza_tipo: 'nessuna'
-              }).select().single();
+                  nome: smartData.description || smartFile.name,
+                  tipo: isExpense ? 'fattura' : 'generico',
+                  url: fileName,
+                  formato: fileExt,
+                  importo: isExpense ? parseFloat(smartData.amount) : null,
+                  data_riferimento: smartData.date,
+                  payment_id: generatedExpenseId
+              });
 
-              if (expError) throw expError;
-              generatedExpenseId = expenseData.id;
+              if (docError) throw docError;
+              toast({ title: "Caricamento completato", description: isExpense ? "Spesa registrata!" : "Archiviato." });
           }
-
-          const { error: docError } = await supabase.from('documents').insert({
-              user_id: user?.id,
-              property_real_id: docsOpen.id,
-              nome: smartData.description || smartFile.name,
-              tipo: isExpense ? 'fattura' : 'generico',
-              url: fileName,
-              formato: fileExt,
-              importo: isExpense ? parseFloat(smartData.amount) : null,
-              data_riferimento: smartData.date,
-              payment_id: generatedExpenseId
-          });
-
-          if (docError) throw docError;
-
-          toast({ title: "Caricamento completato", description: isExpense ? "Spesa registrata!" : "Archiviato." });
           
           setSmartFile(null);
           setIsExpense(false);
+          setShareWithTenant(false);
           setSmartData({ amount: '', date: format(new Date(), 'yyyy-MM-dd'), description: '' });
           
           queryClient.invalidateQueries({ queryKey: ['property-docs-full'] });
@@ -305,7 +347,6 @@ const Properties = () => {
       <AddPropertyDialog 
         isOpen={isAddOpen} 
         onOpenChange={(open) => setIsAddOpen(open)} 
-        // MODIFICA CRUCIALE: Callback onSuccess che invalida la query giusta
         onSuccess={() => {
             queryClient.invalidateQueries({ queryKey: ['properties_real'] });
         }} 
@@ -458,11 +499,22 @@ const Properties = () => {
                     </div>
                     {smartFile && (
                         <div className="bg-white p-3 rounded border shadow-sm space-y-3 animate-in fade-in">
-                            <div className="flex items-center justify-between">
-                                <Label className="cursor-pointer text-sm font-bold text-blue-800">Genera Spesa?</Label>
-                                <Switch checked={isExpense} onCheckedChange={setIsExpense} />
+                            
+                            {/* --- NUOVO: SWITCH CONDIVISIONE --- */}
+                            <div className="flex items-center justify-between p-2 bg-blue-50 border border-blue-100 rounded mb-2">
+                                <Label className="text-sm font-bold text-blue-800 cursor-pointer">Condividi con Inquilino?</Label>
+                                <Switch checked={shareWithTenant} onCheckedChange={(val) => { setShareWithTenant(val); if(val) setIsExpense(false); }} />
                             </div>
-                            {isExpense && (
+
+                            {/* SWITCH SPESA (SOLO SE NON CONDIVIDI) */}
+                            {!shareWithTenant && (
+                                <div className="flex items-center justify-between">
+                                    <Label className="cursor-pointer text-sm font-bold text-gray-600">Genera Spesa?</Label>
+                                    <Switch checked={isExpense} onCheckedChange={setIsExpense} />
+                                </div>
+                            )}
+
+                            {isExpense && !shareWithTenant && (
                                 <>
                                     <div className="grid gap-1">
                                         <Label className="text-xs">Importo (€)</Label>
@@ -482,7 +534,7 @@ const Properties = () => {
                                 <Input className="h-8" value={smartData.description} onChange={e => setSmartData({...smartData, description: e.target.value})} />
                             </div>
                             <Button className="w-full bg-blue-600" size="sm" onClick={handleSmartUpload} disabled={uploading}>
-                                {uploading ? <Loader2 className="w-4 h-4 animate-spin"/> : (isExpense ? 'Salva & Contabilizza' : 'Archivia')}
+                                {uploading ? <Loader2 className="w-4 h-4 animate-spin"/> : (shareWithTenant ? 'Condividi Ora' : (isExpense ? 'Salva Spesa' : 'Archivia'))}
                             </Button>
                         </div>
                     )}
@@ -515,12 +567,14 @@ const Properties = () => {
                                                 </Button>
                                             </div>
                                             
+                                            {/* Badge Inquilino */}
                                             {doc.type === 'tenant' && doc.bookings && (
                                                 <span className="text-[10px] text-purple-700 bg-purple-50 px-1 rounded truncate block w-fit mb-0.5">
                                                     {doc.bookings.nome_ospite}
                                                 </span>
                                             )}
 
+                                            {/* Badge Spesa */}
                                             {doc.payments && (
                                                 <span className="text-[10px] text-green-600 bg-green-50 px-1 rounded truncate block w-fit mb-0.5">
                                                     € {doc.payments.importo} - {doc.payments.categoria}
