@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'; // NEW
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'; 
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Switch } from '@/components/ui/switch';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns'; // FIX: Aggiunto parseISO
 import { 
   CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator, Send, User, Calendar as CalendarIcon, UploadCloud, Download
 } from 'lucide-react';
@@ -59,7 +59,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   const [uploading, setUploading] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
-  const [showResetConfirm, setShowResetConfirm] = useState(false); // NEW: Stato per reset dialog
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [confirmText, setConfirmText] = useState('');
 
   const [newQuoteItem, setNewQuoteItem] = useState({ desc: '', amount: '' });
@@ -167,6 +167,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   };
 
   const handleQuoteUpload = async () => {
+      // FIX QUALITÀ: Controllo dimensione (10MB)
+      if (quoteFile && quoteFile.size > 10 * 1024 * 1024) {
+          toast({ title: "File troppo grande", description: "Il preventivo supera i 10MB.", variant: "destructive" });
+          return;
+      }
+
       setUploading(true);
       try {
         let quoteUrl = ticket.quote_url;
@@ -193,7 +199,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       } finally { setUploading(false); }
   };
 
-  // FIX: Sostituito confirm() con stato per AlertDialog
   const handleResetQuote = () => {
     setShowResetConfirm(true);
   };
@@ -244,7 +249,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 });
                 if (expenseError) throw new Error("Errore creazione spesa: " + expenseError.message);
             }
-            toast({ title: "Approvato & Schedulato", description: `Scadenza impostata al ${format(new Date(approvalDate), 'dd/MM/yyyy')}` });
+            // FIX: parseISO per formattazione sicura
+            toast({ title: "Approvato & Schedulato", description: `Scadenza impostata al ${format(parseISO(approvalDate), 'dd/MM/yyyy')}` });
         } else {
             toast({ title: "Rifiutato" });
         }
@@ -268,6 +274,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   };
 
   const handleSendToVerify = async () => {
+    // FIX QUALITÀ: Controllo dimensione ricevuta (10MB)
+    if (receiptFile && receiptFile.size > 10 * 1024 * 1024) {
+        toast({ title: "File troppo grande", description: "La ricevuta supera i 10MB.", variant: "destructive" });
+        return;
+    }
+
     try {
         setUploading(true);
         let receiptUrl = ticket.ricevuta_url;
@@ -404,7 +416,8 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                 <span className="truncate">{headerTitle}: {ticket.titolo}</span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-                Creato il {format(new Date(ticket.created_at), 'dd/MM/yyyy')} - <Badge className={status === 'risolto' ? 'bg-green-600' : ''}>{status}</Badge>
+                {/* FIX: parseISO per data creazione */}
+                Creato il {format(parseISO(ticket.created_at), 'dd/MM/yyyy')} - <Badge className={status === 'risolto' ? 'bg-green-600' : ''}>{status}</Badge>
             </DialogDescription>
             </DialogHeader>
 
@@ -546,7 +559,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
                                  <Input type="number" placeholder="Totale €" value={quoteAmount} onChange={e => setQuoteAmount(e.target.value)} className="bg-white"/>
                                  {totalDetailedQuotes > 0 && <Button variant="outline" size="icon" onClick={() => setQuoteAmount(totalDetailedQuotes.toString())} title="Usa Somma Voci"><Calculator className="w-4 h-4 text-blue-600"/></Button>}
                             </div>
-                            {/* FIX UX: Aggiunto accept */}
+                            {/* FIX QUALITÀ: Aggiunto accept */}
                             <Input type="file" accept=".pdf,image/*" onChange={e => setQuoteFile(e.target.files?.[0] || null)} className="bg-white"/>
                             <Button className="w-full" disabled={uploading} onClick={handleQuoteUpload}>{uploading ? '...' : 'Invia Preventivo'}</Button>
                         </div>
@@ -627,7 +640,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
                             <div className="mt-4">
                                 <Label className="text-xs mb-1 block">Carica Ricevuta/Fattura</Label>
-                                {/* FIX UX: Aggiunto accept */}
+                                {/* FIX QUALITÀ: Aggiunto accept */}
                                 <Input type="file" accept=".pdf,image/*" onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="bg-white" disabled={isReadOnly}/>
                             </div>
 

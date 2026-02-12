@@ -84,8 +84,9 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     // A. Booking
     rawData.bookings.forEach(b => {
-      const inDate = new Date(b.data_inizio);
-      const outDate = new Date(b.data_fine);
+      // FIX: parseISO
+      const inDate = parseISO(b.data_inizio);
+      const outDate = parseISO(b.data_fine);
       events.push({
         id: `in-${b.id}`, date: inDate, type: 'checkin',
         title: `Check-in: ${b.nome_ospite}`, subtitle: b.properties_real?.nome || 'Proprietà',
@@ -104,7 +105,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     rawData.expenses.forEach(exp => {
       const target = exp.properties_mobile ? `🚛 ${exp.properties_mobile.veicolo}` : `🏠 ${exp.properties_real?.nome || 'Generale'}`;
       events.push({
-        id: `exp-${exp.id}`, date: new Date(exp.scadenza), type: 'expense',
+        // FIX: parseISO
+        id: `exp-${exp.id}`, date: parseISO(exp.scadenza), type: 'expense',
         title: `Uscita: €${exp.importo}`, subtitle: `${target} - ${exp.categoria}`,
         amount: Number(exp.importo), priority: 'media', status: exp.stato, targetTab: 'expenses',
         isCompleted: exp.stato === 'pagato'
@@ -114,7 +116,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     // C. Incassi
     rawData.income.forEach(inc => {
       events.push({
-        id: `inc-${inc.id}`, date: new Date(inc.data_scadenza), type: 'payment',
+        // FIX: parseISO
+        id: `inc-${inc.id}`, date: parseISO(inc.data_scadenza), type: 'payment',
         title: `Incasso: €${inc.importo}`, subtitle: inc.description || 'Affitto',
         amount: Number(inc.importo), priority: 'media', status: inc.stato, targetTab: 'revenue',
         isCompleted: inc.stato === 'pagato'
@@ -123,7 +126,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     // D. Ticket
     rawData.tickets.forEach(t => {
-      const ticketDate = t.scadenza ? new Date(t.scadenza) : new Date(t.created_at);
+      // FIX: parseISO
+      const ticketDate = t.scadenza ? parseISO(t.scadenza) : parseISO(t.created_at);
       events.push({
         id: `tick-${t.id}`, date: ticketDate, type: 'maintenance',
         title: `Ticket: ${t.titolo}`, subtitle: t.properties_real?.nome || 'Generale',
@@ -134,24 +138,26 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
     // E. Veicoli
     rawData.vehicles.forEach(v => {
+      // FIX: parseISO
       if (v.data_revisione) events.push({
-        id: `rev-${v.id}`, date: new Date(v.data_revisione), type: 'deadline',
+        id: `rev-${v.id}`, date: parseISO(v.data_revisione), type: 'deadline',
         title: 'Scadenza Revisione', subtitle: `${v.veicolo} (${v.targa})`,
         priority: 'alta', status: 'pending', targetTab: 'mobile-properties',
-        isCompleted: isPast(new Date(v.data_revisione))
+        isCompleted: isPast(parseISO(v.data_revisione))
       });
       if (v.scadenza_assicurazione) events.push({
-        id: `ass-${v.id}`, date: new Date(v.scadenza_assicurazione), type: 'deadline',
+        id: `ass-${v.id}`, date: parseISO(v.scadenza_assicurazione), type: 'deadline',
         title: 'Scadenza Assicurazione', subtitle: `${v.veicolo} (${v.targa})`,
         priority: 'alta', status: 'pending', targetTab: 'mobile-properties',
-        isCompleted: isPast(new Date(v.scadenza_assicurazione))
+        isCompleted: isPast(parseISO(v.scadenza_assicurazione))
       });
     });
 
     // F. Attività
     rawData.activities.forEach(a => {
         const target = a.properties_mobile ? `🚛 ${a.properties_mobile.veicolo}` : (a.properties_real?.nome ? `🏠 ${a.properties_real.nome}` : 'Generale');
-        const actDate = new Date(a.data || a.created_at);
+        // FIX: parseISO
+        const actDate = parseISO(a.data || a.created_at);
         events.push({
             id: `act-${a.id}`, date: actDate, type: 'activity',
             title: a.titolo || 'Attività', subtitle: `${target} - ${a.descrizione || ''}`,
@@ -160,12 +166,10 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         });
     });
 
-    // --- FIX KPI (Calcolo preciso per il mese corrente) ---
+    // --- FIX KPI (Calcolo preciso per il mese corrente con parseISO) ---
     const now = new Date();
-    
-    // Filtra solo gli elementi che cadono nel mese corrente
-    const currentMonthIncome = rawData.income.filter(i => isSameMonth(new Date(i.data_scadenza), now));
-    const currentMonthExpenses = rawData.expenses.filter(e => isSameMonth(new Date(e.scadenza), now));
+    const currentMonthIncome = rawData.income.filter(i => isSameMonth(parseISO(i.data_scadenza), now));
+    const currentMonthExpenses = rawData.expenses.filter(e => isSameMonth(parseISO(e.scadenza), now));
 
     const kpi = {
       incassato: currentMonthIncome.filter(i => i.stato === 'pagato').reduce((acc, c) => acc + Number(c.importo), 0),
@@ -344,7 +348,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                                 <div className="flex items-start gap-3">
                                     <div className="mt-0.5 text-red-500">{getIcon(u.type)}</div>
                                     <div>
-                                        <h4 className="text-sm font-bold text-slate-800">{u.title}</h4>
+                                        <h4 className="font-bold text-sm text-slate-800">{u.title}</h4>
                                         <p className="text-xs text-slate-500 flex items-center gap-1">
                                             <Clock className="w-3 h-3"/> Scadenza: {format(u.date, 'dd MMM yyyy')}
                                         </p>

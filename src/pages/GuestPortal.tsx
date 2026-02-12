@@ -112,10 +112,14 @@ export default function GuestPortal() {
       const file = event.target.files?.[0];
       if (!file || !booking) return;
 
-      // UX: Validazione dimensione file
+      // FIX QUALITÀ: Controllo dimensione (10MB)
       if (file.size > 10 * 1024 * 1024) {
-          toast({ title: "File troppo grande", description: "Max 10MB", variant: "destructive" });
-          return;
+        toast({ 
+          title: "File troppo grande", 
+          description: "Il file supera il limite di 10MB.", 
+          variant: "destructive" 
+        });
+        return;
       }
 
       setIsUploading(true);
@@ -154,6 +158,7 @@ export default function GuestPortal() {
               booking_id: booking.id,
               property_real_id: booking.property_id,
               titolo: `Pagamento: ${paymentTicketOpen.tipo}`,
+              // FIX: parseISO per stabilità data
               descrizione: `L'inquilino prevede di pagare il ${format(parseISO(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
               stato: 'aperto',
               creato_da: 'ospite',
@@ -247,6 +252,7 @@ export default function GuestPortal() {
                           </div>
                           {!isPendingApproval && (
                              <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors relative">
+                                {/* FIX QUALITÀ: Aggiunto accept */}
                                 <Input type="file" accept="image/*,.pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} disabled={isUploading} />
                                 {isUploading ? <Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-600"/> : <p className="text-blue-600 font-bold">Scatta Foto</p>}
                              </div>
@@ -319,7 +325,7 @@ export default function GuestPortal() {
                                         <span className="font-bold text-blue-600">€{svc.price}</span>
                                         <Button size="sm" onClick={() => {
                                             setTicketForm({ titolo: `Prenotazione: ${svc.title}`, descrizione: "Vorrei prenotare questa esperienza." });
-                                            setActiveTab('support'); // <--- FIX NAVIGAZIONE
+                                            setActiveTab('support'); // <--- FIX NAVIGAZIONE (React state invece di DOM)
                                         }}>Prenota</Button>
                                     </div>
                                 </CardContent>
@@ -335,6 +341,7 @@ export default function GuestPortal() {
                         <CardContent>
                             {payments?.map((pay: any) => (
                                 <div key={pay.id} className="flex justify-between items-center p-3 border-b last:border-0">
+                                    {/* FIX: parseISO per stabilità data */}
                                     <div><p className="font-medium capitalize">{pay.tipo?.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(parseISO(pay.data_scadenza), 'dd MMM')}</p></div>
                                     <div className="text-right">
                                         <p className="font-bold">€{pay.importo}</p>
