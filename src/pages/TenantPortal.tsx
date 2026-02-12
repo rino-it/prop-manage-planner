@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom'; // <--- AGGIUNTO
+import { useParams } from 'react-router-dom'; // <--- FONDAMENTALE PER IL LINK UNICO
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -16,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export default function TenantPortal() {
-  const { id } = useParams(); // <--- Recupera l'ID dal link (es. /tenant/UUID)
+  const { id } = useParams(); // Recupera l'UUID dal link
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -25,7 +25,7 @@ export default function TenantPortal() {
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  // 1. Recupero Booking tramite ID (Logica "Link Unico" senza login)
+  // 1. Recupero Booking tramite ID (Logica Link Unico)
   const { data: booking, isLoading: bookingLoading } = useQuery({
     queryKey: ['tenant-booking', id],
     queryFn: async () => {
@@ -47,7 +47,7 @@ export default function TenantPortal() {
 
       if (!bookingData) return null;
 
-      // Fallback per proprietà mobile (veicolo) se necessario
+      // Fallback per proprietà mobile (veicolo)
       let mobileProp = null;
       if (!bookingData.properties_real && bookingData.property_mobile_id) {
           const { data: mp } = await supabase
@@ -71,8 +71,7 @@ export default function TenantPortal() {
     queryKey: ['tenant-payments', booking?.id],
     queryFn: async () => {
       if (!booking?.id) return [];
-      const { data, error } = await supabase.from('tenant_payments').select('*').eq('booking_id', booking.id).order('data_scadenza', { ascending: true });
-      if (error) return [];
+      const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', booking.id).order('data_scadenza', { ascending: true });
       return data || [];
     },
     enabled: !!booking?.id
@@ -83,36 +82,32 @@ export default function TenantPortal() {
     queryKey: ['tenant-tickets', booking?.id],
     queryFn: async () => {
       if (!booking?.id) return [];
-      const { data, error } = await supabase.from('tickets').select('*').eq('booking_id', booking.id).order('created_at', { ascending: false });
-      if (error) return [];
+      const { data } = await supabase.from('tickets').select('*').eq('booking_id', booking.id).order('created_at', { ascending: false });
       return data || [];
     },
     enabled: !!booking?.id
   });
 
-  // 4. DOCUMENTI (TAB AGGIUNTA)
+  // 4. DOCUMENTI (NUOVO)
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
       if (!booking?.id) return [];
-      const { data, error } = await supabase.from('booking_documents').select('*').eq('booking_id', booking.id).order('uploaded_at', { ascending: false });
-      if (error) return [];
+      const { data } = await supabase.from('booking_documents').select('*').eq('booking_id', booking.id).order('uploaded_at', { ascending: false });
       return data || [];
     },
     enabled: !!booking?.id
   });
 
-  // 5. SERVIZI (TAB AGGIUNTA - Gestione errore silenziosa)
+  // 5. SERVIZI (NUOVO)
   const { data: services = [] } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
         try {
-            const { data, error } = await supabase.from('services').select('*').eq('active', true);
-            if (error) return [];
+            const { data } = await supabase.from('services').select('*').eq('active', true);
             return data || [];
         } catch { return []; }
-    },
-    retry: false
+    }
   });
 
   // --- AZIONI ---
@@ -128,7 +123,7 @@ export default function TenantPortal() {
         descrizione: ticketData.descrizione,
         priorita: ticketData.priorita,
         stato: 'aperto',
-        creato_da: 'ospite' // Identifichiamo che arriva dal portale pubblico
+        creato_da: 'ospite'
       });
       if (error) throw error;
     },
