@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useParams } from 'react-router-dom'; // <--- AGGIUNTO
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -13,11 +14,10 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useNavigate } from 'react-router-dom';
 
 export default function TenantPortal() {
+  const { id } = useParams(); // <--- Recupera l'ID dal link (es. /tenant/UUID)
   const { toast } = useToast();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
   
   const [newTicketOpen, setNewTicketOpen] = useState(false);
@@ -25,88 +25,84 @@ export default function TenantPortal() {
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  // 1. Sessione & Booking
-  const { data: sessionData, isLoading: sessionLoading } = useQuery({
-    queryKey: ['tenant-session'],
+  // 1. Recupero Booking tramite ID (Logica "Link Unico" senza login)
+  const { data: booking, isLoading: bookingLoading } = useQuery({
+    queryKey: ['tenant-booking', id],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Non autenticato");
+      if (!id) return null;
       
-      const today = new Date().toISOString().split('T')[0];
-      
-      // FIX: Usiamo 'guest_email' (non 'email') e non joinamo property_mobile
-      const { data: booking, error } = await supabase
+      const { data: bookingData, error } = await supabase
         .from('bookings')
         .select(`
             *,
             properties_real(id, nome, indirizzo, wifi_ssid, wifi_password)
         `)
-        .eq('guest_email', user.email) // <--- PUNTO CRITICO: DEVE ESSERE guest_email
-        .lte('data_inizio', today)
-        .gte('data_fine', today)
+        .eq('id', id)
         .maybeSingle();
 
-      if (error) console.error("Errore fetch booking:", error);
+      if (error) {
+          console.error("Errore fetch booking:", error);
+          throw error;
+      }
 
-      if (!booking) return { user, booking: null };
+      if (!bookingData) return null;
 
-      // Recupero manuale veicolo se necessario
+      // Fallback per proprietà mobile (veicolo) se necessario
       let mobileProp = null;
-      if (!booking.properties_real && booking.property_mobile_id) {
+      if (!bookingData.properties_real && bookingData.property_mobile_id) {
           const { data: mp } = await supabase
             .from('properties_mobile')
             .select('id, veicolo, targa, immagine_url')
-            .eq('id', booking.property_mobile_id)
+            .eq('id', bookingData.property_mobile_id)
             .maybeSingle();
           mobileProp = mp;
       }
 
-      return { user, booking: { ...booking, properties_mobile: mobileProp } };
-    }
+      return { ...bookingData, properties_mobile: mobileProp };
+    },
+    enabled: !!id
   });
 
-  const booking = sessionData?.booking;
-  const user = sessionData?.user;
   const property = booking?.properties_real || booking?.properties_mobile;
   const isReal = !!booking?.properties_real;
 
-  // 2. Pagamenti (Protezione da crash)
+  // 2. Pagamenti
   const { data: payments = [] } = useQuery({
     queryKey: ['tenant-payments', booking?.id],
     queryFn: async () => {
-      if (!booking) return [];
+      if (!booking?.id) return [];
       const { data, error } = await supabase.from('tenant_payments').select('*').eq('booking_id', booking.id).order('data_scadenza', { ascending: true });
       if (error) return [];
       return data || [];
     },
-    enabled: !!booking
+    enabled: !!booking?.id
   });
 
   // 3. Ticket
   const { data: tickets = [] } = useQuery({
     queryKey: ['tenant-tickets', booking?.id],
     queryFn: async () => {
-      if (!booking) return [];
+      if (!booking?.id) return [];
       const { data, error } = await supabase.from('tickets').select('*').eq('booking_id', booking.id).order('created_at', { ascending: false });
       if (error) return [];
       return data || [];
     },
-    enabled: !!booking
+    enabled: !!booking?.id
   });
 
-  // 4. Documenti
+  // 4. DOCUMENTI (TAB AGGIUNTA)
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
-      if (!booking) return [];
+      if (!booking?.id) return [];
       const { data, error } = await supabase.from('booking_documents').select('*').eq('booking_id', booking.id).order('uploaded_at', { ascending: false });
       if (error) return [];
       return data || [];
     },
-    enabled: !!booking
+    enabled: !!booking?.id
   });
 
-  // 5. Servizi (Protezione 400)
+  // 5. SERVIZI (TAB AGGIUNTA - Gestione errore silenziosa)
   const { data: services = [] } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
@@ -115,27 +111,24 @@ export default function TenantPortal() {
             if (error) return [];
             return data || [];
         } catch { return []; }
-    }
+    },
+    retry: false
   });
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/auth');
-  };
+  // --- AZIONI ---
 
   const handleCreateTicket = useMutation({
     mutationFn: async () => {
-      if (!booking) throw new Error("Errore");
+      if (!booking) return;
       const { error } = await supabase.from('tickets').insert({
         booking_id: booking.id,
-        user_id: sessionData?.user.id,
         property_real_id: isReal ? property.id : null,
         property_mobile_id: !isReal ? property.id : null,
         titolo: ticketData.titolo,
         descrizione: ticketData.descrizione,
         priorita: ticketData.priorita,
         stato: 'aperto',
-        source: 'tenant_portal'
+        creato_da: 'ospite' // Identifichiamo che arriva dal portale pubblico
       });
       if (error) throw error;
     },
@@ -143,9 +136,8 @@ export default function TenantPortal() {
       queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
       setNewTicketOpen(false);
       setTicketData({ titolo: '', descrizione: '', priorita: 'bassa' });
-      toast({ title: "Ticket inviato" });
-    },
-    onError: () => toast({ title: "Errore", variant: "destructive" })
+      toast({ title: "Segnalazione inviata" });
+    }
   });
 
   const sendPaymentNotice = useMutation({
@@ -155,19 +147,16 @@ export default function TenantPortal() {
               booking_id: booking.id,
               property_real_id: isReal ? property.id : null,
               titolo: `Pagamento: ${paymentTicketOpen.tipo}`,
-              descrizione: `Previsto pagamento il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} con ${payPromise.method}.`,
+              descrizione: `L'inquilino prevede di pagare il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
               stato: 'aperto',
-              source: 'tenant_portal',
-              related_payment_id: paymentTicketOpen.id,
-              promised_payment_date: payPromise.date,
-              promised_payment_method: payPromise.method
+              creato_da: 'ospite',
+              related_payment_id: paymentTicketOpen.id
           });
       },
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-          toast({ title: "Avviso inviato" });
+          toast({ title: "Amministrazione avvisata" });
           setPaymentTicketOpen(null);
-          setPayPromise({ date: '', method: '' });
       }
   });
 
@@ -177,41 +166,26 @@ export default function TenantPortal() {
         if (error || !data) throw new Error();
         window.open(data.signedUrl, '_blank');
     } catch {
-        toast({ title: "Errore", description: "Impossibile scaricare il file.", variant: "destructive" });
+        toast({ title: "Errore download", variant: "destructive" });
     }
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: "Copiato!" });
+    toast({ title: "Copiato!", duration: 1500 });
   };
 
-  if (sessionLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600"/></div>;
+  if (bookingLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600"/></div>;
 
-  // --- SCHERMATA NESSUNA PRENOTAZIONE (CON DIAGNOSTICA) ---
   if (!booking) {
-    const today = new Date().toISOString().split('T')[0];
     return (
       <div className="flex flex-col h-screen items-center justify-center p-4 text-center bg-slate-50">
-        <Home className="w-16 h-16 text-slate-300 mb-4"/>
-        <h1 className="text-2xl font-bold text-slate-800">Nessuna Locazione Attiva</h1>
-        
-        {/* DIAGNOSTICA PROBLEMI */}
-        <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded text-left text-xs font-mono text-yellow-800 max-w-md w-full">
-            <p className="font-bold border-b border-yellow-200 mb-2 pb-1">DIAGNOSTICA (Mostra all'Admin):</p>
-            <p><strong>Utente Loggato:</strong> {user?.email}</p>
-            <p><strong>Data Oggi:</strong> {today}</p>
-            <p className="mt-2 font-semibold">Il sistema cerca nel DB una prenotazione con:</p>
-            <ul className="list-disc pl-4 mt-1 space-y-1">
-                <li>guest_email = "{user?.email}"</li>
-                <li>data_inizio &lt;= {today}</li>
-                <li>data_fine &gt;= {today}</li>
-            </ul>
-            <p className="mt-3 text-red-600 font-bold">SOLUZIONE:</p>
-            <p>Controlla nella tabella 'bookings' di Supabase che l'email sia identica e le date includano oggi.</p>
-        </div>
-
-        <Button variant="outline" className="mt-6" onClick={handleLogout}>Esci</Button>
+        <AlertTriangle className="w-16 h-16 text-amber-500 mb-4"/>
+        <h1 className="text-2xl font-bold text-slate-800">Link Non Valido</h1>
+        <p className="text-slate-500 max-w-md mt-2">
+            Non siamo riusciti a trovare la prenotazione associata a questo link. 
+            Contatta l'amministratore per ricevere il link corretto.
+        </p>
       </div>
     );
   }
@@ -222,25 +196,29 @@ export default function TenantPortal() {
         <div className="flex items-center gap-2">
             <div className="bg-blue-100 p-2 rounded-lg"><Home className="w-5 h-5 text-blue-600"/></div>
             <div>
-                <h1 className="font-bold text-sm sm:text-base text-slate-900 truncate max-w-[150px]">{isReal ? property.nome : property?.veicolo}</h1>
-                <p className="text-[10px] sm:text-xs text-slate-500 truncate">{isReal ? property.indirizzo : property?.targa}</p>
+                <h1 className="font-bold text-sm text-slate-900 truncate max-w-[150px]">{isReal ? property.nome : property?.veicolo}</h1>
+                <p className="text-[10px] text-slate-500">Portale Inquilino</p>
             </div>
         </div>
-        <Button variant="ghost" size="icon" onClick={handleLogout}><LogOut className="w-5 h-5 text-slate-400"/></Button>
+        <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">Attivo</Badge>
       </header>
 
-      <main className="max-w-5xl mx-auto p-4 space-y-6">
-        <Card className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-none shadow-lg">
+      <main className="max-w-xl mx-auto p-4 space-y-6">
+        <Card className="bg-slate-900 text-white border-none shadow-xl overflow-hidden relative">
             <CardHeader>
-                <CardTitle className="text-xl">Ciao, {booking.nome_ospite.split(' ')[0]} 👋</CardTitle>
-                <CardDescription className="text-blue-100">Scadenza contratto: <strong>{format(new Date(booking.data_fine), 'dd MMM yyyy')}</strong></CardDescription>
+                <CardTitle className="text-xl">Benvenuto, {booking.nome_ospite}</CardTitle>
+                <CardDescription className="text-slate-400">Rimani aggiornato sulla tua locazione.</CardDescription>
             </CardHeader>
             {isReal && property?.wifi_password && (
-                <CardFooter>
-                    <div className="bg-white/10 p-3 rounded-lg flex items-center gap-3 w-full cursor-pointer hover:bg-white/20 transition-colors" onClick={() => copyToClipboard(property.wifi_password)}>
-                        <div className="bg-white p-2 rounded-full text-blue-600"><Home className="w-4 h-4"/></div>
-                        <div className="flex-1"><p className="text-[10px] uppercase font-bold text-blue-200">WiFi Password</p><p className="font-mono font-bold text-sm">{property.wifi_password}</p></div>
-                        <Copy className="w-4 h-4 text-white/50"/>
+                <CardFooter className="bg-white/5 border-t border-white/10">
+                    <div className="flex justify-between items-center w-full py-1">
+                        <div>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">WiFi Password</p>
+                            <p className="text-sm font-mono">{property.wifi_password}</p>
+                        </div>
+                        <Button size="icon" variant="ghost" className="text-slate-400 hover:text-white" onClick={() => copyToClipboard(property.wifi_password)}>
+                            <Copy className="w-4 h-4"/>
+                        </Button>
                     </div>
                 </CardFooter>
             )}
@@ -248,22 +226,26 @@ export default function TenantPortal() {
 
         <Tabs defaultValue="status" className="w-full">
             <TabsList className="grid w-full grid-cols-4 mb-4">
-                <TabsTrigger value="status">Stato</TabsTrigger>
-                <TabsTrigger value="services">Servizi</TabsTrigger>
-                <TabsTrigger value="documents">Documenti</TabsTrigger>
-                <TabsTrigger value="support">Assistenza</TabsTrigger>
+                <TabsTrigger value="status" className="text-xs">Stato</TabsTrigger>
+                <TabsTrigger value="services" className="text-xs">Servizi</TabsTrigger>
+                <TabsTrigger value="docs" className="text-xs">Documenti</TabsTrigger>
+                <TabsTrigger value="support" className="text-xs">Help</TabsTrigger>
             </TabsList>
 
             <TabsContent value="status" className="space-y-4">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-5 h-5"/> Pagamenti</h3>
-                {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Tutto in regola!</p> : (
+                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-4 h-4"/> Piano Pagamenti</h3>
+                {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Nessun pagamento registrato.</p> : (
                     <div className="space-y-3">
                         {payments.map((pay: any) => (
-                            <Card key={pay.id} className={`border-l-4 ${pay.stato === 'pagato' ? 'border-l-green-500' : 'border-l-orange-500'}`}>
+                            <Card key={pay.id} className="border-l-4 border-l-blue-500">
                                 <CardContent className="p-4 flex justify-between items-center">
-                                    <div><p className="font-bold text-sm capitalize">{pay.tipo.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(new Date(pay.data_scadenza), 'dd MMM')}</p></div>
-                                    <div className="text-right"><p className="font-bold text-lg">€ {pay.importo}</p><Badge variant={pay.stato === 'pagato' ? 'default' : 'outline'} className={pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'text-orange-600'}>{pay.stato === 'pagato' ? 'Pagato' : 'Da Pagare'}</Badge></div>
-                                    {pay.stato !== 'pagato' && <Button size="sm" variant="outline" className="ml-2 h-8 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>Avvisa</Button>}
+                                    <div><p className="font-bold text-sm capitalize">{pay.tipo.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p></div>
+                                    <div className="text-right">
+                                        <p className="font-bold text-lg">€ {pay.importo}</p>
+                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-700 border-0">Pagato</Badge> : 
+                                            <Button size="sm" variant="outline" className="h-7 text-[10px] border-orange-200 text-orange-600" onClick={() => setPaymentTicketOpen(pay)}>Avvisa</Button>
+                                        }
+                                    </div>
                                 </CardContent>
                             </Card>
                         ))}
@@ -272,77 +254,101 @@ export default function TenantPortal() {
             </TabsContent>
 
             <TabsContent value="services" className="space-y-4">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Utensils className="w-5 h-5"/> Servizi Extra</h3>
+                <h3 className="font-bold text-slate-700">Servizi Disponibili</h3>
                 <div className="grid gap-3">
                     {services.map((svc: any) => (
-                        <Card key={svc.id} className="overflow-hidden border-0 shadow-md">
-                            {svc.image_url && <div className="h-32 bg-cover bg-center" style={{ backgroundImage: `url(${svc.image_url})` }} />}
+                        <Card key={svc.id} className="overflow-hidden">
+                            {svc.image_url && <img src={svc.image_url} className="h-32 w-full object-cover" />}
                             <CardContent className="p-4">
-                                <div className="flex justify-between items-start mb-2"><h3 className="font-bold text-lg">{svc.title}</h3><Badge className="bg-green-100 text-green-800">Consigliato</Badge></div>
-                                <p className="text-sm text-slate-600 line-clamp-2">{svc.description}</p>
-                                <div className="mt-4 flex justify-between items-center"><span className="font-bold text-blue-600">€{svc.price}</span><Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({ titolo: `Prenotazione: ${svc.title}`, descrizione: "Vorrei prenotare questo servizio.", priorita: 'bassa' }); }}>Prenota</Button></div>
+                                <h4 className="font-bold">{svc.title}</h4>
+                                <p className="text-xs text-slate-500 mt-1">{svc.description}</p>
+                                <div className="flex justify-between items-center mt-4">
+                                    <span className="font-bold text-blue-600 text-sm">€{svc.price}</span>
+                                    <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({...ticketData, titolo: `Richiesta Servizio: ${svc.title}`}) }}>Richiedi</Button>
+                                </div>
                             </CardContent>
                         </Card>
                     ))}
-                    {services.length === 0 && <p className="text-center text-gray-400 py-8">Nessun servizio disponibile.</p>}
+                    {services.length === 0 && <p className="text-center text-gray-400 py-8">Nessun servizio extra disponibile.</p>}
                 </div>
             </TabsContent>
 
-            <TabsContent value="documents" className="space-y-4">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2"><FileText className="w-5 h-5"/> Documenti Condivisi</h3>
-                {documents.length === 0 ? <div className="text-center py-12 bg-white rounded-lg border border-dashed"><FileQuestion className="w-10 h-10 text-slate-300 mx-auto mb-2"/><p className="text-slate-500">Nessun documento.</p></div> : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <TabsContent value="docs" className="space-y-4">
+                <h3 className="font-bold text-slate-700">Documenti Condivisi</h3>
+                {documents.length === 0 ? <div className="text-center py-12 bg-white rounded-lg border border-dashed text-gray-400"><FileQuestion className="w-8 h-8 mx-auto mb-2 opacity-20"/><p>Nessun documento.</p></div> : (
+                    <div className="grid gap-3">
                         {documents.map((doc: any) => (
-                            <Card key={doc.id} className="hover:shadow-md transition-shadow group">
-                                <CardContent className="p-4 flex items-center justify-between">
-                                    <div className="flex items-center gap-3 overflow-hidden"><div className="bg-slate-100 p-2 rounded text-slate-600"><FileText className="w-6 h-6"/></div><div className="min-w-0"><p className="font-semibold text-sm truncate" title={doc.filename}>{doc.filename}</p><p className="text-xs text-gray-400">{format(new Date(doc.uploaded_at), 'dd MMM')}</p></div></div>
-                                    <Button size="icon" variant="ghost" onClick={() => downloadDoc(doc.file_url)}><Download className="w-4 h-4 text-blue-600"/></Button>
-                                </CardContent>
-                            </Card>
+                            <div key={doc.id} className="flex justify-between items-center p-3 bg-white rounded-lg border shadow-sm">
+                                <div className="flex items-center gap-3 overflow-hidden">
+                                    <FileText className="w-5 h-5 text-blue-500 shrink-0"/>
+                                    <span className="text-sm font-medium truncate">{doc.filename}</span>
+                                </div>
+                                <Button size="icon" variant="ghost" onClick={() => downloadDoc(doc.file_url)}>
+                                    <Download className="w-4 h-4 text-blue-600"/>
+                                </Button>
+                            </div>
                         ))}
                     </div>
                 )}
             </TabsContent>
 
             <TabsContent value="support" className="space-y-4">
-                <div className="flex justify-between items-center"><h3 className="font-bold text-slate-700 flex items-center gap-2"><Wrench className="w-5 h-5"/> Segnalazioni</h3><Button size="sm" onClick={() => setNewTicketOpen(true)} className="bg-blue-600"><Plus className="w-4 h-4 mr-2"/> Nuova</Button></div>
+                <Button className="w-full bg-blue-600 shadow-md" onClick={() => setNewTicketOpen(true)}>
+                    <Plus className="w-4 h-4 mr-2"/> Nuova Segnalazione
+                </Button>
                 <div className="space-y-3">
                     {tickets.map((ticket: any) => (
-                        <Card key={ticket.id} className="bg-white">
+                        <Card key={ticket.id}>
                             <CardContent className="p-4">
-                                <div className="flex justify-between items-start mb-2"><h4 className="font-bold text-sm">{ticket.titolo}</h4><Badge variant="outline">{ticket.stato}</Badge></div>
-                                <p className="text-xs text-gray-600 line-clamp-2 mb-2">{ticket.descrizione}</p>
-                                {ticket.admin_notes && <div className="bg-blue-50 p-2 rounded text-xs text-blue-800 mb-2 border border-blue-100"><strong>Staff:</strong> {ticket.admin_notes}</div>}
-                                <p className="text-[10px] text-gray-400 text-right">{format(new Date(ticket.created_at), 'dd/MM HH:mm')}</p>
+                                <div className="flex justify-between items-start mb-2">
+                                    <h4 className="font-bold text-sm">{ticket.titolo}</h4>
+                                    <Badge variant="outline" className="text-[10px]">{ticket.stato}</Badge>
+                                </div>
+                                <p className="text-xs text-slate-600 mb-2">{ticket.descrizione}</p>
+                                {ticket.admin_notes && (
+                                    <div className="bg-blue-50 p-2 rounded border border-blue-100 text-[11px] text-blue-800">
+                                        <strong>Staff:</strong> {ticket.admin_notes}
+                                    </div>
+                                )}
+                                <p className="text-[9px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
                             </CardContent>
                         </Card>
                     ))}
-                    {tickets.length === 0 && <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Nessuna segnalazione.</p>}
+                    {tickets.length === 0 && <p className="text-center text-gray-400 py-8">Nessuna segnalazione aperta.</p>}
                 </div>
             </TabsContent>
         </Tabs>
       </main>
 
-      {/* DIALOGS (TICKET + PAGAMENTO) */}
+      {/* DIALOG NUOVO TICKET */}
       <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
         <DialogContent className="w-[95vw] sm:max-w-md">
             <DialogHeader><DialogTitle>Nuova Segnalazione</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
-                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia / Prenotazione Pulizie" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia / Info affitto" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Descrizione</Label><Textarea placeholder="Dettagli..." value={ticketData.descrizione} onChange={e => setTicketData({...ticketData, descrizione: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Urgenza</Label><Select value={ticketData.priorita} onValueChange={(val) => setTicketData({...ticketData, priorita: val})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="bassa">Bassa</SelectItem><SelectItem value="media">Media</SelectItem><SelectItem value="alta">Alta</SelectItem></SelectContent></Select></div>
             </div>
-            <DialogFooter><Button variant="outline" onClick={() => setNewTicketOpen(false)}>Annulla</Button><Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600">Invia</Button></DialogFooter>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setNewTicketOpen(false)}>Annulla</Button>
+                <Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600">Invia</Button>
+            </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      {/* DIALOG AVVISO PAGAMENTO */}
       <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
-                    <p className="text-sm text-gray-500">Comunica all'amministrazione quando e come pagherai <strong>€{paymentTicketOpen?.importo}</strong>.</p>
+                    <p className="text-sm text-gray-500">Dicci quando e come prevedi di pagare <strong>€{paymentTicketOpen?.importo}</strong>.</p>
                     <div className="space-y-2"><Label>Data Prevista</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
-                    <div className="space-y-2"><Label>Metodo</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder="Seleziona..."/></SelectTrigger><SelectContent><SelectItem value="bonifico">Bonifico</SelectItem><SelectItem value="contanti">Contanti</SelectItem><SelectItem value="altro">Altro</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-2">
+                        <Label>Metodo</Label>
+                        <Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}>
+                            <SelectTrigger><SelectValue placeholder="Scegli..."/></SelectTrigger>
+                            <SelectContent><SelectItem value="bonifico">Bonifico</SelectItem><SelectItem value="contanti">Contanti</SelectItem><SelectItem value="altro">Altro</SelectItem></SelectContent>
+                        </Select>
+                    </div>
                 </div>
                 <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">Invia Avviso</Button></DialogFooter>
             </DialogContent>
