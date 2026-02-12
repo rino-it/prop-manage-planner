@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom'; // <--- FONDAMENTALE PER IL LINK UNICO
+import { useParams } from 'react-router-dom'; // NECESSARIO PER IL LINK /tenant/:id
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -25,7 +25,7 @@ export default function TenantPortal() {
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
 
-  // 1. Recupero Booking tramite ID (Logica Link Unico)
+  // 1. Recupero Booking tramite ID (Senza Login)
   const { data: booking, isLoading: bookingLoading } = useQuery({
     queryKey: ['tenant-booking', id],
     queryFn: async () => {
@@ -42,12 +42,12 @@ export default function TenantPortal() {
 
       if (error) {
           console.error("Errore fetch booking:", error);
-          throw error;
+          return null;
       }
 
       if (!bookingData) return null;
 
-      // Fallback per proprietà mobile (veicolo)
+      // Fallback per veicolo
       let mobileProp = null;
       if (!bookingData.properties_real && bookingData.property_mobile_id) {
           const { data: mp } = await supabase
@@ -66,12 +66,13 @@ export default function TenantPortal() {
   const property = booking?.properties_real || booking?.properties_mobile;
   const isReal = !!booking?.properties_real;
 
-  // 2. Pagamenti
+  // 2. Pagamenti (Query Protetta)
   const { data: payments = [] } = useQuery({
     queryKey: ['tenant-payments', booking?.id],
     queryFn: async () => {
       if (!booking?.id) return [];
-      const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', booking.id).order('data_scadenza', { ascending: true });
+      const { data, error } = await supabase.from('tenant_payments').select('*').eq('booking_id', booking.id).order('data_scadenza', { ascending: true });
+      if (error) return [];
       return data || [];
     },
     enabled: !!booking?.id
@@ -88,7 +89,7 @@ export default function TenantPortal() {
     enabled: !!booking?.id
   });
 
-  // 4. DOCUMENTI (NUOVO)
+  // 4. Documenti
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
@@ -99,15 +100,17 @@ export default function TenantPortal() {
     enabled: !!booking?.id
   });
 
-  // 5. SERVIZI (NUOVO)
+  // 5. Servizi (Gestione errore tabella mancante)
   const { data: services = [] } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
         try {
-            const { data } = await supabase.from('services').select('*').eq('active', true);
+            const { data, error } = await supabase.from('services').select('*').eq('active', true);
+            if (error) return [];
             return data || [];
         } catch { return []; }
-    }
+    },
+    retry: false
   });
 
   // --- AZIONI ---
@@ -141,7 +144,7 @@ export default function TenantPortal() {
           await supabase.from('tickets').insert({
               booking_id: booking.id,
               property_real_id: isReal ? property.id : null,
-              titolo: `Pagamento: ${paymentTicketOpen.tipo}`,
+              titolo: `Pagamento: ${paymentTicketOpen.tipo || 'Rata'}`,
               descrizione: `L'inquilino prevede di pagare il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
               stato: 'aperto',
               creato_da: 'ospite',
@@ -150,7 +153,7 @@ export default function TenantPortal() {
       },
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-          toast({ title: "Amministrazione avvisata" });
+          toast({ title: "Avviso inviato" });
           setPaymentTicketOpen(null);
       }
   });
@@ -176,10 +179,10 @@ export default function TenantPortal() {
     return (
       <div className="flex flex-col h-screen items-center justify-center p-4 text-center bg-slate-50">
         <AlertTriangle className="w-16 h-16 text-amber-500 mb-4"/>
-        <h1 className="text-2xl font-bold text-slate-800">Link Non Valido</h1>
+        <h1 className="text-2xl font-bold text-slate-800">Link Non Valido o Scaduto</h1>
         <p className="text-slate-500 max-w-md mt-2">
-            Non siamo riusciti a trovare la prenotazione associata a questo link. 
-            Contatta l'amministratore per ricevere il link corretto.
+            Non troviamo la prenotazione associata a questo link.<br/>
+            ID cercato: <span className="font-mono text-xs bg-slate-100 p-1 rounded">{id}</span>
         </p>
       </div>
     );
@@ -191,7 +194,7 @@ export default function TenantPortal() {
         <div className="flex items-center gap-2">
             <div className="bg-blue-100 p-2 rounded-lg"><Home className="w-5 h-5 text-blue-600"/></div>
             <div>
-                <h1 className="font-bold text-sm text-slate-900 truncate max-w-[150px]">{isReal ? property.nome : property?.veicolo}</h1>
+                <h1 className="font-bold text-sm text-slate-900 truncate max-w-[180px]">{isReal ? property?.nome : property?.veicolo}</h1>
                 <p className="text-[10px] text-slate-500">Portale Inquilino</p>
             </div>
         </div>
@@ -223,7 +226,7 @@ export default function TenantPortal() {
             <TabsList className="grid w-full grid-cols-4 mb-4">
                 <TabsTrigger value="status" className="text-xs">Stato</TabsTrigger>
                 <TabsTrigger value="services" className="text-xs">Servizi</TabsTrigger>
-                <TabsTrigger value="docs" className="text-xs">Documenti</TabsTrigger>
+                <TabsTrigger value="docs" className="text-xs">File</TabsTrigger>
                 <TabsTrigger value="support" className="text-xs">Help</TabsTrigger>
             </TabsList>
 
@@ -234,7 +237,11 @@ export default function TenantPortal() {
                         {payments.map((pay: any) => (
                             <Card key={pay.id} className="border-l-4 border-l-blue-500">
                                 <CardContent className="p-4 flex justify-between items-center">
-                                    <div><p className="font-bold text-sm capitalize">{pay.tipo.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p></div>
+                                    <div>
+                                        {/* FIX ANTI-CRASH: Se 'tipo' è null, usa 'Rata' */}
+                                        <p className="font-bold text-sm capitalize">{(pay.tipo || 'Rata').replace('_', ' ')}</p>
+                                        <p className="text-xs text-gray-500">Scad: {pay.data_scadenza ? format(new Date(pay.data_scadenza), 'dd MMM yyyy') : 'N/D'}</p>
+                                    </div>
                                     <div className="text-right">
                                         <p className="font-bold text-lg">€ {pay.importo}</p>
                                         {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-700 border-0">Pagato</Badge> : 
@@ -296,7 +303,7 @@ export default function TenantPortal() {
                         <Card key={ticket.id}>
                             <CardContent className="p-4">
                                 <div className="flex justify-between items-start mb-2">
-                                    <h4 className="font-bold text-sm">{ticket.titolo}</h4>
+                                    <h4 className="font-bold text-sm">{ticket.titolo || 'Segnalazione'}</h4>
                                     <Badge variant="outline" className="text-[10px]">{ticket.stato}</Badge>
                                 </div>
                                 <p className="text-xs text-slate-600 mb-2">{ticket.descrizione}</p>
@@ -325,7 +332,7 @@ export default function TenantPortal() {
             </div>
             <DialogFooter>
                 <Button variant="outline" onClick={() => setNewTicketOpen(false)}>Annulla</Button>
-                <Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600">Invia</Button>
+                <Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600 w-full" disabled={!ticketData.titolo}>Invia</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -335,17 +342,25 @@ export default function TenantPortal() {
             <DialogContent className="w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
-                    <p className="text-sm text-gray-500">Dicci quando e come prevedi di pagare <strong>€{paymentTicketOpen?.importo}</strong>.</p>
+                    <p className="text-sm text-gray-500">Dicci quando prevedi di pagare <strong>€{paymentTicketOpen?.importo}</strong>.</p>
                     <div className="space-y-2"><Label>Data Prevista</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
                     <div className="space-y-2">
                         <Label>Metodo</Label>
                         <Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}>
-                            <SelectTrigger><SelectValue placeholder="Scegli..."/></SelectTrigger>
-                            <SelectContent><SelectItem value="bonifico">Bonifico</SelectItem><SelectItem value="contanti">Contanti</SelectItem><SelectItem value="altro">Altro</SelectItem></SelectContent>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Scegli..."/>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="bonifico">Bonifico</SelectItem>
+                                <SelectItem value="contanti">Contanti</SelectItem>
+                                <SelectItem value="altro">Altro</SelectItem>
+                            </SelectContent>
                         </Select>
                     </div>
                 </div>
-                <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">Invia Avviso</Button></DialogFooter>
+                <DialogFooter>
+                    <Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">Invia Avviso</Button>
+                </DialogFooter>
             </DialogContent>
       </Dialog>
     </div>
