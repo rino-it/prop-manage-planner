@@ -7,9 +7,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'; // NEW
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { Plus, Trash2, Pencil, User, Car, Home, Ticket, Euro, CreditCard, Search, ChevronLeft, ChevronRight, Filter } from 'lucide-react';
+import { Plus, Trash2, Pencil, User, Car, Home, Ticket, Euro, CreditCard, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { usePropertiesReal } from '@/hooks/useProperties';
@@ -19,6 +20,9 @@ export default function Expenses() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   
+  // UX: Stato per confermare eliminazione
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null); 
+
   // --- STATI PER I FILTRI ---
   const [filterType, setFilterType] = useState('all'); // all, real, mobile
   const [searchTerm, setSearchTerm] = useState('');
@@ -105,6 +109,7 @@ export default function Expenses() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unified-expenses'] });
       toast({ title: "Spesa eliminata" });
+      setDeleteConfirmId(null); // Chiudi dialog
     }
   });
 
@@ -145,14 +150,13 @@ export default function Expenses() {
       if (filterType === 'real' && !ex.property_real_id) return false;
       if (filterType === 'mobile' && !ex.property_mobile_id) return false;
 
-      // 2. Filtro Testo POTENZIATO (Cerca anche nel nome proprietà/veicolo)
+      // 2. Filtro Testo POTENZIATO
       if (searchTerm) {
         const lowerSearch = searchTerm.toLowerCase();
         const matchesDesc = ex.descrizione?.toLowerCase().includes(lowerSearch);
         const matchesCat = ex.categoria?.toLowerCase().includes(lowerSearch);
         const matchesAmount = ex.importo.toString().includes(lowerSearch);
         
-        // Nuova ricerca per proprietà
         const matchesPropReal = ex.properties_real?.nome?.toLowerCase().includes(lowerSearch);
         const matchesPropMobile = ex.properties_mobile?.veicolo?.toLowerCase().includes(lowerSearch) || 
                                   ex.properties_mobile?.targa?.toLowerCase().includes(lowerSearch);
@@ -312,7 +316,8 @@ export default function Expenses() {
                               <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:bg-blue-50" onClick={() => openEdit(ex)}>
                                   <Pencil className="w-4 h-4" />
                               </Button>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => { if(confirm("Eliminare questa spesa?")) deleteExpense.mutate(ex.id) }}>
+                              {/* FIX UX: Sostituito confirm() con stato per AlertDialog */}
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-red-400 hover:bg-red-50 hover:text-red-600" onClick={() => setDeleteConfirmId(ex.id)}>
                                   <Trash2 className="w-4 h-4" />
                               </Button>
                           </div>
@@ -464,6 +469,25 @@ export default function Expenses() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* UX: AlertDialog per eliminazione */}
+      <AlertDialog open={!!deleteConfirmId} onOpenChange={() => setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>Sei assolutamente sicuro?</AlertDialogTitle>
+                <AlertDialogDescription>
+                    Questa azione non può essere annullata. La spesa verrà rimossa permanentemente dal registro.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deleteConfirmId && deleteExpense.mutate(deleteConfirmId)} className="bg-red-600 hover:bg-red-700">
+                    Elimina
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }

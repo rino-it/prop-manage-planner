@@ -8,7 +8,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
 // Componenti Layout
 import Sidebar from '@/components/Sidebar';
-import NotificationBell from '@/components/NotificationBell'; // <--- IMPORT NUOVO
+import NotificationBell from '@/components/NotificationBell'; 
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -97,20 +97,22 @@ const Index = () => {
             </div>
             {/* Logo Mobile */}
             <img src="/logo.png" alt="PropManager" className="h-8 w-auto object-contain md:hidden" />
-            <h1 className="text-lg font-bold text-slate-700 capitalize hidden md:block">
+            
+            {/* FIX: Titolo ora visibile su mobile con responsive text e truncate */}
+            <h1 className="text-sm md:text-lg font-bold text-slate-700 capitalize truncate max-w-[140px] sm:max-w-none">
                {activeTab === 'dashboard' ? 'Dashboard' : activeTab.replace('-', ' ')}
             </h1>
           </div>
 
           {/* AREA NOTIFICHE E UTENTE */}
           <div className="flex items-center gap-2">
-             <NotificationBell /> {/* <--- QUI LA CAMPANELLA */}
+             <NotificationBell />
           </div>
         </div>
         
         {/* Area Contenuto */}
         <main className="flex-1 overflow-y-auto p-4 md:p-6">
-           <Outlet />
+            <Outlet />
         </main>
       </div>
     </div>

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-// FIX: Aggiunto 'Key' agli import mancanti
 import { 
   Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2, 
-  CheckCircle, FileText, Calendar, Clock, ShieldCheck, UploadCloud, Send, UserCog, AlertTriangle, Download, Utensils, Key
+  CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Textarea } from '@/components/ui/textarea';
 
 export default function GuestPortal() {
@@ -24,6 +23,9 @@ export default function GuestPortal() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
+  // UX: Stato Tabs controllato
+  const [activeTab, setActiveTab] = useState('experiences');
+
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [ticketForm, setTicketForm] = useState({ titolo: '', descrizione: '' });
   
@@ -109,6 +111,13 @@ export default function GuestPortal() {
     try {
       const file = event.target.files?.[0];
       if (!file || !booking) return;
+
+      // UX: Validazione dimensione file
+      if (file.size > 10 * 1024 * 1024) {
+          toast({ title: "File troppo grande", description: "Max 10MB", variant: "destructive" });
+          return;
+      }
+
       setIsUploading(true);
       const fileName = `doc_${booking.id}_${Date.now()}.${file.name.split('.').pop()}`;
       const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
@@ -145,7 +154,7 @@ export default function GuestPortal() {
               booking_id: booking.id,
               property_real_id: booking.property_id,
               titolo: `Pagamento: ${paymentTicketOpen.tipo}`,
-              descrizione: `L'inquilino prevede di pagare il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
+              descrizione: `L'inquilino prevede di pagare il ${format(parseISO(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
               stato: 'aperto',
               creato_da: 'ospite',
               related_payment_id: paymentTicketOpen.id,
@@ -165,8 +174,6 @@ export default function GuestPortal() {
     navigator.clipboard.writeText(text);
     toast({ title: "Copiato!", duration: 1500 });
   };
-
-  const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
   const downloadDoc = async (path: string) => {
     try {
@@ -237,21 +244,21 @@ export default function GuestPortal() {
                             ) : (
                                 <><UploadCloud className="w-12 h-12 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900">Carica i Documenti</h3><p className="text-sm text-slate-500">Carica foto del documento d'identità e contratto.</p></>
                             )}
-                         </div>
-                         {!isPendingApproval && (
+                          </div>
+                          {!isPendingApproval && (
                              <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors relative">
-                                <Input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} disabled={isUploading} />
+                                <Input type="file" accept="image/*,.pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} disabled={isUploading} />
                                 {isUploading ? <Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-600"/> : <p className="text-blue-600 font-bold">Scatta Foto</p>}
                              </div>
-                         )}
-                         <div className="space-y-2">
+                          )}
+                          <div className="space-y-2">
                              {documents?.filter((d:any) => d.status === 'in_revisione').map((doc: any) => (
                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
                                      <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-blue-500" /><span className="text-sm font-medium truncate max-w-[200px]">{doc.filename}</span></div>
                                      <Badge variant="secondary">In Revisione</Badge>
                                  </div>
                              ))}
-                         </div>
+                          </div>
                     </div>
                 )}
 
@@ -262,14 +269,14 @@ export default function GuestPortal() {
                                 <Key className="w-6 h-6 mx-auto mb-2 text-yellow-400"/>
                                 <p className="text-[10px] uppercase font-bold text-slate-400">Codice Keybox</p>
                                 <p className="text-2xl font-mono font-bold tracking-widest">{booking.properties_real?.keybox_code || '---'}</p>
-                            </div>
-                            <div className="p-4 bg-blue-50 rounded-xl cursor-pointer" onClick={() => copyToClipboard(booking.properties_real?.wifi_password || "")}>
+                             </div>
+                             <div className="p-4 bg-blue-50 rounded-xl cursor-pointer" onClick={() => copyToClipboard(booking.properties_real?.wifi_password || "")}>
                                 <Wifi className="w-6 h-6 mx-auto mb-2 text-blue-500"/>
                                 <p className="text-[10px] uppercase font-bold text-blue-400">WiFi</p>
                                 <p className="text-lg font-bold text-blue-700 flex items-center justify-center gap-2">
                                     {booking.properties_real?.wifi_ssid ? 'Copia' : 'N/A'} <Copy className="w-3 h-3"/>
                                 </p>
-                            </div>
+                             </div>
                         </div>
                         <div className="grid grid-cols-2 gap-4">
                             {booking.properties_real?.checkin_video_url && (
@@ -288,7 +295,7 @@ export default function GuestPortal() {
 
         {/* TABS (Visibili dopo sblocco o se ci sono dati) */}
         {(isCheckinUnlocked || payments?.length > 0 || myTickets?.length > 0) && (
-            <Tabs defaultValue="experiences" className="w-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="w-full grid grid-cols-4">
                     <TabsTrigger value="experiences" className="text-xs">Esperienze</TabsTrigger>
                     <TabsTrigger value="payments" className="text-xs">Extra</TabsTrigger>
@@ -299,7 +306,7 @@ export default function GuestPortal() {
                 {/* TAB ESPERIENZE */}
                 <TabsContent value="experiences" className="space-y-4">
                     <div className="grid gap-3">
-                        {services?.map((svc) => (
+                        {services?.map((svc: any) => (
                             <Card key={svc.id} className="overflow-hidden border-0 shadow-md">
                                 <div className="h-32 bg-cover bg-center" style={{ backgroundImage: `url(${svc.image_url || '/placeholder.svg'})` }} />
                                 <CardContent className="p-4">
@@ -312,7 +319,7 @@ export default function GuestPortal() {
                                         <span className="font-bold text-blue-600">€{svc.price}</span>
                                         <Button size="sm" onClick={() => {
                                             setTicketForm({ titolo: `Prenotazione: ${svc.title}`, descrizione: "Vorrei prenotare questa esperienza." });
-                                            document.querySelector('[value="support"]')?.dispatchEvent(new MouseEvent('click', {bubbles: true}));
+                                            setActiveTab('support'); // <--- FIX NAVIGAZIONE
                                         }}>Prenota</Button>
                                     </div>
                                 </CardContent>
@@ -326,9 +333,9 @@ export default function GuestPortal() {
                     <Card>
                         <CardHeader><CardTitle>Spese Extra</CardTitle><CardDescription>Pulizie o servizi aggiuntivi.</CardDescription></CardHeader>
                         <CardContent>
-                            {payments?.map((pay) => (
+                            {payments?.map((pay: any) => (
                                 <div key={pay.id} className="flex justify-between items-center p-3 border-b last:border-0">
-                                    <div><p className="font-medium capitalize">{pay.tipo?.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(new Date(pay.data_scadenza), 'dd MMM')}</p></div>
+                                    <div><p className="font-medium capitalize">{pay.tipo?.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(parseISO(pay.data_scadenza), 'dd MMM')}</p></div>
                                     <div className="text-right">
                                         <p className="font-bold">€{pay.importo}</p>
                                         {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-800">Pagato</Badge> : 
@@ -344,7 +351,7 @@ export default function GuestPortal() {
 
                 {/* TAB DOCUMENTI */}
                 <TabsContent value="docs" className="space-y-4">
-                     <Card>
+                      <Card>
                         <CardHeader><CardTitle>Documenti Condivisi</CardTitle><CardDescription>Contratti e info utili.</CardDescription></CardHeader>
                         <CardContent className="space-y-2">
                              {documents?.filter((d:any) => d.status !== 'in_revisione').map((doc: any) => (
@@ -360,7 +367,7 @@ export default function GuestPortal() {
                              ))}
                              {documents?.length === 0 && <p className="text-center text-gray-400 py-4">Nessun documento.</p>}
                         </CardContent>
-                     </Card>
+                      </Card>
                 </TabsContent>
 
                 <TabsContent value="support" className="space-y-6">
@@ -373,7 +380,7 @@ export default function GuestPortal() {
                         </CardContent>
                     </Card>
                     <div className="space-y-3">
-                        {myTickets?.map(t => (
+                        {myTickets?.map((t: any) => (
                             <div key={t.id} className="bg-white p-4 rounded-lg border shadow-sm">
                                 <div className="flex justify-between items-center mb-2"><p className="font-medium">{t.titolo}</p><Badge variant={t.stato === 'risolto' ? 'default' : 'secondary'}>{t.stato}</Badge></div>
                                 <p className="text-sm text-gray-600 mb-2">"{t.descrizione}"</p>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'; // NEW
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -11,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { 
-  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator, Send, User, Calendar as CalendarIcon
+  CheckCircle, Phone, FileText, RotateCcw, Euro, Truck, Home, Paperclip, AlertTriangle, Share2, Plus, Trash2, Calculator, Send, User, Calendar as CalendarIcon, UploadCloud, Download
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -58,6 +59,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
   const [uploading, setUploading] = useState(false);
   const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [showResetConfirm, setShowResetConfirm] = useState(false); // NEW: Stato per reset dialog
   const [confirmText, setConfirmText] = useState('');
 
   const [newQuoteItem, setNewQuoteItem] = useState({ desc: '', amount: '' });
@@ -112,7 +114,6 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       const { data: { user } } = await supabase.auth.getUser(); 
       const amountVal = parseFloat(newQuoteItem.amount); 
 
-      // FIX: Rimosso 'tipo', aggiunto 'importo_originale'
       const { error } = await supabase.from('payments').insert({
         ticket_id: ticket.id,
         property_real_id: ticket.property_real_id,
@@ -192,8 +193,12 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
       } finally { setUploading(false); }
   };
 
-  const handleResetQuote = async () => {
-    if(!confirm("Confermi il reset? Il ticket tornerà 'In Attesa'.")) return;
+  // FIX: Sostituito confirm() con stato per AlertDialog
+  const handleResetQuote = () => {
+    setShowResetConfirm(true);
+  };
+
+  const confirmResetQuote = async () => {
     const { error } = await supabase.from('tickets').update({ quote_status: 'pending', stato: 'in_attesa' }).eq('id', ticket.id);
     if(error) toast({ title: "Errore", description: error.message, variant: "destructive" });
     else { 
@@ -202,6 +207,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
         toast({ title: "Reset Effettuato" }); 
         onUpdate(); 
     }
+    setShowResetConfirm(false);
   };
 
   const handleQuoteDecision = async (decision: 'approved' | 'rejected') => {
@@ -216,13 +222,11 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
 
         if (decision === 'approved') {
             if (ticketExpenses.length > 0) {
-                // Aggiorna data scadenza voci esistenti
                 const { error: updateExpError } = await supabase.from('payments')
                     .update({ scadenza: approvalDate })
                     .eq('ticket_id', ticket.id);
                 if (updateExpError) throw updateExpError;
             } else {
-                // Crea macro voce se non ne esistono
                 const entityData = ticket.property_real_id 
                     ? { property_real_id: ticket.property_real_id } 
                     : (ticket.property_mobile_id ? { property_mobile_id: ticket.property_mobile_id } : {});
@@ -391,251 +395,272 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-lg">
-            <span className="bg-blue-100 text-blue-700 p-1 rounded shrink-0">{headerIcon}</span>
-            <span className="truncate">{headerTitle}: {ticket.titolo}</span>
-          </DialogTitle>
-          <DialogDescription className="text-xs">
-            Creato il {format(new Date(ticket.created_at), 'dd/MM/yyyy')} - <Badge className={status === 'risolto' ? 'bg-green-600' : ''}>{status}</Badge>
-          </DialogDescription>
-        </DialogHeader>
+    <>
+        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DialogContent className="sm:max-w-xl w-[95vw] max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+                <span className="bg-blue-100 text-blue-700 p-1 rounded shrink-0">{headerIcon}</span>
+                <span className="truncate">{headerTitle}: {ticket.titolo}</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+                Creato il {format(new Date(ticket.created_at), 'dd/MM/yyyy')} - <Badge className={status === 'risolto' ? 'bg-green-600' : ''}>{status}</Badge>
+            </DialogDescription>
+            </DialogHeader>
 
-        <Tabs defaultValue="management" className="w-full mt-2">
-            <TabsList className="grid w-full grid-cols-4 h-auto">
-                <TabsTrigger value="management" className="text-xs px-1">1. Gestione</TabsTrigger>
-                <TabsTrigger value="quote" className="text-xs px-1">2. Preventivo</TabsTrigger>
-                <TabsTrigger value="delega" className="text-xs px-1">3. Delega</TabsTrigger>
-                <TabsTrigger value="closing" className="text-xs px-1">4. Chiusura</TabsTrigger>
-            </TabsList>
+            <Tabs defaultValue="management" className="w-full mt-2">
+                <TabsList className="grid w-full grid-cols-4 h-auto">
+                    <TabsTrigger value="management" className="text-xs px-1">1. Gestione</TabsTrigger>
+                    <TabsTrigger value="quote" className="text-xs px-1">2. Preventivo</TabsTrigger>
+                    <TabsTrigger value="delega" className="text-xs px-1">3. Delega</TabsTrigger>
+                    <TabsTrigger value="closing" className="text-xs px-1">4. Chiusura</TabsTrigger>
+                </TabsList>
 
-            <TabsContent value="management" className="space-y-4 py-4">
-                {ticket.attachments && ticket.attachments.length > 0 && (
-                    <div className="bg-slate-50 p-3 rounded border">
-                        <Label className="text-xs font-bold text-slate-500 mb-2 block">Allegati Iniziali</Label>
-                        <div className="flex flex-wrap gap-2">
-                            {ticket.attachments.map((file: string, idx: number) => (
-                                <Button key={idx} variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={() => viewFile(file)}>
-                                    <Paperclip className="w-3 h-3 mr-1 text-blue-500"/> File {idx + 1}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="grid gap-2">
-                        <Label>Stato</Label>
-                        <Select value={status} onValueChange={setStatus} disabled={isReadOnly}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="aperto">🟡 Aperto</SelectItem>
-                                <SelectItem value="in_corso">🔵 In Corso</SelectItem>
-                                <SelectItem value="in_attesa">🟠 In Attesa</SelectItem>
-                                <SelectItem value="risolto">🟢 Risolto</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                    <div className="grid gap-2">
-                        <Label>Priorità</Label>
-                        <Select value={priority} onValueChange={setPriority} disabled={isReadOnly}>
-                            <SelectTrigger><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="bassa">Bassa</SelectItem>
-                                <SelectItem value="media">Media</SelectItem>
-                                <SelectItem value="alta">Alta</SelectItem>
-                                <SelectItem value="critica">Critica</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div className="grid gap-2"><Label>Data Scadenza</Label><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} /></div>
-                    <div className="grid gap-2"><Label>Delega a Team</Label><UserMultiSelect options={colleagues} selected={assignedTo} onChange={setAssignedTo} placeholder="Seleziona..." /></div>
-                </div>
-
-                <div className="grid gap-2 p-3 bg-slate-50 rounded border">
-                    <Label className="text-slate-700 font-semibold">Fornitore Esterno</Label>
-                    <div className="flex gap-2">
-                        <Input placeholder="Ditta" value={supplier} onChange={e => setSupplier(e.target.value)} disabled={isReadOnly} className="flex-1"/>
-                        <Input placeholder="Tel" value={supplierContact} onChange={e => setSupplierContact(e.target.value)} className="w-[100px] sm:w-1/3" disabled={isReadOnly}/>
-                        {supplierContact && <Button size="icon" variant="outline" onClick={() => window.open(`tel:${supplierContact}`)}><Phone className="w-4 h-4 text-blue-600"/></Button>}
-                    </div>
-                </div>
-                
-                <div className="grid gap-2">
-                    <Label>Note Interne</Label>
-                    <Textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={isReadOnly} placeholder="Dettagli tecnici..." />
-                    <div className="flex items-center gap-2 mt-1">
-                        <Switch checked={shareNotes} onCheckedChange={setShareNotes} disabled={isReadOnly}/>
-                        <Label className="text-xs">Visibile a ospite</Label>
-                    </div>
-                </div>
-
-                {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress} className="w-full sm:w-auto">Salva e Chiudi</Button></div>}
-            </TabsContent>
-
-            <TabsContent value="quote" className="space-y-4 py-4">
-                <div className="bg-slate-50 p-4 rounded-lg border space-y-3">
-                    <Label className="font-bold text-slate-700">Dettaglio Voci Spesa (Opzionale)</Label>
-                    {!isReadOnly && (
-                        <div className="flex gap-2 items-end">
-                            <Input placeholder="Es. Materiali..." value={newQuoteItem.desc} onChange={e => setNewQuoteItem({...newQuoteItem, desc: e.target.value})} className="bg-white flex-1"/>
-                            <div className="w-[100px] relative">
-                                <Euro className="w-3 h-3 absolute left-2 top-3 text-gray-400"/>
-                                <Input type="number" placeholder="0.00" value={newQuoteItem.amount} onChange={e => setNewQuoteItem({...newQuoteItem, amount: e.target.value})} className="bg-white pl-6"/>
-                            </div>
-                            <Button size="icon" className="bg-green-600 hover:bg-green-700" onClick={() => addQuoteExpense.mutate()}><Plus className="w-4 h-4"/></Button>
-                        </div>
-                    )}
-                    <div className="space-y-2 max-h-[150px] overflow-y-auto">
-                        {ticketExpenses.map((exp: any) => (
-                            <div key={exp.id} className="flex justify-between items-center p-2 bg-white border rounded text-sm">
-                                <span>{exp.descrizione.replace('[Preventivo] ', '')}</span>
-                                <div className="flex items-center gap-2">
-                                    <span className="font-bold">€{exp.importo}</span>
-                                    {!isReadOnly && <Trash2 className="w-3 h-3 text-red-500 cursor-pointer" onClick={() => deleteExpense.mutate(exp.id)}/>}
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                    {totalDetailedQuotes > 0 && <div className="text-right font-bold text-blue-700 text-sm">Totale Voci: € {totalDetailedQuotes}</div>}
-                </div>
-
-                <div className="border-t my-4"></div>
-
-                {(ticket.quote_amount || ticket.quote_url) && (
-                    <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
-                        <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2 font-bold"><Euro className="w-5 h-5"/> {ticket.quote_amount}</div>
-                            <div className="flex items-center gap-2">
-                                {ticket.quote_url && <Button size="sm" variant="ghost" onClick={() => viewFile(ticket.quote_url)}><FileText className="w-4 h-4 mr-2"/> Vedi</Button>}
-                                <Badge className={quoteStatus === 'approved' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{quoteStatus}</Badge>
-                            </div>
-                        </div>
-                        {quoteStatus === 'approved' && !isReadOnly && (
-                            <Button variant="destructive" size="sm" className="w-full mt-2" onClick={handleResetQuote}><RotateCcw className="w-4 h-4 mr-2" /> Reset</Button>
-                        )}
-                    </div>
-                )}
-
-                {quoteStatus === 'pending' && !isReadOnly && (
-                      <div className="space-y-3 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                        <Label className="text-blue-800 font-bold flex items-center gap-2"><CalendarIcon className="w-4 h-4"/> Schedula Conferma / Lavori</Label>
-                        <Input type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} className="bg-white border-blue-300"/>
-                        <p className="text-[10px] text-blue-600">Imposta la data in cui il pagamento/lavoro apparirà in dashboard.</p>
-                        
-                        <div className="grid grid-cols-2 gap-2 mt-2">
-                            <Button className="bg-green-600 hover:bg-green-700" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>Approva e Schedula</Button>
-                            <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>Rifiuta</Button>
-                        </div>
-                    </div>
-                )}
-                
-                {quoteStatus !== 'approved' && quoteStatus !== 'pending' && !isReadOnly && (
-                    <div className="bg-slate-50 p-4 rounded border border-dashed space-y-3">
-                        <div className="flex gap-2 items-center">
-                             <Input type="number" placeholder="Totale €" value={quoteAmount} onChange={e => setQuoteAmount(e.target.value)} className="bg-white"/>
-                             {totalDetailedQuotes > 0 && <Button variant="outline" size="icon" onClick={() => setQuoteAmount(totalDetailedQuotes.toString())} title="Usa Somma Voci"><Calculator className="w-4 h-4 text-blue-600"/></Button>}
-                        </div>
-                        <Input type="file" onChange={e => setQuoteFile(e.target.files?.[0] || null)} className="bg-white"/>
-                        <Button className="w-full" disabled={uploading} onClick={handleQuoteUpload}>{uploading ? '...' : 'Invia Preventivo'}</Button>
-                    </div>
-                )}
-            </TabsContent>
-
-            <TabsContent value="delega" className="space-y-4 py-4">
-                <div className="space-y-4">
-                    <Label>Seleziona Tecnico da Contattare</Label>
-                    
-                    {assignedTeamMembers.length > 0 ? (
-                        <div className="grid gap-2">
-                            <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Assegnati al Ticket</p>
-                            {assignedTeamMembers.map((m: any) => (
-                                <div key={m.id} onClick={() => setSelectedDelegatePhone(m.phone || '')} className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${selectedDelegatePhone === m.phone ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'hover:bg-slate-50'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <div className="bg-blue-100 p-2 rounded-full text-blue-600"><User className="w-4 h-4"/></div>
-                                        <div>
-                                            <p className="font-bold text-sm">{m.first_name} {m.last_name}</p>
-                                            <p className="text-xs text-gray-500">{m.phone || 'No telefono'}</p>
-                                        </div>
-                                    </div>
-                                    {selectedDelegatePhone === m.phone && <CheckCircle className="w-5 h-5 text-blue-600"/>}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="p-4 bg-yellow-50 text-yellow-700 text-sm rounded border border-yellow-200">
-                            Nessun tecnico del team assegnato a questo ticket.
-                        </div>
-                    )}
-                    
-                    <div className="space-y-2">
-                         <Label className="text-xs text-gray-500 uppercase">Tutti i Contatti</Label>
-                         <Select onValueChange={setSelectedDelegatePhone} value={selectedDelegatePhone}>
-                            <SelectTrigger><SelectValue placeholder="Scegli dalla lista completa..."/></SelectTrigger>
-                            <SelectContent>
-                                {colleagues.map((m: any) => (
-                                    <SelectItem key={m.id} value={m.phone || 'nophone'}>
-                                        {m.first_name} {m.last_name}
-                                    </SelectItem>
+                <TabsContent value="management" className="space-y-4 py-4">
+                    {ticket.attachments && ticket.attachments.length > 0 && (
+                        <div className="bg-slate-50 p-3 rounded border">
+                            <Label className="text-xs font-bold text-slate-500 mb-2 block">Allegati Iniziali</Label>
+                            <div className="flex flex-wrap gap-2">
+                                {ticket.attachments.map((file: string, idx: number) => (
+                                    <Button key={idx} variant="outline" size="sm" className="h-7 text-xs bg-white" onClick={() => viewFile(file)}>
+                                        <Paperclip className="w-3 h-3 mr-1 text-blue-500"/> File {idx + 1}
+                                    </Button>
                                 ))}
-                            </SelectContent>
-                         </Select>
-                    </div>
-
-                    <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" onClick={handleDelegate} disabled={!selectedDelegatePhone || selectedDelegatePhone === 'nophone'}>
-                        <Send className="w-4 h-4"/> Invia Delega WhatsApp
-                    </Button>
-                </div>
-            </TabsContent>
-
-            <TabsContent value="closing" className="space-y-4 py-4">
-                {status === 'in_verifica' && (
-                    <div className="bg-orange-50 p-4 rounded text-center space-y-2 border border-orange-200">
-                        <h3 className="font-bold text-orange-800">In Attesa di Verifica</h3>
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button className="bg-green-600" onClick={attemptClose}>Approva e Chiudi</Button>
-                            <Button variant="outline" className="text-red-600" onClick={handleReopen}>Riapri</Button>
-                        </div>
-                    </div>
-                )}
-                {status !== 'in_verifica' && status !== 'risolto' && (
-                    <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
-                        <Label className="font-bold text-yellow-800 block mb-2">Chiusura</Label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div className="flex gap-2">
-                                <Input type="number" placeholder="Totale €" value={costAmount} onChange={e => setCostAmount(e.target.value)} disabled={isReadOnly} className="bg-white"/>
-                                {totalDetailedQuotes > 0 && <Button variant="outline" size="icon" onClick={() => setCostAmount(totalDetailedQuotes.toString())} title="Copia Preventivo"><Calculator className="w-4 h-4 text-blue-600"/></Button>}
                             </div>
-                            <div className="flex items-center gap-2"><Switch checked={costVisible} onCheckedChange={setCostVisible} disabled={isReadOnly}/><Label className="text-xs">Addebita Ospite</Label></div>
                         </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Stato</Label>
+                            <Select value={status} onValueChange={setStatus} disabled={isReadOnly}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="aperto">🟡 Aperto</SelectItem>
+                                    <SelectItem value="in_corso">🔵 In Corso</SelectItem>
+                                    <SelectItem value="in_attesa">🟠 In Attesa</SelectItem>
+                                    <SelectItem value="risolto">🟢 Risolto</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Priorità</Label>
+                            <Select value={priority} onValueChange={setPriority} disabled={isReadOnly}>
+                                <SelectTrigger><SelectValue /></SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="bassa">Bassa</SelectItem>
+                                    <SelectItem value="media">Media</SelectItem>
+                                    <SelectItem value="alta">Alta</SelectItem>
+                                    <SelectItem value="critica">Critica</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2"><Label>Data Scadenza</Label><Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} disabled={isReadOnly} /></div>
+                        <div className="grid gap-2"><Label>Delega a Team</Label><UserMultiSelect options={colleagues} selected={assignedTo} onChange={setAssignedTo} placeholder="Seleziona..." /></div>
+                    </div>
+
+                    <div className="grid gap-2 p-3 bg-slate-50 rounded border">
+                        <Label className="text-slate-700 font-semibold">Fornitore Esterno</Label>
+                        <div className="flex gap-2">
+                            <Input placeholder="Ditta" value={supplier} onChange={e => setSupplier(e.target.value)} disabled={isReadOnly} className="flex-1"/>
+                            <Input placeholder="Tel" value={supplierContact} onChange={e => setSupplierContact(e.target.value)} className="w-[100px] sm:w-1/3" disabled={isReadOnly}/>
+                            {supplierContact && <Button size="icon" variant="outline" onClick={() => window.open(`tel:${supplierContact}`)}><Phone className="w-4 h-4 text-blue-600"/></Button>}
+                        </div>
+                    </div>
+                    
+                    <div className="grid gap-2">
+                        <Label>Note Interne</Label>
+                        <Textarea value={notes} onChange={e => setNotes(e.target.value)} disabled={isReadOnly} placeholder="Dettagli tecnici..." />
+                        <div className="flex items-center gap-2 mt-1">
+                            <Switch checked={shareNotes} onCheckedChange={setShareNotes} disabled={isReadOnly}/>
+                            <Label className="text-xs">Visibile a ospite</Label>
+                        </div>
+                    </div>
+
+                    {!isReadOnly && <div className="border-t pt-4 text-right"><Button type="button" onClick={saveProgress} className="w-full sm:w-auto">Salva e Chiudi</Button></div>}
+                </TabsContent>
+
+                <TabsContent value="quote" className="space-y-4 py-4">
+                    <div className="bg-slate-50 p-4 rounded-lg border space-y-3">
+                        <Label className="font-bold text-slate-700">Dettaglio Voci Spesa (Opzionale)</Label>
+                        {!isReadOnly && (
+                            <div className="flex gap-2 items-end">
+                                <Input placeholder="Es. Materiali..." value={newQuoteItem.desc} onChange={e => setNewQuoteItem({...newQuoteItem, desc: e.target.value})} className="bg-white flex-1"/>
+                                <div className="w-[100px] relative">
+                                    <Euro className="w-3 h-3 absolute left-2 top-3 text-gray-400"/>
+                                    <Input type="number" placeholder="0.00" value={newQuoteItem.amount} onChange={e => setNewQuoteItem({...newQuoteItem, amount: e.target.value})} className="bg-white pl-6"/>
+                                </div>
+                                <Button size="icon" className="bg-green-600 hover:bg-green-700" onClick={() => addQuoteExpense.mutate()}><Plus className="w-4 h-4"/></Button>
+                            </div>
+                        )}
+                        <div className="space-y-2 max-h-[150px] overflow-y-auto">
+                            {ticketExpenses.map((exp: any) => (
+                                <div key={exp.id} className="flex justify-between items-center p-2 bg-white border rounded text-sm">
+                                    <span>{exp.descrizione.replace('[Preventivo] ', '')}</span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold">€{exp.importo}</span>
+                                        {!isReadOnly && <Trash2 className="w-3 h-3 text-red-500 cursor-pointer" onClick={() => deleteExpense.mutate(exp.id)}/>}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                        {totalDetailedQuotes > 0 && <div className="text-right font-bold text-blue-700 text-sm">Totale Voci: € {totalDetailedQuotes}</div>}
+                    </div>
+
+                    <div className="border-t my-4"></div>
+
+                    {(ticket.quote_amount || ticket.quote_url) && (
+                        <div className="border rounded p-4 mb-4 bg-white shadow-sm flex flex-col gap-2">
+                            <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2 font-bold"><Euro className="w-5 h-5"/> {ticket.quote_amount}</div>
+                                <div className="flex items-center gap-2">
+                                    {ticket.quote_url && <Button size="sm" variant="ghost" onClick={() => viewFile(ticket.quote_url)}><FileText className="w-4 h-4 mr-2"/> Vedi</Button>}
+                                    <Badge className={quoteStatus === 'approved' ? 'bg-green-100 text-green-800' : 'bg-orange-100 text-orange-800'}>{quoteStatus}</Badge>
+                                </div>
+                            </div>
+                            {quoteStatus === 'approved' && !isReadOnly && (
+                                <Button variant="destructive" size="sm" className="w-full mt-2" onClick={handleResetQuote}><RotateCcw className="w-4 h-4 mr-2" /> Reset</Button>
+                            )}
+                        </div>
+                    )}
+
+                    {quoteStatus === 'pending' && !isReadOnly && (
+                          <div className="space-y-3 mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                            <Label className="text-blue-800 font-bold flex items-center gap-2"><CalendarIcon className="w-4 h-4"/> Schedula Conferma / Lavori</Label>
+                            <Input type="date" value={approvalDate} onChange={(e) => setApprovalDate(e.target.value)} className="bg-white border-blue-300"/>
+                            <p className="text-[10px] text-blue-600">Imposta la data in cui il pagamento/lavoro apparirà in dashboard.</p>
+                            
+                            <div className="grid grid-cols-2 gap-2 mt-2">
+                                <Button className="bg-green-600 hover:bg-green-700" disabled={uploading} onClick={() => handleQuoteDecision('approved')}>Approva e Schedula</Button>
+                                <Button variant="destructive" disabled={uploading} onClick={() => handleQuoteDecision('rejected')}>Rifiuta</Button>
+                            </div>
+                        </div>
+                    )}
+                    
+                    {quoteStatus !== 'approved' && quoteStatus !== 'pending' && !isReadOnly && (
+                        <div className="bg-slate-50 p-4 rounded border border-dashed space-y-3">
+                            <div className="flex gap-2 items-center">
+                                 <Input type="number" placeholder="Totale €" value={quoteAmount} onChange={e => setQuoteAmount(e.target.value)} className="bg-white"/>
+                                 {totalDetailedQuotes > 0 && <Button variant="outline" size="icon" onClick={() => setQuoteAmount(totalDetailedQuotes.toString())} title="Usa Somma Voci"><Calculator className="w-4 h-4 text-blue-600"/></Button>}
+                            </div>
+                            {/* FIX UX: Aggiunto accept */}
+                            <Input type="file" accept=".pdf,image/*" onChange={e => setQuoteFile(e.target.files?.[0] || null)} className="bg-white"/>
+                            <Button className="w-full" disabled={uploading} onClick={handleQuoteUpload}>{uploading ? '...' : 'Invia Preventivo'}</Button>
+                        </div>
+                    )}
+                </TabsContent>
+
+                <TabsContent value="delega" className="space-y-4 py-4">
+                    <div className="space-y-4">
+                        <Label>Seleziona Tecnico da Contattare</Label>
                         
-                        <div className="mt-4 space-y-2">
-                             <Label className="text-xs">Note Finali</Label>
-                             <Textarea value={closingNote} onChange={(e) => setClosingNote(e.target.value)} placeholder="Descrizione risoluzione..." className="bg-white"/>
+                        {assignedTeamMembers.length > 0 ? (
+                            <div className="grid gap-2">
+                                <p className="text-xs text-green-600 font-bold uppercase tracking-wider">Assegnati al Ticket</p>
+                                {assignedTeamMembers.map((m: any) => (
+                                    <div key={m.id} onClick={() => setSelectedDelegatePhone(m.phone || '')} className={`flex items-center justify-between p-3 border rounded-lg cursor-pointer transition-all ${selectedDelegatePhone === m.phone ? 'border-blue-500 bg-blue-50 ring-1 ring-blue-500' : 'hover:bg-slate-50'}`}>
+                                        <div className="flex items-center gap-3">
+                                            <div className="bg-blue-100 p-2 rounded-full text-blue-600"><User className="w-4 h-4"/></div>
+                                            <div>
+                                                <p className="font-bold text-sm">{m.first_name} {m.last_name}</p>
+                                                <p className="text-xs text-gray-500">{m.phone || 'No telefono'}</p>
+                                            </div>
+                                        </div>
+                                        {selectedDelegatePhone === m.phone && <CheckCircle className="w-5 h-5 text-blue-600"/>}
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="p-4 bg-yellow-50 text-yellow-700 text-sm rounded border border-yellow-200">
+                                Nessun tecnico del team assegnato a questo ticket.
+                            </div>
+                        )}
+                        
+                        <div className="space-y-2">
+                             <Label className="text-xs text-gray-500 uppercase">Tutti i Contatti</Label>
+                             <Select onValueChange={setSelectedDelegatePhone} value={selectedDelegatePhone}>
+                                <SelectTrigger><SelectValue placeholder="Scegli dalla lista completa..."/></SelectTrigger>
+                                <SelectContent>
+                                    {colleagues.map((m: any) => (
+                                        <SelectItem key={m.id} value={m.phone || 'nophone'}>
+                                            {m.first_name} {m.last_name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                             </Select>
                         </div>
 
-                        <div className="mt-4">
-                            <Label className="text-xs mb-1 block">Carica Ricevuta/Fattura</Label>
-                            <Input type="file" onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="bg-white" disabled={isReadOnly}/>
-                        </div>
+                        <Button className="w-full bg-green-600 hover:bg-green-700 gap-2" onClick={handleDelegate} disabled={!selectedDelegatePhone || selectedDelegatePhone === 'nophone'}>
+                            <Send className="w-4 h-4"/> Invia Delega WhatsApp
+                        </Button>
+                    </div>
+                </TabsContent>
 
-                        {!isReadOnly && <Button className="w-full bg-blue-600 mt-4" onClick={handleSendToVerify} disabled={uploading}>📤 Manda in Verifica</Button>}
-                    </div>
-                )}
-                {status === 'risolto' && (
-                    <div className="bg-green-50 border border-green-200 p-4 rounded text-center">
-                        <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2"/>
-                        <h3 className="font-bold text-green-800">Ticket Risolto</h3>
-                    </div>
-                )}
-            </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
+                <TabsContent value="closing" className="space-y-4 py-4">
+                    {status === 'in_verifica' && (
+                        <div className="bg-orange-50 p-4 rounded text-center space-y-2 border border-orange-200">
+                            <h3 className="font-bold text-orange-800">In Attesa di Verifica</h3>
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button className="bg-green-600" onClick={attemptClose}>Approva e Chiudi</Button>
+                                <Button variant="outline" className="text-red-600" onClick={handleReopen}>Riapri</Button>
+                            </div>
+                        </div>
+                    )}
+                    {status !== 'in_verifica' && status !== 'risolto' && (
+                        <div className="bg-yellow-50 p-4 rounded border border-yellow-200">
+                            <Label className="font-bold text-yellow-800 block mb-2">Chiusura</Label>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div className="flex gap-2">
+                                    <Input type="number" placeholder="Totale €" value={costAmount} onChange={e => setCostAmount(e.target.value)} disabled={isReadOnly} className="bg-white"/>
+                                    {totalDetailedQuotes > 0 && <Button variant="outline" size="icon" onClick={() => setCostAmount(totalDetailedQuotes.toString())} title="Copia Preventivo"><Calculator className="w-4 h-4 text-blue-600"/></Button>}
+                                </div>
+                                <div className="flex items-center gap-2"><Switch checked={costVisible} onCheckedChange={setCostVisible} disabled={isReadOnly}/><Label className="text-xs">Addebita Ospite</Label></div>
+                            </div>
+                            
+                            <div className="mt-4 space-y-2">
+                                 <Label className="text-xs">Note Finali</Label>
+                                 <Textarea value={closingNote} onChange={(e) => setClosingNote(e.target.value)} placeholder="Descrizione risoluzione..." className="bg-white"/>
+                            </div>
+
+                            <div className="mt-4">
+                                <Label className="text-xs mb-1 block">Carica Ricevuta/Fattura</Label>
+                                {/* FIX UX: Aggiunto accept */}
+                                <Input type="file" accept=".pdf,image/*" onChange={e => setReceiptFile(e.target.files?.[0] || null)} className="bg-white" disabled={isReadOnly}/>
+                            </div>
+
+                            {!isReadOnly && <Button className="w-full bg-blue-600 mt-4" onClick={handleSendToVerify} disabled={uploading}>📤 Manda in Verifica</Button>}
+                        </div>
+                    )}
+                    {status === 'risolto' && (
+                        <div className="bg-green-50 border border-green-200 p-4 rounded text-center">
+                            <CheckCircle className="w-12 h-12 text-green-600 mx-auto mb-2"/>
+                            <h3 className="font-bold text-green-800">Ticket Risolto</h3>
+                        </div>
+                    )}
+                </TabsContent>
+            </Tabs>
+        </DialogContent>
+        </Dialog>
+
+        {/* ALERT DIALOG: CONFERMA RESET PREVENTIVO */}
+        <AlertDialog open={showResetConfirm} onOpenChange={setShowResetConfirm}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2 text-red-600"><AlertTriangle className="w-5 h-5"/> Reset Preventivo</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Stai per eliminare il preventivo caricato e riportare il ticket allo stato "In Attesa". 
+                        L'operazione non è reversibile.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel>Annulla</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmResetQuote} className="bg-red-600 hover:bg-red-700">Conferma Reset</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+    </>
   );
 }

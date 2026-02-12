@@ -6,12 +6,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Users, Ticket, Wallet, MessageCircle, ExternalLink, Download, Share2, UserCog } from 'lucide-react';
-import { format } from 'date-fns';
-import TicketManager from '@/components/TicketManager'; // <--- IMPORTATO IL NUOVO COMPONENTE
+import { Users, Ticket, Wallet, MessageCircle, ExternalLink, Share2, UserCog, Mail } from 'lucide-react'; // Aggiunta Mail che mancava negli import
+import { format, parseISO } from 'date-fns'; // FIX: Aggiunto parseISO
+import TicketManager from '@/components/TicketManager';
+import { useToast } from '@/hooks/use-toast'; // FIX: Import toast hook
 
 export default function TenantManager() {
   const queryClient = useQueryClient();
+  const { toast } = useToast(); // FIX: Inizializza toast
   
   // STATI PER I DIALOG
   const [selectedTicketTenant, setSelectedTicketTenant] = useState<string | null>(null);
@@ -65,22 +67,31 @@ export default function TenantManager() {
 
   // HELPER FUNCTIONS (WhatsApp, Calendar, etc.)
   const sendWhatsApp = (phone: string, amount: number, date: string, type: string) => {
-    if (!phone) return alert("Nessun telefono salvato per questo inquilino");
-    const text = `Ciao, ti ricordo la scadenza di €${amount} relativa a ${type} per il giorno ${format(new Date(date), 'dd/MM/yyyy')}. Grazie.`;
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank');
+    if (!phone) {
+        // FIX UX: Toast invece di alert
+        toast({ 
+            title: "Numero mancante", 
+            description: "Non è stato salvato un numero di telefono per questo inquilino.", 
+            variant: "destructive" 
+        });
+        return;
+    }
+    // FIX DATE: parseISO
+    const text = `Ciao, ti ricordo la scadenza di €${amount} relativa a ${type} per il giorno ${format(parseISO(date), 'dd/MM/yyyy')}. Grazie.`;
+    window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
   };
 
   const addToGoogleCal = (amount: number, date: string, propertyName: string) => {
     const title = `Incasso Affitto: ${propertyName}`;
     const details = `Importo atteso: €${amount}`;
-    const d = format(new Date(date), 'yyyyMMdd');
+    const d = format(parseISO(date), 'yyyyMMdd'); // FIX DATE: parseISO
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&details=${encodeURIComponent(details)}&dates=${d}/${d}`;
     window.open(url, '_blank');
   };
 
   const downloadIcs = async (amount: number, date: string, propertyName: string) => {
     const title = `Incasso Affitto: ${propertyName}`;
-    const d = format(new Date(date), 'yyyyMMdd');
+    const d = format(parseISO(date), 'yyyyMMdd'); // FIX DATE: parseISO
     
     const icsContent = [
       'BEGIN:VCALENDAR',
@@ -171,7 +182,7 @@ export default function TenantManager() {
                 </div>
 
                 <div className="text-xs text-center text-gray-400">
-                    Contratto scade il: {format(new Date(booking.data_fine), 'dd MMM yyyy')}
+                    Contratto scade il: {booking.data_fine ? format(parseISO(booking.data_fine), 'dd MMM yyyy') : 'N/D'}
                 </div>
               </CardContent>
             </Card>
@@ -196,7 +207,7 @@ export default function TenantManager() {
                             <p className="text-gray-600 text-xs mb-2">{t.descrizione}</p>
                             
                             <div className="flex justify-between items-center mt-2 pt-2 border-t border-gray-200">
-                                <span className="text-gray-400 text-[10px]">{format(new Date(t.created_at), 'dd MMM')}</span>
+                                <span className="text-gray-400 text-[10px]">{format(parseISO(t.created_at), 'dd MMM')}</span>
                                 {/* BOTTONE CHE APRE IL NUOVO TICKET MANAGER */}
                                 <Button 
                                     size="sm" 
@@ -234,7 +245,7 @@ export default function TenantManager() {
                                 <div className="flex justify-between items-center border-b pb-2">
                                     <div>
                                         <p className="font-bold capitalize text-gray-900">{p.tipo?.replace('_', ' ')}</p>
-                                        <p className="text-xs text-gray-500">Scadenza: {format(new Date(p.data_scadenza), 'dd MMM yyyy')}</p>
+                                        <p className="text-xs text-gray-500">Scadenza: {format(parseISO(p.data_scadenza), 'dd MMM yyyy')}</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="font-bold text-lg text-blue-600">€{p.importo}</p>
