@@ -35,6 +35,7 @@ Questo documento riflette la struttura REALE estratta dal database.
 | `user_id` | uuid | Chi ha inserito la spesa |
 | `supplier` | text | Fornitore |
 
-## 🚫 Tabelle da IGNORARE
-* **`payments`**: Tabella duplicata con colonne in italiano (`importo`). **NON USARE.**
+## 3. Note Tabelle Dashboard
+* **`payments`**: Usata nella dashboard come fonte per le **SPESE** (mappata su `expenses` nel codice).
+* **`tenant_payments`**: Usata nella dashboard come fonte per gli **INCASSI** (mappata su `income` nel codice).
 * **`maintenance_expenses`**: Vecchia tabella non collegata alla dashboard. **NON USARE.**

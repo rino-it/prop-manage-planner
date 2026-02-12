@@ -13,9 +13,9 @@ import {
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, 
   Calendar as CalendarIcon, ArrowRight, MapPin, User, Wrench, 
   Wallet, LogOut, Bell, Truck, Circle, Filter, LayoutGrid, List, 
-  ExternalLink, ClipboardList // <--- FIX: AGGIUNTE LE ICONE MANCANTI
+  ExternalLink, ClipboardList 
 } from 'lucide-react';
-import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth } from 'date-fns';
+import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
 
 interface DashboardProps {
@@ -39,9 +39,9 @@ interface DashboardEvent {
 
 export default function Dashboard({ onNavigate }: DashboardProps) {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false); // Apre Sheet Urgenze
-  const [isAgendaOpen, setIsAgendaOpen] = useState(false); // Apre Dialog Agenda Completa
-  const [agendaFilter, setAgendaFilter] = useState('all'); // Filtro Agenda
+  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false); 
+  const [isAgendaOpen, setIsAgendaOpen] = useState(false); 
+  const [agendaFilter, setAgendaFilter] = useState('all'); 
   
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
@@ -160,11 +160,17 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         });
     });
 
-    // KPI
+    // --- FIX KPI (Calcolo preciso per il mese corrente) ---
+    const now = new Date();
+    
+    // Filtra solo gli elementi che cadono nel mese corrente
+    const currentMonthIncome = rawData.income.filter(i => isSameMonth(new Date(i.data_scadenza), now));
+    const currentMonthExpenses = rawData.expenses.filter(e => isSameMonth(new Date(e.scadenza), now));
+
     const kpi = {
-      incassato: rawData.income.filter(i => i.stato === 'pagato').reduce((acc, c) => acc + Number(c.importo), 0),
-      atteso: rawData.income.filter(i => i.stato === 'da_pagare').reduce((acc, c) => acc + Number(c.importo), 0),
-      uscite: rawData.expenses.reduce((acc, c) => acc + Number(c.importo), 0)
+      incassato: currentMonthIncome.filter(i => i.stato === 'pagato').reduce((acc, c) => acc + Number(c.importo), 0),
+      atteso: currentMonthIncome.filter(i => i.stato === 'da_pagare').reduce((acc, c) => acc + Number(c.importo), 0),
+      uscite: currentMonthExpenses.reduce((acc, c) => acc + Number(c.importo), 0)
     };
 
     // Urgenze
