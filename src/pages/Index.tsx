@@ -98,7 +98,7 @@ const Index = () => {
             {/* Logo Mobile */}
             <img src="/logo.png" alt="PropManager" className="h-8 w-auto object-contain md:hidden" />
             
-            {/* FIX: Titolo ora visibile su mobile con responsive text e truncate */}
+            {/* FIX: Rimosso 'hidden md:block'. Ora visibile su mobile. Aggiunto truncate per sicurezza. */}
             <h1 className="text-sm md:text-lg font-bold text-slate-700 capitalize truncate max-w-[140px] sm:max-w-none">
                {activeTab === 'dashboard' ? 'Dashboard' : activeTab.replace('-', ' ')}
             </h1>

@@ -6,14 +6,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Users, Ticket, Wallet, MessageCircle, ExternalLink, Share2, UserCog, Mail } from 'lucide-react'; // Aggiunta Mail che mancava negli import
-import { format, parseISO } from 'date-fns'; // FIX: Aggiunto parseISO
+import { Users, Ticket, Wallet, MessageCircle, ExternalLink, Share2, UserCog } from 'lucide-react'; 
+import { format, parseISO } from 'date-fns';
 import TicketManager from '@/components/TicketManager';
-import { useToast } from '@/hooks/use-toast'; // FIX: Import toast hook
+import { useToast } from '@/hooks/use-toast';
 
 export default function TenantManager() {
   const queryClient = useQueryClient();
-  const { toast } = useToast(); // FIX: Inizializza toast
+  const { toast } = useToast();
   
   // STATI PER I DIALOG
   const [selectedTicketTenant, setSelectedTicketTenant] = useState<string | null>(null);
@@ -68,7 +68,6 @@ export default function TenantManager() {
   // HELPER FUNCTIONS (WhatsApp, Calendar, etc.)
   const sendWhatsApp = (phone: string, amount: number, date: string, type: string) => {
     if (!phone) {
-        // FIX UX: Toast invece di alert
         toast({ 
             title: "Numero mancante", 
             description: "Non è stato salvato un numero di telefono per questo inquilino.", 
@@ -76,7 +75,7 @@ export default function TenantManager() {
         });
         return;
     }
-    // FIX DATE: parseISO
+    
     const text = `Ciao, ti ricordo la scadenza di €${amount} relativa a ${type} per il giorno ${format(parseISO(date), 'dd/MM/yyyy')}. Grazie.`;
     window.open(`https://wa.me/${phone.replace(/[^0-9]/g, '')}?text=${encodeURIComponent(text)}`, '_blank');
   };
@@ -84,14 +83,14 @@ export default function TenantManager() {
   const addToGoogleCal = (amount: number, date: string, propertyName: string) => {
     const title = `Incasso Affitto: ${propertyName}`;
     const details = `Importo atteso: €${amount}`;
-    const d = format(parseISO(date), 'yyyyMMdd'); // FIX DATE: parseISO
+    const d = format(parseISO(date), 'yyyyMMdd');
     const url = `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(title)}&details=${encodeURIComponent(details)}&dates=${d}/${d}`;
     window.open(url, '_blank');
   };
 
   const downloadIcs = async (amount: number, date: string, propertyName: string) => {
     const title = `Incasso Affitto: ${propertyName}`;
-    const d = format(parseISO(date), 'yyyyMMdd'); // FIX DATE: parseISO
+    const d = format(parseISO(date), 'yyyyMMdd');
     
     const icsContent = [
       'BEGIN:VCALENDAR',
