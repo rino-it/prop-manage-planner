@@ -8,7 +8,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
 // Componenti Layout
 import Sidebar from '@/components/Sidebar';
-import NotificationBell from '@/components/NotificationBell'; 
+import AdminNotificationBell from '@/components/AdminNotificationBell'; 
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -106,7 +106,7 @@ const Index = () => {
 
           {/* AREA NOTIFICHE E UTENTE */}
           <div className="flex items-center gap-2">
-             <NotificationBell />
+             <AdminNotificationBell />
           </div>
         </div>
         
