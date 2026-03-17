@@ -107,7 +107,7 @@ export default function TenantPortal() {
     queryKey: ['guest-services'],
     queryFn: async () => {
         try {
-            const { data, error } = await supabase.from('services').select('*').eq('active', true);
+            const { data, error } = await supabase.from('services').select('*').eq('attivo', true);
             if (error) return [];
             return data || [];
         } catch { return []; }
@@ -298,13 +298,13 @@ export default function TenantPortal() {
                 <div className="grid gap-3">
                     {services.map((svc: any) => (
                         <Card key={svc.id} className="overflow-hidden">
-                            {svc.image_url && <img src={svc.image_url} className="h-32 w-full object-cover" />}
+                            {svc.immagine_url && <img src={svc.immagine_url} className="h-32 w-full object-cover" />}
                             <CardContent className="p-4">
-                                <h4 className="font-bold">{svc.title}</h4>
-                                <p className="text-xs text-slate-500 mt-1">{svc.description}</p>
+                                <h4 className="font-bold">{svc.titolo}</h4>
+                                <p className="text-xs text-slate-500 mt-1">{svc.descrizione}</p>
                                 <div className="flex justify-between items-center mt-4">
-                                    <span className="font-bold text-blue-600 text-sm">€{svc.price}</span>
-                                    <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({...ticketData, titolo: `Richiesta Servizio: ${svc.title}`}) }}>Richiedi</Button>
+                                    <span className="font-bold text-blue-600 text-sm">€{svc.prezzo}</span>
+                                    <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({...ticketData, titolo: `Richiesta Servizio: ${svc.titolo}`}) }}>Richiedi</Button>
                                 </div>
                             </CardContent>
                         </Card>

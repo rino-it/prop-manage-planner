@@ -59,7 +59,7 @@ export default function GuestPortal() {
   const { data: services } = useQuery({
     queryKey: ['guest-services'],
     queryFn: async () => {
-        const { data } = await supabase.from('services').select('*').eq('active', true);
+        const { data } = await supabase.from('services').select('*').eq('attivo', true);
         return data || [];
     }
   });
@@ -316,17 +316,17 @@ export default function GuestPortal() {
                     <div className="grid gap-3">
                         {services?.map((svc: any) => (
                             <Card key={svc.id} className="overflow-hidden border-0 shadow-md">
-                                <div className="h-32 bg-cover bg-center" style={{ backgroundImage: `url(${svc.image_url || '/placeholder.svg'})` }} />
+                                <div className="h-32 bg-cover bg-center" style={{ backgroundImage: `url(${svc.immagine_url || '/placeholder.svg'})` }} />
                                 <CardContent className="p-4">
                                     <div className="flex justify-between items-start mb-2">
-                                        <h3 className="font-bold text-lg">{svc.title}</h3>
+                                        <h3 className="font-bold text-lg">{svc.titolo}</h3>
                                         <Badge className="bg-green-100 text-green-800">Consigliato</Badge>
                                     </div>
-                                    <p className="text-sm text-slate-600 line-clamp-2">{svc.description}</p>
+                                    <p className="text-sm text-slate-600 line-clamp-2">{svc.descrizione}</p>
                                     <div className="mt-4 flex justify-between items-center">
-                                        <span className="font-bold text-blue-600">€{svc.price}</span>
+                                        <span className="font-bold text-blue-600">€{svc.prezzo}</span>
                                         <Button size="sm" onClick={() => {
-                                            setTicketForm({ titolo: `Prenotazione: ${svc.title}`, descrizione: "Vorrei prenotare questa esperienza." });
+                                            setTicketForm({ titolo: `Prenotazione: ${svc.titolo}`, descrizione: "Vorrei prenotare questa esperienza." });
                                             setActiveTab('support'); // <--- FIX NAVIGAZIONE (React state invece di DOM)
                                         }}>Prenota</Button>
                                     </div>
