@@ -386,7 +386,7 @@ function TenantPortalInner() {
 
       {/* DIALOG NUOVO TICKET */}
       <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
-        <DialogContent className="w-[95vw] sm:max-w-md">
+        <DialogContent className="max-w-[95vw] sm:max-w-md">
             <DialogHeader><DialogTitle>{t('support.newReport')}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
                 <div className="space-y-2"><Label>{t('placeholder.subject')}</Label><Input placeholder={t('placeholder.subjectExample')} value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
@@ -401,7 +401,7 @@ function TenantPortalInner() {
 
       {/* DIALOG AVVISO PAGAMENTO */}
       <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
-            <DialogContent className="w-[95vw] rounded-xl">
+            <DialogContent className="max-w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>{t('dialog.notifyPayment')}</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
                     <p className="text-sm text-gray-500">{t('dialog.paymentTenantDesc')} <strong>€{paymentTicketOpen?.importo}</strong>.</p>
@@ -426,7 +426,7 @@ function TenantPortalInner() {
 
       {/* DIALOG CONTATTA STRUTTURA */}
       <Dialog open={!!serviceContactOpen} onOpenChange={() => setServiceContactOpen(null)}>
-          <DialogContent className="w-[95vw] sm:max-w-md">
+          <DialogContent className="max-w-[95vw] sm:max-w-md">
               <DialogHeader><DialogTitle>{t('dialog.contactStructure')}</DialogTitle></DialogHeader>
               <div className="space-y-4 py-2">
                   <p className="text-sm text-gray-500">{t('dialog.contactServiceDesc', { service: serviceContactOpen?.titolo, price: serviceContactOpen?.prezzo })}</p>

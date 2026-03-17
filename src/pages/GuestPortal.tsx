@@ -426,7 +426,7 @@ function GuestPortalInner() {
 
         {/* DIALOG PAGAMENTO */}
         <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
-            <DialogContent className="w-[95vw] rounded-xl">
+            <DialogContent className="max-w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>{t('dialog.notifyPayment')}</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
                     <p className="text-sm text-gray-500">{t('dialog.paymentDesc')} <strong>€{paymentTicketOpen?.importo}</strong> per <T text={paymentTicketOpen?.tipo} />.</p>
@@ -439,7 +439,7 @@ function GuestPortalInner() {
 
         {/* DIALOG CONTATTA STRUTTURA */}
         <Dialog open={!!serviceContactOpen} onOpenChange={() => setServiceContactOpen(null)}>
-            <DialogContent className="w-[95vw] rounded-xl">
+            <DialogContent className="max-w-[95vw] rounded-xl">
                 <DialogHeader><DialogTitle>{t('dialog.contactStructure')}</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
                     <p className="text-sm text-gray-500">{t('dialog.contactServiceDesc', { service: serviceContactOpen?.titolo, price: serviceContactOpen?.prezzo })}</p>
