@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useParams } from 'react-router-dom'; // NECESSARIO PER IL LINK /tenant/:id
+import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
@@ -14,12 +14,23 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { LanguageProvider, useLanguage } from '@/i18n/LanguageContext';
+import LanguagePicker from '@/components/LanguagePicker';
 
 export default function TenantPortal() {
-  const { id } = useParams(); // Recupera l'UUID dal link
+  return (
+    <LanguageProvider>
+      <TenantPortalInner />
+    </LanguageProvider>
+  );
+}
+
+function TenantPortalInner() {
+  const { id } = useParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
+  const { t } = useLanguage();
+
   const [newTicketOpen, setNewTicketOpen] = useState(false);
   const [ticketData, setTicketData] = useState({ titolo: '', descrizione: '', priorita: 'bassa' });
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
@@ -27,29 +38,20 @@ export default function TenantPortal() {
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [isSavingContact, setIsSavingContact] = useState(false);
 
-  // 1. Recupero Booking tramite ID (Senza Login)
+  // 1. Recupero Booking tramite ID
   const { data: booking, isLoading: bookingLoading } = useQuery({
     queryKey: ['tenant-booking', id],
     queryFn: async () => {
       if (!id) return null;
-      
       const { data: bookingData, error } = await supabase
         .from('bookings')
-        .select(`
-            *,
-            properties_real(id, nome, indirizzo, wifi_ssid, wifi_password)
-        `)
+        .select(`*, properties_real(id, nome, indirizzo, wifi_ssid, wifi_password)`)
         .eq('id', id)
         .maybeSingle();
 
-      if (error) {
-          console.error("Errore fetch booking:", error);
-          return null;
-      }
-
+      if (error) { console.error("Errore fetch booking:", error); return null; }
       if (!bookingData) return null;
 
-      // Fallback per veicolo
       let mobileProp = null;
       if (!bookingData.properties_real && bookingData.property_mobile_id) {
           const { data: mp } = await supabase
@@ -59,7 +61,6 @@ export default function TenantPortal() {
             .maybeSingle();
           mobileProp = mp;
       }
-
       return { ...bookingData, properties_mobile: mobileProp };
     },
     enabled: !!id
@@ -68,7 +69,6 @@ export default function TenantPortal() {
   const property = booking?.properties_real || booking?.properties_mobile;
   const isReal = !!booking?.properties_real;
 
-  // 2. Pagamenti (Query Protetta)
   const { data: payments = [] } = useQuery({
     queryKey: ['tenant-payments', booking?.id],
     queryFn: async () => {
@@ -80,7 +80,6 @@ export default function TenantPortal() {
     enabled: !!booking?.id
   });
 
-  // 3. Ticket
   const { data: tickets = [] } = useQuery({
     queryKey: ['tenant-tickets', booking?.id],
     queryFn: async () => {
@@ -91,7 +90,6 @@ export default function TenantPortal() {
     enabled: !!booking?.id
   });
 
-  // 4. Documenti
   const { data: documents = [] } = useQuery({
     queryKey: ['tenant-documents', booking?.id],
     queryFn: async () => {
@@ -102,7 +100,6 @@ export default function TenantPortal() {
     enabled: !!booking?.id
   });
 
-  // 5. Servizi (filtrati per proprietà)
   const { data: services = [] } = useQuery({
     queryKey: ['guest-services', booking?.property_id],
     queryFn: async () => {
@@ -125,13 +122,11 @@ export default function TenantPortal() {
     try {
       const { error } = await supabase.from('bookings').update({ email_ospite: contactForm.email, telefono_ospite: contactForm.phone }).eq('id', id);
       if (error) throw error;
-      toast({ title: "Contatti Salvati" });
+      toast({ title: t('toast.contactsSaved') });
       queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
-    } catch (e) { toast({ title: "Errore nel salvataggio", variant: "destructive" }); }
+    } catch (e) { toast({ title: t('toast.contactsError'), variant: "destructive" }); }
     finally { setIsSavingContact(false); }
   };
-
-  // --- AZIONI ---
 
   const handleCreateTicket = useMutation({
     mutationFn: async () => {
@@ -152,7 +147,7 @@ export default function TenantPortal() {
       queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
       setNewTicketOpen(false);
       setTicketData({ titolo: '', descrizione: '', priorita: 'bassa' });
-      toast({ title: "Segnalazione inviata" });
+      toast({ title: t('toast.reportSent') });
     }
   });
 
@@ -162,8 +157,8 @@ export default function TenantPortal() {
           await supabase.from('tickets').insert({
               booking_id: booking.id,
               property_real_id: isReal ? property.id : null,
-              titolo: `Pagamento: ${paymentTicketOpen.tipo || 'Rata'}`,
-              descrizione: `L'inquilino prevede di pagare il ${format(new Date(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
+              titolo: `${t('payment.prefix')} ${paymentTicketOpen.tipo || 'Rata'}`,
+              descrizione: t('payment.tenantWillPay', { date: format(new Date(payPromise.date), 'dd/MM/yyyy'), method: payPromise.method }),
               stato: 'aperto',
               creato_da: 'ospite',
               related_payment_id: paymentTicketOpen.id
@@ -171,7 +166,7 @@ export default function TenantPortal() {
       },
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-          toast({ title: "Avviso inviato" });
+          toast({ title: t('toast.noticeSent') });
           setPaymentTicketOpen(null);
       }
   });
@@ -182,13 +177,13 @@ export default function TenantPortal() {
         if (error || !data) throw new Error();
         window.open(data.signedUrl, '_blank');
     } catch {
-        toast({ title: "Errore download", variant: "destructive" });
+        toast({ title: t('toast.downloadError'), variant: "destructive" });
     }
   };
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: "Copiato!", duration: 1500 });
+    toast({ title: t('toast.copied'), duration: 1500 });
   };
 
   if (bookingLoading) return <div className="flex h-screen items-center justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-600"/></div>;
@@ -197,10 +192,10 @@ export default function TenantPortal() {
     return (
       <div className="flex flex-col h-screen items-center justify-center p-4 text-center bg-slate-50">
         <AlertTriangle className="w-16 h-16 text-amber-500 mb-4"/>
-        <h1 className="text-2xl font-bold text-slate-800">Link Non Valido o Scaduto</h1>
+        <h1 className="text-2xl font-bold text-slate-800">{t('error.invalidLink')}</h1>
         <p className="text-slate-500 max-w-md mt-2">
-            Non troviamo la prenotazione associata a questo link.<br/>
-            ID cercato: <span className="font-mono text-xs bg-slate-100 p-1 rounded">{id}</span>
+            {t('error.invalidLinkDesc')}<br/>
+            {t('error.searchedId')} <span className="font-mono text-xs bg-slate-100 p-1 rounded">{id}</span>
         </p>
       </div>
     );
@@ -213,10 +208,13 @@ export default function TenantPortal() {
             <div className="bg-blue-100 p-2 rounded-lg"><Home className="w-5 h-5 text-blue-600"/></div>
             <div>
                 <h1 className="font-bold text-sm text-slate-900 truncate max-w-[180px]">{isReal ? property?.nome : property?.veicolo}</h1>
-                <p className="text-[10px] text-slate-500">Portale Inquilino</p>
+                <p className="text-[10px] text-slate-500">{t('portal.tenant')}</p>
             </div>
         </div>
-        <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">Attivo</Badge>
+        <div className="flex items-center gap-2">
+            <LanguagePicker />
+            <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">{t('badge.active')}</Badge>
+        </div>
       </header>
 
       <main className="max-w-xl mx-auto p-4 space-y-6">
@@ -224,18 +222,18 @@ export default function TenantPortal() {
           <Card className="border-2 border-red-200 shadow-lg">
             <CardHeader className="pb-2 border-b">
               <CardTitle className="flex justify-between items-center text-lg">
-                <span className="text-red-700">Completa il tuo profilo</span>
+                <span className="text-red-700">{t('contact.completeProfile')}</span>
                 <Lock className="text-red-500 w-6 h-6"/>
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-4">
-              <p className="text-sm text-slate-600 text-center">Inserisci i tuoi recapiti per accedere al portale.</p>
+              <p className="text-sm text-slate-600 text-center">{t('contact.accessPrompt')}</p>
               <div className="space-y-3">
-                <div><Label className="text-xs uppercase text-slate-500">Email</Label><Input placeholder="tua@email.com" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
-                <div><Label className="text-xs uppercase text-slate-500">Telefono</Label><Input placeholder="+39 ..." value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
+                <div><Label className="text-xs uppercase text-slate-500">{t('label.email')}</Label><Input placeholder={t('placeholder.email')} value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
+                <div><Label className="text-xs uppercase text-slate-500">{t('label.phone')}</Label><Input placeholder={t('placeholder.phone')} value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
               </div>
               <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact || !contactForm.email || !contactForm.phone}>
-                {isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : "Invia Contatti"}
+                {isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : t('button.sendContacts')}
               </Button>
             </CardContent>
           </Card>
@@ -244,14 +242,14 @@ export default function TenantPortal() {
         {hasContactInfo && (<>
         <Card className="bg-slate-900 text-white border-none shadow-xl overflow-hidden relative">
             <CardHeader>
-                <CardTitle className="text-xl">Benvenuto, {booking.nome_ospite}</CardTitle>
-                <CardDescription className="text-slate-400">Rimani aggiornato sulla tua locazione.</CardDescription>
+                <CardTitle className="text-xl">{t('tenant.welcome')} {booking.nome_ospite}</CardTitle>
+                <CardDescription className="text-slate-400">{t('tenant.stayUpdated')}</CardDescription>
             </CardHeader>
             {isReal && property?.wifi_password && (
                 <CardFooter className="bg-white/5 border-t border-white/10">
                     <div className="flex justify-between items-center w-full py-1">
                         <div>
-                            <p className="text-[10px] text-slate-400 uppercase font-bold">WiFi Password</p>
+                            <p className="text-[10px] text-slate-400 uppercase font-bold">{t('label.wifiPassword')}</p>
                             <p className="text-sm font-mono">{property.wifi_password}</p>
                         </div>
                         <Button size="icon" variant="ghost" className="text-slate-400 hover:text-white" onClick={() => copyToClipboard(property.wifi_password)}>
@@ -264,28 +262,27 @@ export default function TenantPortal() {
 
         <Tabs defaultValue="status" className="w-full">
             <TabsList className="grid w-full grid-cols-4 mb-4">
-                <TabsTrigger value="status" className="text-xs">Stato</TabsTrigger>
-                <TabsTrigger value="services" className="text-xs">Servizi</TabsTrigger>
-                <TabsTrigger value="docs" className="text-xs">File</TabsTrigger>
-                <TabsTrigger value="support" className="text-xs">Help</TabsTrigger>
+                <TabsTrigger value="status" className="text-xs">{t('tab.status')}</TabsTrigger>
+                <TabsTrigger value="services" className="text-xs">{t('tab.services')}</TabsTrigger>
+                <TabsTrigger value="docs" className="text-xs">{t('tab.files')}</TabsTrigger>
+                <TabsTrigger value="support" className="text-xs">{t('tab.help')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="status" className="space-y-4">
-                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-4 h-4"/> Piano Pagamenti</h3>
-                {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">Nessun pagamento registrato.</p> : (
+                <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-4 h-4"/> {t('payments.plan')}</h3>
+                {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">{t('empty.payments')}</p> : (
                     <div className="space-y-3">
                         {payments.map((pay: any) => (
                             <Card key={pay.id} className="border-l-4 border-l-blue-500">
                                 <CardContent className="p-4 flex justify-between items-center">
                                     <div>
-                                        {/* FIX ANTI-CRASH: Se 'tipo' è null, usa 'Rata' */}
                                         <p className="font-bold text-sm capitalize">{(pay.tipo || 'Rata').replace('_', ' ')}</p>
                                         <p className="text-xs text-gray-500">Scad: {pay.data_scadenza ? format(new Date(pay.data_scadenza), 'dd MMM yyyy') : 'N/D'}</p>
                                     </div>
                                     <div className="text-right">
                                         <p className="font-bold text-lg">€ {pay.importo}</p>
-                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-700 border-0">Pagato</Badge> : 
-                                            <Button size="sm" variant="outline" className="h-7 text-[10px] border-orange-200 text-orange-600" onClick={() => setPaymentTicketOpen(pay)}>Avvisa</Button>
+                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-700 border-0">{t('badge.paid')}</Badge> :
+                                            <Button size="sm" variant="outline" className="h-7 text-[10px] border-orange-200 text-orange-600" onClick={() => setPaymentTicketOpen(pay)}>{t('button.notify')}</Button>
                                         }
                                     </div>
                                 </CardContent>
@@ -296,7 +293,7 @@ export default function TenantPortal() {
             </TabsContent>
 
             <TabsContent value="services" className="space-y-4">
-                <h3 className="font-bold text-slate-700">Servizi Disponibili</h3>
+                <h3 className="font-bold text-slate-700">{t('services.available')}</h3>
                 <div className="grid gap-3">
                     {services.map((svc: any) => (
                         <Card key={svc.id} className="overflow-hidden">
@@ -306,18 +303,18 @@ export default function TenantPortal() {
                                 <p className="text-xs text-slate-500 mt-1">{svc.descrizione}</p>
                                 <div className="flex justify-between items-center mt-4">
                                     <span className="font-bold text-blue-600 text-sm">€{svc.prezzo}</span>
-                                    <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({...ticketData, titolo: `Richiesta Servizio: ${svc.titolo}`}) }}>Richiedi</Button>
+                                    <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({...ticketData, titolo: `${t('booking.serviceRequest')} ${svc.titolo}`}) }}>{t('button.request')}</Button>
                                 </div>
                             </CardContent>
                         </Card>
                     ))}
-                    {services.length === 0 && <p className="text-center text-gray-400 py-8">Nessun servizio extra disponibile.</p>}
+                    {services.length === 0 && <p className="text-center text-gray-400 py-8">{t('empty.services')}</p>}
                 </div>
             </TabsContent>
 
             <TabsContent value="docs" className="space-y-4">
-                <h3 className="font-bold text-slate-700">Documenti Condivisi</h3>
-                {documents.length === 0 ? <div className="text-center py-12 bg-white rounded-lg border border-dashed text-gray-400"><FileQuestion className="w-8 h-8 mx-auto mb-2 opacity-20"/><p>Nessun documento.</p></div> : (
+                <h3 className="font-bold text-slate-700">{t('docs.shared')}</h3>
+                {documents.length === 0 ? <div className="text-center py-12 bg-white rounded-lg border border-dashed text-gray-400"><FileQuestion className="w-8 h-8 mx-auto mb-2 opacity-20"/><p>{t('empty.docs')}</p></div> : (
                     <div className="grid gap-3">
                         {documents.map((doc: any) => (
                             <div key={doc.id} className="flex justify-between items-center p-3 bg-white rounded-lg border shadow-sm">
@@ -336,27 +333,27 @@ export default function TenantPortal() {
 
             <TabsContent value="support" className="space-y-4">
                 <Button className="w-full bg-blue-600 shadow-md" onClick={() => setNewTicketOpen(true)}>
-                    <Plus className="w-4 h-4 mr-2"/> Nuova Segnalazione
+                    <Plus className="w-4 h-4 mr-2"/> {t('support.newReport')}
                 </Button>
                 <div className="space-y-3">
                     {tickets.map((ticket: any) => (
                         <Card key={ticket.id}>
                             <CardContent className="p-4">
                                 <div className="flex justify-between items-start mb-2">
-                                    <h4 className="font-bold text-sm">{ticket.titolo || 'Segnalazione'}</h4>
+                                    <h4 className="font-bold text-sm">{ticket.titolo || t('support.report')}</h4>
                                     <Badge variant="outline" className="text-[10px]">{ticket.stato}</Badge>
                                 </div>
                                 <p className="text-xs text-slate-600 mb-2">{ticket.descrizione}</p>
                                 {ticket.admin_notes && (
                                     <div className="bg-blue-50 p-2 rounded border border-blue-100 text-[11px] text-blue-800">
-                                        <strong>Staff:</strong> {ticket.admin_notes}
+                                        <strong>{t('label.staff')}</strong> {ticket.admin_notes}
                                     </div>
                                 )}
                                 <p className="text-[9px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
                             </CardContent>
                         </Card>
                     ))}
-                    {tickets.length === 0 && <p className="text-center text-gray-400 py-8">Nessuna segnalazione aperta.</p>}
+                    {tickets.length === 0 && <p className="text-center text-gray-400 py-8">{t('empty.reports')}</p>}
                 </div>
             </TabsContent>
         </Tabs>
@@ -366,14 +363,14 @@ export default function TenantPortal() {
       {/* DIALOG NUOVO TICKET */}
       <Dialog open={newTicketOpen} onOpenChange={setNewTicketOpen}>
         <DialogContent className="w-[95vw] sm:max-w-md">
-            <DialogHeader><DialogTitle>Nuova Segnalazione</DialogTitle></DialogHeader>
+            <DialogHeader><DialogTitle>{t('support.newReport')}</DialogTitle></DialogHeader>
             <div className="space-y-4 py-2">
-                <div className="space-y-2"><Label>Oggetto</Label><Input placeholder="Es. Caldaia / Info affitto" value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
-                <div className="space-y-2"><Label>Descrizione</Label><Textarea placeholder="Dettagli..." value={ticketData.descrizione} onChange={e => setTicketData({...ticketData, descrizione: e.target.value})} /></div>
+                <div className="space-y-2"><Label>{t('placeholder.subject')}</Label><Input placeholder={t('placeholder.subjectExample')} value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
+                <div className="space-y-2"><Label>{t('label.description')}</Label><Textarea placeholder={t('placeholder.details')} value={ticketData.descrizione} onChange={e => setTicketData({...ticketData, descrizione: e.target.value})} /></div>
             </div>
             <DialogFooter>
-                <Button variant="outline" onClick={() => setNewTicketOpen(false)}>Annulla</Button>
-                <Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600 w-full" disabled={!ticketData.titolo}>Invia</Button>
+                <Button variant="outline" onClick={() => setNewTicketOpen(false)}>{t('button.cancel')}</Button>
+                <Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600 w-full" disabled={!ticketData.titolo}>{t('button.send')}</Button>
             </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -381,26 +378,24 @@ export default function TenantPortal() {
       {/* DIALOG AVVISO PAGAMENTO */}
       <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
-                <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>{t('dialog.notifyPayment')}</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
-                    <p className="text-sm text-gray-500">Dicci quando prevedi di pagare <strong>€{paymentTicketOpen?.importo}</strong>.</p>
-                    <div className="space-y-2"><Label>Data Prevista</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
+                    <p className="text-sm text-gray-500">{t('dialog.paymentTenantDesc')} <strong>€{paymentTicketOpen?.importo}</strong>.</p>
+                    <div className="space-y-2"><Label>{t('label.expectedDate')}</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
                     <div className="space-y-2">
-                        <Label>Metodo</Label>
+                        <Label>{t('label.method')}</Label>
                         <Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Scegli..."/>
-                            </SelectTrigger>
+                            <SelectTrigger><SelectValue placeholder={t('placeholder.choose')}/></SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="bonifico">Bonifico</SelectItem>
-                                <SelectItem value="contanti">Contanti</SelectItem>
-                                <SelectItem value="altro">Altro</SelectItem>
+                                <SelectItem value="bonifico">{t('method.transfer')}</SelectItem>
+                                <SelectItem value="contanti">{t('method.cash')}</SelectItem>
+                                <SelectItem value="altro">{t('method.other')}</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
                 </div>
                 <DialogFooter>
-                    <Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">Invia Avviso</Button>
+                    <Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">{t('button.sendNotice')}</Button>
                 </DialogFooter>
             </DialogContent>
       </Dialog>

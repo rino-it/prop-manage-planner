@@ -10,29 +10,35 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { 
-  Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2, 
+import {
+  Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2,
   CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
 import { Textarea } from '@/components/ui/textarea';
+import { LanguageProvider, useLanguage } from '@/i18n/LanguageContext';
+import LanguagePicker from '@/components/LanguagePicker';
 
 export default function GuestPortal() {
+  return (
+    <LanguageProvider>
+      <GuestPortalInner />
+    </LanguageProvider>
+  );
+}
+
+function GuestPortalInner() {
   const { id } = useParams();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  
-  // UX: Stato Tabs controllato
-  const [activeTab, setActiveTab] = useState('experiences');
+  const { t } = useLanguage();
 
+  const [activeTab, setActiveTab] = useState('experiences');
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [ticketForm, setTicketForm] = useState({ titolo: '', descrizione: '' });
-  
-  // Stato per Ticket Pagamento
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
-
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
 
@@ -55,7 +61,6 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
-  // Query per Esperienze (filtrate per proprietà)
   const { data: services } = useQuery({
     queryKey: ['guest-services', booking?.property_id],
     queryFn: async () => {
@@ -88,11 +93,11 @@ export default function GuestPortal() {
   const hasContactInfo = booking?.telefono_ospite && booking?.email_ospite;
   const hasDocuments = documents && documents.length > 0;
   const isApproved = booking?.documents_approved === true;
-  
+
   let currentStep = 1;
   if (hasContactInfo) currentStep = 2;
-  if (hasContactInfo && hasDocuments) currentStep = 3; 
-  if (isApproved) currentStep = 4; 
+  if (hasContactInfo && hasDocuments) currentStep = 3;
+  if (isApproved) currentStep = 4;
 
   const isCheckinUnlocked = currentStep === 4;
   const isPendingApproval = currentStep === 3;
@@ -104,9 +109,9 @@ export default function GuestPortal() {
     try {
         const { error } = await supabase.from('bookings').update({ email_ospite: contactForm.email, telefono_ospite: contactForm.phone }).eq('id', id);
         if (error) throw error;
-        toast({ title: "Contatti Salvati" });
+        toast({ title: t('toast.contactsSaved') });
         queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
-    } catch (e) { toast({ title: "Errore", variant: "destructive" }); } 
+    } catch (e) { toast({ title: t('toast.error'), variant: "destructive" }); }
     finally { setIsSavingContact(false); }
   };
 
@@ -115,13 +120,8 @@ export default function GuestPortal() {
       const file = event.target.files?.[0];
       if (!file || !booking) return;
 
-      // FIX QUALITÀ: Controllo dimensione (10MB)
       if (file.size > 10 * 1024 * 1024) {
-        toast({ 
-          title: "File troppo grande", 
-          description: "Il file supera il limite di 10MB.", 
-          variant: "destructive" 
-        });
+        toast({ title: t('toast.fileTooLarge'), description: t('toast.fileTooLargeDesc'), variant: "destructive" });
         return;
       }
 
@@ -135,9 +135,9 @@ export default function GuestPortal() {
       });
       if (dbError) throw dbError;
 
-      toast({ title: "Caricato!", description: "Documento in verifica." });
+      toast({ title: t('toast.uploaded'), description: t('toast.uploadedDesc') });
       queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
-    } catch (error: any) { toast({ title: "Errore upload", variant: "destructive" }); } 
+    } catch (error: any) { toast({ title: t('toast.uploadError'), variant: "destructive" }); }
     finally { setIsUploading(false); }
   };
 
@@ -150,7 +150,7 @@ export default function GuestPortal() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-      toast({ title: "Richiesta inviata" });
+      toast({ title: t('toast.requestSent') });
       setTicketForm({ titolo: '', descrizione: '' });
     }
   });
@@ -161,9 +161,8 @@ export default function GuestPortal() {
           await supabase.from('tickets').insert({
               booking_id: booking.id,
               property_real_id: booking.property_id,
-              titolo: `Pagamento: ${paymentTicketOpen.tipo}`,
-              // FIX: parseISO per stabilità data
-              descrizione: `L'inquilino prevede di pagare il ${format(parseISO(payPromise.date), 'dd/MM/yyyy')} tramite ${payPromise.method}.`,
+              titolo: `${t('payment.prefix')} ${paymentTicketOpen.tipo}`,
+              descrizione: t('payment.tenantWillPay', { date: format(parseISO(payPromise.date), 'dd/MM/yyyy'), method: payPromise.method }),
               stato: 'aperto',
               creato_da: 'ospite',
               related_payment_id: paymentTicketOpen.id,
@@ -173,7 +172,7 @@ export default function GuestPortal() {
       },
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-          toast({ title: "Amministrazione avvisata" });
+          toast({ title: t('toast.adminNotified') });
           setPaymentTicketOpen(null);
           setPayPromise({ date: '', method: '' });
       }
@@ -181,7 +180,7 @@ export default function GuestPortal() {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
-    toast({ title: "Copiato!", duration: 1500 });
+    toast({ title: t('toast.copied'), duration: 1500 });
   };
 
   const downloadDoc = async (path: string) => {
@@ -190,7 +189,7 @@ export default function GuestPortal() {
         if (error) throw error;
         if (data?.signedUrl) window.open(data.signedUrl, '_blank');
     } catch (e: any) {
-        toast({ title: "Impossibile aprire", description: "File non trovato.", variant: "destructive" });
+        toast({ title: t('toast.cantOpen'), description: t('toast.fileNotFound'), variant: "destructive" });
     }
   };
 
@@ -198,15 +197,18 @@ export default function GuestPortal() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
-      
+
       {/* HEADER */}
       <div className="bg-white border-b sticky top-0 z-10 shadow-sm px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
              <img src="/prop-manager-logo.svg" alt="Logo" className="h-8 w-auto object-contain" />
           </div>
-          <div className="text-right">
-             <p className="text-sm font-bold text-slate-900 truncate max-w-[150px]">{booking.properties_real?.nome}</p>
-             <p className="text-xs text-slate-500">Portale Ospite</p>
+          <div className="flex items-center gap-3">
+             <LanguagePicker />
+             <div className="text-right">
+                <p className="text-sm font-bold text-slate-900 truncate max-w-[150px]">{booking.properties_real?.nome}</p>
+                <p className="text-xs text-slate-500">{t('portal.guest')}</p>
+             </div>
           </div>
       </div>
 
@@ -214,7 +216,7 @@ export default function GuestPortal() {
 
         {/* TIMELINE */}
         <div className="flex justify-between items-center px-4 py-2 bg-white rounded-full border shadow-sm mx-2">
-            {[{ s: 1, l: 'Contatti' }, { s: 2, l: 'Documenti' }, { s: 3, l: 'Verifica' }, { s: 4, l: 'Accesso' }].map((step) => (
+            {[{ s: 1, l: t('steps.contacts') }, { s: 2, l: t('steps.documents') }, { s: 3, l: t('steps.verification') }, { s: 4, l: t('steps.access') }].map((step) => (
                 <div key={step.s} className="flex flex-col items-center gap-1">
                     <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${currentStep >= step.s ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-300'}`}>
                         {currentStep > step.s ? <CheckCircle className="w-4 h-4"/> : step.s}
@@ -228,20 +230,20 @@ export default function GuestPortal() {
         <Card className={`border-2 overflow-hidden shadow-lg transition-all duration-500 ${isCheckinUnlocked ? 'border-green-400 bg-white' : isPendingApproval ? 'border-yellow-400 bg-yellow-50' : 'border-red-200 bg-white'}`}>
             <CardHeader className="pb-2 border-b border-black/5">
                 <CardTitle className="flex justify-between items-center text-lg">
-                    {isCheckinUnlocked ? <span className="text-green-700">Accesso Attivo</span> : isPendingApproval ? <span className="text-yellow-700">Verifica in corso...</span> : <span className="text-red-700">Check-in Online</span>}
+                    {isCheckinUnlocked ? <span className="text-green-700">{t('checkin.active')}</span> : isPendingApproval ? <span className="text-yellow-700">{t('checkin.pending')}</span> : <span className="text-red-700">{t('checkin.online')}</span>}
                     {isCheckinUnlocked ? <Unlock className="text-green-600 w-6 h-6"/> : isPendingApproval ? <Clock className="text-yellow-600 w-6 h-6"/> : <Lock className="text-red-500 w-6 h-6"/>}
                 </CardTitle>
             </CardHeader>
             <CardContent className="pt-6 space-y-6">
-                
+
                 {currentStep === 1 && (
                     <div className="space-y-4 animate-in fade-in">
-                        <p className="text-sm text-slate-600 text-center">Inserisci i tuoi recapiti per iniziare.</p>
+                        <p className="text-sm text-slate-600 text-center">{t('contact.prompt')}</p>
                         <div className="space-y-3">
-                            <div><Label className="text-xs uppercase text-slate-500">Email</Label><Input placeholder="tua@email.com" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
-                            <div><Label className="text-xs uppercase text-slate-500">Telefono</Label><Input placeholder="+39 ..." value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
+                            <div><Label className="text-xs uppercase text-slate-500">{t('label.email')}</Label><Input placeholder={t('placeholder.email')} value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
+                            <div><Label className="text-xs uppercase text-slate-500">{t('label.phone')}</Label><Input placeholder={t('placeholder.phone')} value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
                         </div>
-                        <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact}>{isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : "Avanti"}</Button>
+                        <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact}>{isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : t('button.next')}</Button>
                     </div>
                 )}
 
@@ -249,23 +251,22 @@ export default function GuestPortal() {
                     <div className="space-y-4 animate-in fade-in">
                           <div className="text-center mb-4">
                             {isPendingApproval ? (
-                                <><ShieldCheck className="w-12 h-12 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900">Documenti ricevuti!</h3><p className="text-sm text-yellow-700">L'host sta controllando i file.</p></>
+                                <><ShieldCheck className="w-12 h-12 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900">{t('docs.received')}</h3><p className="text-sm text-yellow-700">{t('docs.hostChecking')}</p></>
                             ) : (
-                                <><UploadCloud className="w-12 h-12 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900">Carica i Documenti</h3><p className="text-sm text-slate-500">Carica foto del documento d'identità e contratto.</p></>
+                                <><UploadCloud className="w-12 h-12 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900">{t('docs.upload')}</h3><p className="text-sm text-slate-500">{t('docs.uploadPrompt')}</p></>
                             )}
                           </div>
                           {!isPendingApproval && (
                              <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors relative">
-                                {/* FIX QUALITÀ: Aggiunto accept */}
                                 <Input type="file" accept="image/*,.pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} disabled={isUploading} />
-                                {isUploading ? <Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-600"/> : <p className="text-blue-600 font-bold">Scatta Foto</p>}
+                                {isUploading ? <Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-600"/> : <p className="text-blue-600 font-bold">{t('docs.takePhoto')}</p>}
                              </div>
                           )}
                           <div className="space-y-2">
                              {documents?.filter((d:any) => d.status === 'in_revisione').map((doc: any) => (
                                  <div key={doc.id} className="flex items-center justify-between p-3 bg-white border rounded-lg shadow-sm">
                                      <div className="flex items-center gap-3"><FileText className="w-4 h-4 text-blue-500" /><span className="text-sm font-medium truncate max-w-[200px]">{doc.filename}</span></div>
-                                     <Badge variant="secondary">In Revisione</Badge>
+                                     <Badge variant="secondary">{t('docs.inReview')}</Badge>
                                  </div>
                              ))}
                           </div>
@@ -277,14 +278,14 @@ export default function GuestPortal() {
                         <div className="grid grid-cols-2 gap-4 text-center">
                              <div className="p-4 bg-slate-900 text-white rounded-xl">
                                 <Key className="w-6 h-6 mx-auto mb-2 text-yellow-400"/>
-                                <p className="text-[10px] uppercase font-bold text-slate-400">Codice Keybox</p>
+                                <p className="text-[10px] uppercase font-bold text-slate-400">{t('label.keyboxCode')}</p>
                                 <p className="text-2xl font-mono font-bold tracking-widest">{booking.properties_real?.keybox_code || '---'}</p>
                              </div>
                              <div className="p-4 bg-blue-50 rounded-xl cursor-pointer" onClick={() => copyToClipboard(booking.properties_real?.wifi_password || "")}>
                                 <Wifi className="w-6 h-6 mx-auto mb-2 text-blue-500"/>
-                                <p className="text-[10px] uppercase font-bold text-blue-400">WiFi</p>
+                                <p className="text-[10px] uppercase font-bold text-blue-400">{t('label.wifi')}</p>
                                 <p className="text-lg font-bold text-blue-700 flex items-center justify-center gap-2">
-                                    {booking.properties_real?.wifi_ssid ? 'Copia' : 'N/A'} <Copy className="w-3 h-3"/>
+                                    {booking.properties_real?.wifi_ssid ? t('button.copy') : 'N/A'} <Copy className="w-3 h-3"/>
                                 </p>
                              </div>
                         </div>
@@ -295,7 +296,7 @@ export default function GuestPortal() {
                                 </Button>
                             )}
                             <Button variant="outline" className="h-14" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent((booking.properties_real?.indirizzo || '') + ' ' + (booking.properties_real?.citta || ''))}`, '_blank')}>
-                                <MapPin className="w-4 h-4 mr-2 text-blue-600"/> Naviga
+                                <MapPin className="w-4 h-4 mr-2 text-blue-600"/> {t('button.navigate')}
                             </Button>
                         </div>
                     </div>
@@ -303,17 +304,16 @@ export default function GuestPortal() {
             </CardContent>
         </Card>
 
-        {/* TABS (Visibili dopo sblocco o se ci sono dati) */}
+        {/* TABS */}
         {(isCheckinUnlocked || payments?.length > 0 || myTickets?.length > 0) && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="w-full grid grid-cols-4">
-                    <TabsTrigger value="experiences" className="text-xs">Esperienze</TabsTrigger>
-                    <TabsTrigger value="payments" className="text-xs">Extra</TabsTrigger>
-                    <TabsTrigger value="docs" className="text-xs">Documenti</TabsTrigger>
-                    <TabsTrigger value="support" className="text-xs">Help</TabsTrigger>
+                    <TabsTrigger value="experiences" className="text-xs">{t('tab.experiences')}</TabsTrigger>
+                    <TabsTrigger value="payments" className="text-xs">{t('tab.extra')}</TabsTrigger>
+                    <TabsTrigger value="docs" className="text-xs">{t('tab.documents')}</TabsTrigger>
+                    <TabsTrigger value="support" className="text-xs">{t('tab.help')}</TabsTrigger>
                 </TabsList>
-                
-                {/* TAB ESPERIENZE */}
+
                 <TabsContent value="experiences" className="space-y-4">
                     <div className="grid gap-3">
                         {services?.map((svc: any) => (
@@ -322,48 +322,46 @@ export default function GuestPortal() {
                                 <CardContent className="p-4">
                                     <div className="flex justify-between items-start mb-2">
                                         <h3 className="font-bold text-lg">{svc.titolo}</h3>
-                                        <Badge className="bg-green-100 text-green-800">Consigliato</Badge>
+                                        <Badge className="bg-green-100 text-green-800">{t('badge.recommended')}</Badge>
                                     </div>
                                     <p className="text-sm text-slate-600 line-clamp-2">{svc.descrizione}</p>
                                     <div className="mt-4 flex justify-between items-center">
                                         <span className="font-bold text-blue-600">€{svc.prezzo}</span>
                                         <Button size="sm" onClick={() => {
-                                            setTicketForm({ titolo: `Prenotazione: ${svc.titolo}`, descrizione: "Vorrei prenotare questa esperienza." });
-                                            setActiveTab('support'); // <--- FIX NAVIGAZIONE (React state invece di DOM)
-                                        }}>Prenota</Button>
+                                            setTicketForm({ titolo: `${t('booking.prefix')} ${svc.titolo}`, descrizione: t('booking.wantToBook') });
+                                            setActiveTab('support');
+                                        }}>{t('button.book')}</Button>
                                     </div>
                                 </CardContent>
                             </Card>
                         ))}
-                        {services?.length === 0 && <p className="text-center text-gray-400 py-8">Nessuna esperienza disponibile.</p>}
+                        {services?.length === 0 && <p className="text-center text-gray-400 py-8">{t('empty.experiences')}</p>}
                     </div>
                 </TabsContent>
 
                 <TabsContent value="payments" className="space-y-4">
                     <Card>
-                        <CardHeader><CardTitle>Spese Extra</CardTitle><CardDescription>Pulizie o servizi aggiuntivi.</CardDescription></CardHeader>
+                        <CardHeader><CardTitle>{t('payments.extraExpenses')}</CardTitle><CardDescription>{t('payments.extraDesc')}</CardDescription></CardHeader>
                         <CardContent>
                             {payments?.map((pay: any) => (
                                 <div key={pay.id} className="flex justify-between items-center p-3 border-b last:border-0">
-                                    {/* FIX: parseISO per stabilità data */}
                                     <div><p className="font-medium capitalize">{pay.tipo?.replace('_', ' ')}</p><p className="text-xs text-gray-500">Scad: {format(parseISO(pay.data_scadenza), 'dd MMM')}</p></div>
                                     <div className="text-right">
                                         <p className="font-bold">€{pay.importo}</p>
-                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-800">Pagato</Badge> : 
-                                            <Button size="sm" variant="outline" className="h-7 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>Avvisa</Button>
+                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-800">{t('badge.paid')}</Badge> :
+                                            <Button size="sm" variant="outline" className="h-7 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>{t('button.notify')}</Button>
                                         }
                                     </div>
                                 </div>
                             ))}
-                            {payments?.length === 0 && <p className="text-center text-gray-400 py-4">Nessun extra.</p>}
+                            {payments?.length === 0 && <p className="text-center text-gray-400 py-4">{t('empty.extra')}</p>}
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                {/* TAB DOCUMENTI */}
                 <TabsContent value="docs" className="space-y-4">
                       <Card>
-                        <CardHeader><CardTitle>Documenti Condivisi</CardTitle><CardDescription>Contratti e info utili.</CardDescription></CardHeader>
+                        <CardHeader><CardTitle>{t('docs.shared')}</CardTitle><CardDescription>{t('docs.sharedDesc')}</CardDescription></CardHeader>
                         <CardContent className="space-y-2">
                              {documents?.filter((d:any) => d.status !== 'in_revisione').map((doc: any) => (
                                  <div key={doc.id} className="flex justify-between items-center p-3 bg-slate-50 rounded border">
@@ -376,26 +374,26 @@ export default function GuestPortal() {
                                      </Button>
                                  </div>
                              ))}
-                             {documents?.length === 0 && <p className="text-center text-gray-400 py-4">Nessun documento.</p>}
+                             {documents?.length === 0 && <p className="text-center text-gray-400 py-4">{t('empty.docs')}</p>}
                         </CardContent>
                       </Card>
                 </TabsContent>
 
                 <TabsContent value="support" className="space-y-6">
                     <Card>
-                        <CardHeader><CardTitle>Chat con Host</CardTitle><CardDescription>Hai bisogno di aiuto?</CardDescription></CardHeader>
+                        <CardHeader><CardTitle>{t('support.chatHost')}</CardTitle><CardDescription>{t('support.needHelp')}</CardDescription></CardHeader>
                         <CardContent className="space-y-4">
-                            <Input placeholder="Oggetto" value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
-                            <Textarea placeholder="Scrivi qui..." value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} />
-                            <Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4 mr-2" /> Invia Messaggio</Button>
+                            <Input placeholder={t('placeholder.subject')} value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} />
+                            <Textarea placeholder={t('placeholder.writeHere')} value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} />
+                            <Button className="w-full" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4 mr-2" /> {t('button.sendMessage')}</Button>
                         </CardContent>
                     </Card>
                     <div className="space-y-3">
-                        {myTickets?.map((t: any) => (
-                            <div key={t.id} className="bg-white p-4 rounded-lg border shadow-sm">
-                                <div className="flex justify-between items-center mb-2"><p className="font-medium">{t.titolo}</p><Badge variant={t.stato === 'risolto' ? 'default' : 'secondary'}>{t.stato}</Badge></div>
-                                <p className="text-sm text-gray-600 mb-2">"{t.descrizione}"</p>
-                                {t.admin_notes && <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md"><p className="text-xs font-bold text-blue-700 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1" /> Risposta Host:</p><p className="text-sm text-blue-900">{t.admin_notes}</p></div>}
+                        {myTickets?.map((tk: any) => (
+                            <div key={tk.id} className="bg-white p-4 rounded-lg border shadow-sm">
+                                <div className="flex justify-between items-center mb-2"><p className="font-medium">{tk.titolo}</p><Badge variant={tk.stato === 'risolto' ? 'default' : 'secondary'}>{tk.stato}</Badge></div>
+                                <p className="text-sm text-gray-600 mb-2">"{tk.descrizione}"</p>
+                                {tk.admin_notes && <div className="mt-3 p-3 bg-blue-50 border border-blue-100 rounded-md"><p className="text-xs font-bold text-blue-700 mb-1 flex items-center"><UserCog className="w-3 h-3 mr-1" /> {t('label.hostReply')}</p><p className="text-sm text-blue-900">{tk.admin_notes}</p></div>}
                             </div>
                         ))}
                     </div>
@@ -406,13 +404,13 @@ export default function GuestPortal() {
         {/* DIALOG PAGAMENTO */}
         <Dialog open={!!paymentTicketOpen} onOpenChange={() => setPaymentTicketOpen(null)}>
             <DialogContent className="w-[95vw] rounded-xl">
-                <DialogHeader><DialogTitle>Avvisa Pagamento</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>{t('dialog.notifyPayment')}</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-2">
-                    <p className="text-sm text-gray-500">Comunica all'amministrazione quando e come pagherai <strong>€{paymentTicketOpen?.importo}</strong> per {paymentTicketOpen?.tipo}.</p>
-                    <div className="space-y-2"><Label>Data Prevista</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
-                    <div className="space-y-2"><Label>Metodo</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder="Seleziona..."/></SelectTrigger><SelectContent><SelectItem value="bonifico">Bonifico</SelectItem><SelectItem value="contanti">Contanti</SelectItem><SelectItem value="altro">Altro</SelectItem></SelectContent></Select></div>
+                    <p className="text-sm text-gray-500">{t('dialog.paymentDesc')} <strong>€{paymentTicketOpen?.importo}</strong> per {paymentTicketOpen?.tipo}.</p>
+                    <div className="space-y-2"><Label>{t('label.expectedDate')}</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
+                    <div className="space-y-2"><Label>{t('label.method')}</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder={t('placeholder.select')}/></SelectTrigger><SelectContent><SelectItem value="bonifico">{t('method.transfer')}</SelectItem><SelectItem value="contanti">{t('method.cash')}</SelectItem><SelectItem value="altro">{t('method.other')}</SelectItem></SelectContent></Select></div>
                 </div>
-                <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">Invia Avviso</Button></DialogFooter>
+                <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">{t('button.sendNotice')}</Button></DialogFooter>
             </DialogContent>
         </Dialog>
 
