@@ -42,6 +42,8 @@ function GuestPortalInner() {
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
+  const [serviceContactOpen, setServiceContactOpen] = useState<any>(null);
+  const [serviceMessage, setServiceMessage] = useState('');
 
   // --- QUERIES ---
   const { data: booking, isLoading } = useQuery({
@@ -153,6 +155,26 @@ function GuestPortalInner() {
       queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
       toast({ title: t('toast.requestSent') });
       setTicketForm({ titolo: '', descrizione: '' });
+    }
+  });
+
+  const sendServiceContact = useMutation({
+    mutationFn: async () => {
+      if (!booking || !serviceContactOpen) return;
+      await supabase.from('tickets').insert({
+        booking_id: booking.id,
+        property_real_id: booking.property_id,
+        titolo: `${t('booking.prefix')} ${serviceContactOpen.titolo}`,
+        descrizione: serviceMessage || t('booking.wantToBook'),
+        stato: 'aperto',
+        creato_da: 'ospite'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
+      toast({ title: t('toast.messageSent') });
+      setServiceContactOpen(null);
+      setServiceMessage('');
     }
   });
 
@@ -329,9 +351,9 @@ function GuestPortalInner() {
                                     <div className="mt-4 flex justify-between items-center">
                                         <span className="font-bold text-blue-600">€{svc.prezzo}</span>
                                         <Button size="sm" onClick={() => {
-                                            setTicketForm({ titolo: `${t('booking.prefix')} ${svc.titolo}`, descrizione: t('booking.wantToBook') });
-                                            setActiveTab('support');
-                                        }}>{t('button.book')}</Button>
+                                            setServiceContactOpen(svc);
+                                            setServiceMessage(t('booking.wantToBook'));
+                                        }}>{t('button.contactStructure')}</Button>
                                     </div>
                                 </CardContent>
                             </Card>
@@ -412,6 +434,18 @@ function GuestPortalInner() {
                     <div className="space-y-2"><Label>{t('label.method')}</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder={t('placeholder.select')}/></SelectTrigger><SelectContent><SelectItem value="bonifico">{t('method.transfer')}</SelectItem><SelectItem value="contanti">{t('method.cash')}</SelectItem><SelectItem value="altro">{t('method.other')}</SelectItem></SelectContent></Select></div>
                 </div>
                 <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">{t('button.sendNotice')}</Button></DialogFooter>
+            </DialogContent>
+        </Dialog>
+
+        {/* DIALOG CONTATTA STRUTTURA */}
+        <Dialog open={!!serviceContactOpen} onOpenChange={() => setServiceContactOpen(null)}>
+            <DialogContent className="w-[95vw] rounded-xl">
+                <DialogHeader><DialogTitle>{t('dialog.contactStructure')}</DialogTitle></DialogHeader>
+                <div className="space-y-4 py-2">
+                    <p className="text-sm text-gray-500">{t('dialog.contactServiceDesc', { service: serviceContactOpen?.titolo, price: serviceContactOpen?.prezzo })}</p>
+                    <Textarea placeholder={t('placeholder.yourMessage')} value={serviceMessage} onChange={e => setServiceMessage(e.target.value)} rows={4} />
+                </div>
+                <DialogFooter><Button onClick={() => sendServiceContact.mutate()} disabled={!serviceMessage} className="w-full"><Send className="w-4 h-4 mr-2" />{t('button.sendMessage')}</Button></DialogFooter>
             </DialogContent>
         </Dialog>
 

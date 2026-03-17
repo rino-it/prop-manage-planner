@@ -141,6 +141,13 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.serviceRequest': 'Richiesta Servizio:',
     'payment.prefix': 'Pagamento:',
     'payment.tenantWillPay': "L'inquilino prevede di pagare il {date} tramite {method}.",
+
+    // Service contact dialog
+    'button.contactStructure': 'Contatta struttura',
+    'dialog.contactStructure': 'Contatta la struttura',
+    'dialog.contactServiceDesc': 'Invia un messaggio per {service} (€{price})',
+    'placeholder.yourMessage': 'Scrivi il tuo messaggio...',
+    'toast.messageSent': 'Messaggio inviato',
   },
 
   en: {
@@ -262,6 +269,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.serviceRequest': 'Service Request:',
     'payment.prefix': 'Payment:',
     'payment.tenantWillPay': 'The tenant plans to pay on {date} via {method}.',
+
+    'button.contactStructure': 'Contact property',
+    'dialog.contactStructure': 'Contact the property',
+    'dialog.contactServiceDesc': 'Send a message about {service} (€{price})',
+    'placeholder.yourMessage': 'Write your message...',
+    'toast.messageSent': 'Message sent',
   },
 
   de: {
@@ -383,6 +396,12 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.serviceRequest': 'Serviceanfrage:',
     'payment.prefix': 'Zahlung:',
     'payment.tenantWillPay': 'Der Mieter plant, am {date} per {method} zu zahlen.',
+
+    'button.contactStructure': 'Unterkunft kontaktieren',
+    'dialog.contactStructure': 'Unterkunft kontaktieren',
+    'dialog.contactServiceDesc': 'Nachricht senden für {service} (€{price})',
+    'placeholder.yourMessage': 'Nachricht schreiben...',
+    'toast.messageSent': 'Nachricht gesendet',
   },
 
   fr: {
@@ -504,5 +523,11 @@ export const translations: Record<Language, Record<string, string>> = {
     'booking.serviceRequest': 'Demande de service :',
     'payment.prefix': 'Paiement :',
     'payment.tenantWillPay': 'Le locataire prévoit de payer le {date} par {method}.',
+
+    'button.contactStructure': "Contacter l'hébergement",
+    'dialog.contactStructure': "Contacter l'hébergement",
+    'dialog.contactServiceDesc': 'Envoyer un message pour {service} (€{price})',
+    'placeholder.yourMessage': 'Écrivez votre message...',
+    'toast.messageSent': 'Message envoyé',
   },
 };

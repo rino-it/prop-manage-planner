@@ -38,6 +38,8 @@ function TenantPortalInner() {
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [isSavingContact, setIsSavingContact] = useState(false);
+  const [serviceContactOpen, setServiceContactOpen] = useState<any>(null);
+  const [serviceMessage, setServiceMessage] = useState('');
 
   // 1. Recupero Booking tramite ID
   const { data: booking, isLoading: bookingLoading } = useQuery({
@@ -149,6 +151,27 @@ function TenantPortalInner() {
       setNewTicketOpen(false);
       setTicketData({ titolo: '', descrizione: '', priorita: 'bassa' });
       toast({ title: t('toast.reportSent') });
+    }
+  });
+
+  const sendServiceContact = useMutation({
+    mutationFn: async () => {
+      if (!booking || !serviceContactOpen) return;
+      await supabase.from('tickets').insert({
+        booking_id: booking.id,
+        property_real_id: isReal ? property.id : null,
+        property_mobile_id: !isReal ? property.id : null,
+        titolo: `${t('booking.serviceRequest')} ${serviceContactOpen.titolo}`,
+        descrizione: serviceMessage || t('booking.wantToBook'),
+        stato: 'aperto',
+        creato_da: 'ospite'
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
+      toast({ title: t('toast.messageSent') });
+      setServiceContactOpen(null);
+      setServiceMessage('');
     }
   });
 
@@ -304,7 +327,7 @@ function TenantPortalInner() {
                                 <p className="text-xs text-slate-500 mt-1"><T text={svc.descrizione} /></p>
                                 <div className="flex justify-between items-center mt-4">
                                     <span className="font-bold text-blue-600 text-sm">€{svc.prezzo}</span>
-                                    <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({...ticketData, titolo: `${t('booking.serviceRequest')} ${svc.titolo}`}) }}>{t('button.request')}</Button>
+                                    <Button size="sm" onClick={() => { setServiceContactOpen(svc); setServiceMessage(t('booking.wantToBook')); }}>{t('button.contactStructure')}</Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -399,6 +422,20 @@ function TenantPortalInner() {
                     <Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full">{t('button.sendNotice')}</Button>
                 </DialogFooter>
             </DialogContent>
+      </Dialog>
+
+      {/* DIALOG CONTATTA STRUTTURA */}
+      <Dialog open={!!serviceContactOpen} onOpenChange={() => setServiceContactOpen(null)}>
+          <DialogContent className="w-[95vw] sm:max-w-md">
+              <DialogHeader><DialogTitle>{t('dialog.contactStructure')}</DialogTitle></DialogHeader>
+              <div className="space-y-4 py-2">
+                  <p className="text-sm text-gray-500">{t('dialog.contactServiceDesc', { service: serviceContactOpen?.titolo, price: serviceContactOpen?.prezzo })}</p>
+                  <Textarea placeholder={t('placeholder.yourMessage')} value={serviceMessage} onChange={e => setServiceMessage(e.target.value)} rows={4} />
+              </div>
+              <DialogFooter>
+                  <Button onClick={() => sendServiceContact.mutate()} disabled={!serviceMessage} className="w-full bg-blue-600">{t('button.sendMessage')}</Button>
+              </DialogFooter>
+          </DialogContent>
       </Dialog>
     </div>
   );
