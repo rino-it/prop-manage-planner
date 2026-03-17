@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import {
   Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2,
-  CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key
+  CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key, ExternalLink
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
@@ -348,12 +348,24 @@ function GuestPortalInner() {
                                         <Badge className="bg-green-100 text-green-800">{t('badge.recommended')}</Badge>
                                     </div>
                                     <p className="text-sm text-slate-600 line-clamp-2"><T text={svc.descrizione} /></p>
-                                    <div className="mt-4 flex justify-between items-center">
+                                    {svc.indirizzo && (
+                                        <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                                            <MapPin className="w-3 h-3 shrink-0" />
+                                            <span className="truncate">{svc.indirizzo}</span>
+                                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-blue-600" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(svc.indirizzo)}`, '_blank')}>{t('button.navigate')}</Button>
+                                        </div>
+                                    )}
+                                    <div className="mt-3 flex items-center justify-between">
                                         <span className="font-bold text-blue-600">€{svc.prezzo}</span>
-                                        <Button size="sm" onClick={() => {
-                                            setServiceContactOpen(svc);
-                                            setServiceMessage(t('booking.wantToBook'));
-                                        }}>{t('button.contactStructure')}</Button>
+                                        <div className="flex gap-2">
+                                            {svc.link_prenotazione && (
+                                                <Button size="sm" variant="outline" onClick={() => window.open(svc.link_prenotazione, '_blank')}><ExternalLink className="w-3 h-3 mr-1" />{t('button.viewOffer')}</Button>
+                                            )}
+                                            <Button size="sm" onClick={() => {
+                                                setServiceContactOpen(svc);
+                                                setServiceMessage(t('booking.wantToBook'));
+                                            }}>{t('button.contactStructure')}</Button>
+                                        </div>
                                     </div>
                                 </CardContent>
                             </Card>

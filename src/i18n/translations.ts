@@ -77,6 +77,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'button.book': 'Prenota',
     'button.request': 'Richiedi',
     'services.available': 'Servizi Disponibili',
+    'button.viewOffer': 'Vedi Offerta',
     'empty.experiences': 'Nessuna esperienza disponibile.',
     'empty.services': 'Nessun servizio extra disponibile.',
 
@@ -211,6 +212,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'button.book': 'Book',
     'button.request': 'Request',
     'services.available': 'Available Services',
+    'button.viewOffer': 'View Offer',
     'empty.experiences': 'No experiences available.',
     'empty.services': 'No extra services available.',
 
@@ -338,6 +340,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'button.book': 'Buchen',
     'button.request': 'Anfragen',
     'services.available': 'Verfügbare Dienste',
+    'button.viewOffer': 'Angebot ansehen',
     'empty.experiences': 'Keine Erlebnisse verfügbar.',
     'empty.services': 'Keine zusätzlichen Dienste verfügbar.',
 
@@ -465,6 +468,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'button.book': 'Réserver',
     'button.request': 'Demander',
     'services.available': 'Services disponibles',
+    'button.viewOffer': "Voir l'offre",
     'empty.experiences': 'Aucune expérience disponible.',
     'empty.services': 'Aucun service supplémentaire disponible.',
 

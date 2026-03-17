@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils, Lock } from 'lucide-react';
+import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils, Lock, MapPin, ExternalLink } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -107,14 +107,11 @@ function TenantPortalInner() {
     queryKey: ['guest-services', booking?.property_id],
     queryFn: async () => {
         if (!booking?.property_id) return [];
-        try {
-            const { data, error } = await supabase.from('services').select('*').eq('attivo', true).contains('property_ids', [booking.property_id]);
-            if (error) return [];
-            return data || [];
-        } catch { return []; }
+        const { data, error } = await supabase.from('services').select('*').eq('attivo', true).contains('property_ids', [booking.property_id]);
+        if (error) { console.error('Errore fetch servizi:', error); return []; }
+        return data || [];
     },
-    enabled: !!booking?.property_id,
-    retry: false
+    enabled: !!booking?.property_id
   });
 
   const hasContactInfo = booking?.telefono_ospite && booking?.email_ospite;
@@ -325,9 +322,21 @@ function TenantPortalInner() {
                             <CardContent className="p-4">
                                 <h4 className="font-bold"><T text={svc.titolo} /></h4>
                                 <p className="text-xs text-slate-500 mt-1"><T text={svc.descrizione} /></p>
-                                <div className="flex justify-between items-center mt-4">
+                                {svc.indirizzo && (
+                                    <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                                        <MapPin className="w-3 h-3 shrink-0" />
+                                        <span className="truncate">{svc.indirizzo}</span>
+                                        <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-blue-600" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(svc.indirizzo)}`, '_blank')}>{t('button.navigate')}</Button>
+                                    </div>
+                                )}
+                                <div className="flex items-center justify-between mt-3">
                                     <span className="font-bold text-blue-600 text-sm">€{svc.prezzo}</span>
-                                    <Button size="sm" onClick={() => { setServiceContactOpen(svc); setServiceMessage(t('booking.wantToBook')); }}>{t('button.contactStructure')}</Button>
+                                    <div className="flex gap-2">
+                                        {svc.link_prenotazione && (
+                                            <Button size="sm" variant="outline" onClick={() => window.open(svc.link_prenotazione, '_blank')}><ExternalLink className="w-3 h-3 mr-1" />{t('button.viewOffer')}</Button>
+                                        )}
+                                        <Button size="sm" onClick={() => { setServiceContactOpen(svc); setServiceMessage(t('booking.wantToBook')); }}>{t('button.contactStructure')}</Button>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>

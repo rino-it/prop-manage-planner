@@ -21,7 +21,7 @@ export default function Services() {
   const { data: properties } = usePropertiesReal();
 
   const emptyForm = {
-    titolo: '', descrizione: '', prezzo: '', immagine_url: '', link_prenotazione: '', property_ids: [] as string[]
+    titolo: '', descrizione: '', prezzo: '', immagine_url: '', link_prenotazione: '', indirizzo: '', property_ids: [] as string[]
   };
   const [formData, setFormData] = useState(emptyForm);
 
@@ -42,6 +42,7 @@ export default function Services() {
         prezzo: parseFloat(serviceData.prezzo) || 0,
         immagine_url: serviceData.immagine_url,
         link_prenotazione: serviceData.link_prenotazione,
+        indirizzo: serviceData.indirizzo,
         property_ids: serviceData.property_ids
       };
 
@@ -92,6 +93,7 @@ export default function Services() {
       prezzo: service.prezzo,
       immagine_url: service.immagine_url,
       link_prenotazione: service.link_prenotazione,
+      indirizzo: service.indirizzo || '',
       property_ids: service.property_ids || []
     });
     setIsDialogOpen(true);
@@ -131,6 +133,7 @@ export default function Services() {
                 </ScrollArea>
               </div>
 
+              <div className="grid gap-2"><Label>Indirizzo / Posizione</Label><Input placeholder="Via Roma 1, Milano" value={formData.indirizzo} onChange={e => setFormData({...formData, indirizzo: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="grid gap-2"><Label>Prezzo (€)</Label><Input type="number" value={formData.prezzo} onChange={e => setFormData({...formData, prezzo: e.target.value})} /></div>
                 <div className="grid gap-2"><Label>Link Partner/Pagamento</Label><Input placeholder="https://..." value={formData.link_prenotazione} onChange={e => setFormData({...formData, link_prenotazione: e.target.value})} /></div>
