@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils } from 'lucide-react';
+import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils, Lock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -24,6 +24,8 @@ export default function TenantPortal() {
   const [ticketData, setTicketData] = useState({ titolo: '', descrizione: '', priorita: 'bassa' });
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
+  const [contactForm, setContactForm] = useState({ email: '', phone: '' });
+  const [isSavingContact, setIsSavingContact] = useState(false);
 
   // 1. Recupero Booking tramite ID (Senza Login)
   const { data: booking, isLoading: bookingLoading } = useQuery({
@@ -112,6 +114,20 @@ export default function TenantPortal() {
     },
     retry: false
   });
+
+  const hasContactInfo = booking?.telefono_ospite && booking?.email_ospite;
+
+  const saveContactInfo = async () => {
+    if (!contactForm.email || !contactForm.phone) return;
+    setIsSavingContact(true);
+    try {
+      const { error } = await supabase.from('bookings').update({ email_ospite: contactForm.email, telefono_ospite: contactForm.phone }).eq('id', id);
+      if (error) throw error;
+      toast({ title: "Contatti Salvati" });
+      queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
+    } catch (e) { toast({ title: "Errore nel salvataggio", variant: "destructive" }); }
+    finally { setIsSavingContact(false); }
+  };
 
   // --- AZIONI ---
 
@@ -202,6 +218,28 @@ export default function TenantPortal() {
       </header>
 
       <main className="max-w-xl mx-auto p-4 space-y-6">
+        {!hasContactInfo && (
+          <Card className="border-2 border-red-200 shadow-lg">
+            <CardHeader className="pb-2 border-b">
+              <CardTitle className="flex justify-between items-center text-lg">
+                <span className="text-red-700">Completa il tuo profilo</span>
+                <Lock className="text-red-500 w-6 h-6"/>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6 space-y-4">
+              <p className="text-sm text-slate-600 text-center">Inserisci i tuoi recapiti per accedere al portale.</p>
+              <div className="space-y-3">
+                <div><Label className="text-xs uppercase text-slate-500">Email</Label><Input placeholder="tua@email.com" value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
+                <div><Label className="text-xs uppercase text-slate-500">Telefono</Label><Input placeholder="+39 ..." value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
+              </div>
+              <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact || !contactForm.email || !contactForm.phone}>
+                {isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : "Invia Contatti"}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {hasContactInfo && (<>
         <Card className="bg-slate-900 text-white border-none shadow-xl overflow-hidden relative">
             <CardHeader>
                 <CardTitle className="text-xl">Benvenuto, {booking.nome_ospite}</CardTitle>
@@ -320,6 +358,7 @@ export default function TenantPortal() {
                 </div>
             </TabsContent>
         </Tabs>
+        </>)}
       </main>
 
       {/* DIALOG NUOVO TICKET */}

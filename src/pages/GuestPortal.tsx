@@ -83,7 +83,7 @@ export default function GuestPortal() {
   });
 
   // --- LOGICA ---
-  const hasContactInfo = booking?.guest_phone && booking?.guest_email;
+  const hasContactInfo = booking?.telefono_ospite && booking?.email_ospite;
   const hasDocuments = documents && documents.length > 0;
   const isApproved = booking?.documents_approved === true;
   
@@ -100,7 +100,8 @@ export default function GuestPortal() {
     if (!contactForm.email || !contactForm.phone) return;
     setIsSavingContact(true);
     try {
-        await supabase.from('bookings').update({ guest_email: contactForm.email, guest_phone: contactForm.phone }).eq('id', id);
+        const { error } = await supabase.from('bookings').update({ email_ospite: contactForm.email, telefono_ospite: contactForm.phone }).eq('id', id);
+        if (error) throw error;
         toast({ title: "Contatti Salvati" });
         queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
     } catch (e) { toast({ title: "Errore", variant: "destructive" }); } 
