@@ -128,10 +128,11 @@ export default function GuestPortal() {
       const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
       if (upError) throw upError;
 
-      await supabase.from('booking_documents').insert({
+      const { error: dbError } = await supabase.from('booking_documents').insert({
         booking_id: booking.id, filename: file.name, file_url: fileName, status: 'in_revisione'
       });
-      
+      if (dbError) throw dbError;
+
       toast({ title: "Caricato!", description: "Documento in verifica." });
       queryClient.invalidateQueries({ queryKey: ['tenant-docs'] });
     } catch (error: any) { toast({ title: "Errore upload", variant: "destructive" }); } 
