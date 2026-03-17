@@ -55,13 +55,15 @@ export default function GuestPortal() {
     enabled: !!id
   });
 
-  // Query per Esperienze
+  // Query per Esperienze (filtrate per proprietà)
   const { data: services } = useQuery({
-    queryKey: ['guest-services'],
+    queryKey: ['guest-services', booking?.property_id],
     queryFn: async () => {
-        const { data } = await supabase.from('services').select('*').eq('attivo', true);
+        if (!booking?.property_id) return [];
+        const { data } = await supabase.from('services').select('*').eq('attivo', true).contains('property_ids', [booking.property_id]);
         return data || [];
-    }
+    },
+    enabled: !!booking?.property_id
   });
 
   const { data: payments } = useQuery({

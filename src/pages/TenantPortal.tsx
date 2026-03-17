@@ -102,16 +102,18 @@ export default function TenantPortal() {
     enabled: !!booking?.id
   });
 
-  // 5. Servizi (Gestione errore tabella mancante)
+  // 5. Servizi (filtrati per proprietà)
   const { data: services = [] } = useQuery({
-    queryKey: ['guest-services'],
+    queryKey: ['guest-services', booking?.property_id],
     queryFn: async () => {
+        if (!booking?.property_id) return [];
         try {
-            const { data, error } = await supabase.from('services').select('*').eq('attivo', true);
+            const { data, error } = await supabase.from('services').select('*').eq('attivo', true).contains('property_ids', [booking.property_id]);
             if (error) return [];
             return data || [];
         } catch { return []; }
     },
+    enabled: !!booking?.property_id,
     retry: false
   });
 
