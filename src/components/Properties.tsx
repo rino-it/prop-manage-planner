@@ -12,7 +12,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, X } from 'lucide-react';
+import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, X, Link2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import TicketManager from '@/components/TicketManager';
@@ -377,10 +377,17 @@ const Properties = () => {
                     </CardTitle>
                     <p className="text-xs text-gray-500 flex items-center"><MapPin className="w-3 h-3 mr-1"/> {prop.citta}</p>
                 </CardHeader>
-                <CardFooter className="bg-slate-50 p-3 grid grid-cols-2 gap-2">
+                <CardFooter className="bg-slate-50 p-3 grid grid-cols-3 gap-2">
                     <Button variant="outline" className="w-full text-xs h-9 md:h-8" onClick={() => setDetailsOpen(prop)}>Analytics</Button>
                     <Button variant="outline" className="w-full text-xs h-9 md:h-8 bg-white hover:text-blue-700 border-blue-200 text-blue-600" onClick={() => setDocsOpen(prop)}>
                         <FolderOpen className="w-3 h-3 mr-1" /> Documenti
+                    </Button>
+                    <Button variant="outline" className="w-full text-xs h-9 md:h-8 bg-white hover:text-green-700 border-green-200 text-green-600" onClick={() => {
+                        const link = `https://prop-manage-planner.vercel.app/guest/auto?name=NOME_OSPITE&checkin=DATA_CHECKIN&checkout=DATA_CHECKOUT&property=${prop.id}`;
+                        navigator.clipboard.writeText(link);
+                        toast({ title: "Link Auto copiato!", description: "Incollalo nei messaggi automatici di Airbnb/Booking. Sostituisci NOME_OSPITE, DATA_CHECKIN, DATA_CHECKOUT con gli shortcode della piattaforma." });
+                    }}>
+                        <Link2 className="w-3 h-3 mr-1" /> Link Auto
                     </Button>
                 </CardFooter>
             </Card>
