@@ -17,6 +17,7 @@ import MobileProperties from "./pages/MobileProperties";
 import Tickets from "./pages/Tickets"; 
 
 // Portali
+import GuestAutoCreate from "./pages/GuestAutoCreate";
 import GuestPortal from "./pages/GuestPortal";
 import TenantPortal from "./pages/TenantPortal";
 import Team from "./components/Team";
@@ -40,6 +41,7 @@ const App = () => (
           <Routes>
             <Route path="/auth" element={<Auth />} />
             
+            <Route path="/guest/auto" element={<GuestAutoCreate />} />
             <Route path="/guest/:id" element={<GuestPortal />} />
             <Route path="/tenant/:id" element={<TenantPortal />} />
 
