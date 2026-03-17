@@ -16,6 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LanguageProvider, useLanguage } from '@/i18n/LanguageContext';
 import LanguagePicker from '@/components/LanguagePicker';
+import T from '@/components/TranslatedText';
 
 export default function TenantPortal() {
   return (
@@ -276,7 +277,7 @@ function TenantPortalInner() {
                             <Card key={pay.id} className="border-l-4 border-l-blue-500">
                                 <CardContent className="p-4 flex justify-between items-center">
                                     <div>
-                                        <p className="font-bold text-sm capitalize">{(pay.tipo || 'Rata').replace('_', ' ')}</p>
+                                        <p className="font-bold text-sm capitalize"><T text={(pay.tipo || 'Rata').replace('_', ' ')} /></p>
                                         <p className="text-xs text-gray-500">Scad: {pay.data_scadenza ? format(new Date(pay.data_scadenza), 'dd MMM yyyy') : 'N/D'}</p>
                                     </div>
                                     <div className="text-right">
@@ -299,8 +300,8 @@ function TenantPortalInner() {
                         <Card key={svc.id} className="overflow-hidden">
                             {svc.immagine_url && <img src={svc.immagine_url} className="h-32 w-full object-cover" />}
                             <CardContent className="p-4">
-                                <h4 className="font-bold">{svc.titolo}</h4>
-                                <p className="text-xs text-slate-500 mt-1">{svc.descrizione}</p>
+                                <h4 className="font-bold"><T text={svc.titolo} /></h4>
+                                <p className="text-xs text-slate-500 mt-1"><T text={svc.descrizione} /></p>
                                 <div className="flex justify-between items-center mt-4">
                                     <span className="font-bold text-blue-600 text-sm">€{svc.prezzo}</span>
                                     <Button size="sm" onClick={() => { setNewTicketOpen(true); setTicketData({...ticketData, titolo: `${t('booking.serviceRequest')} ${svc.titolo}`}) }}>{t('button.request')}</Button>
@@ -340,13 +341,13 @@ function TenantPortalInner() {
                         <Card key={ticket.id}>
                             <CardContent className="p-4">
                                 <div className="flex justify-between items-start mb-2">
-                                    <h4 className="font-bold text-sm">{ticket.titolo || t('support.report')}</h4>
+                                    <h4 className="font-bold text-sm"><T text={ticket.titolo || t('support.report')} /></h4>
                                     <Badge variant="outline" className="text-[10px]">{ticket.stato}</Badge>
                                 </div>
-                                <p className="text-xs text-slate-600 mb-2">{ticket.descrizione}</p>
+                                <p className="text-xs text-slate-600 mb-2"><T text={ticket.descrizione} /></p>
                                 {ticket.admin_notes && (
                                     <div className="bg-blue-50 p-2 rounded border border-blue-100 text-[11px] text-blue-800">
-                                        <strong>{t('label.staff')}</strong> {ticket.admin_notes}
+                                        <strong>{t('label.staff')}</strong> <T text={ticket.admin_notes} />
                                     </div>
                                 )}
                                 <p className="text-[9px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
