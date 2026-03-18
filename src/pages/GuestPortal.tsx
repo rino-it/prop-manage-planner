@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import {
   Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2,
-  CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key, ExternalLink
+  CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key, ExternalLink, Ticket, MessageCircle
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
@@ -42,8 +42,9 @@ function GuestPortalInner() {
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
   const [isUploading, setIsUploading] = useState(false);
   const [isSavingContact, setIsSavingContact] = useState(false);
-  const [serviceContactOpen, setServiceContactOpen] = useState<any>(null);
+  const [serviceDetailOpen, setServiceDetailOpen] = useState<any>(null);
   const [serviceMessage, setServiceMessage] = useState('');
+  const [showContactForm, setShowContactForm] = useState(false);
 
   // --- QUERIES ---
   const { data: booking, isLoading } = useQuery({
@@ -160,11 +161,11 @@ function GuestPortalInner() {
 
   const sendServiceContact = useMutation({
     mutationFn: async () => {
-      if (!booking || !serviceContactOpen) return;
+      if (!booking || !serviceDetailOpen) return;
       await supabase.from('tickets').insert({
         booking_id: booking.id,
         property_real_id: booking.property_id,
-        titolo: `${t('booking.prefix')} ${serviceContactOpen.titolo}`,
+        titolo: `${t('booking.prefix')} ${serviceDetailOpen.titolo}`,
         descrizione: serviceMessage || t('booking.wantToBook'),
         stato: 'aperto',
         creato_da: 'ospite'
@@ -172,9 +173,9 @@ function GuestPortalInner() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
-      toast({ title: t('toast.messageSent') });
-      setServiceContactOpen(null);
+      setShowContactForm(false);
       setServiceMessage('');
+      toast({ title: t('toast.messageSent') });
     }
   });
 
@@ -214,6 +215,53 @@ function GuestPortalInner() {
     } catch (e: any) {
         toast({ title: t('toast.cantOpen'), description: t('toast.fileNotFound'), variant: "destructive" });
     }
+  };
+
+  const generateVoucher = (svc: any) => {
+    const w = window.open('', '_blank');
+    if (!w) return;
+    const today = new Date().toLocaleDateString('it-IT');
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${t('voucher.title')}</title>
+    <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',system-ui,sans-serif;padding:40px;background:#f8fafc}
+    .voucher{max-width:600px;margin:0 auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,.1);border:2px solid #e2e8f0}
+    .header{background:linear-gradient(135deg,#0f172a,#334155);color:white;padding:32px;text-align:center}
+    .header h1{font-size:28px;letter-spacing:4px;margin-bottom:8px}
+    .header p{opacity:.7;font-size:13px}
+    .image{width:100%;height:200px;object-fit:cover}
+    .body{padding:32px}
+    .service-name{font-size:22px;font-weight:700;color:#0f172a;margin-bottom:4px}
+    .service-desc{color:#64748b;font-size:14px;line-height:1.6;margin-bottom:20px}
+    .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+    .info-box{background:#f8fafc;border-radius:10px;padding:14px}
+    .info-label{font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;font-weight:700;margin-bottom:4px}
+    .info-value{font-size:15px;font-weight:600;color:#0f172a}
+    .price-box{background:linear-gradient(135deg,#dbeafe,#eff6ff);border-radius:10px;padding:14px;text-align:center}
+    .price{font-size:28px;font-weight:800;color:#2563eb}
+    .divider{border:none;border-top:2px dashed #e2e8f0;margin:24px 0}
+    .footer{text-align:center;padding:0 32px 32px}
+    .footer p{color:#94a3b8;font-size:12px;font-style:italic}
+    @media print{body{padding:0;background:white}.voucher{box-shadow:none;border:1px solid #ccc}}
+    </style></head><body>
+    <div class="voucher">
+    <div class="header"><h1>${t('voucher.title')}</h1><p>${booking.properties_real?.nome || ''}</p></div>
+    ${svc.immagine_url ? `<img class="image" src="${svc.immagine_url}" />` : ''}
+    <div class="body">
+    <div class="service-name">${svc.titolo}</div>
+    <div class="service-desc">${svc.descrizione || ''}</div>
+    <div class="info-grid">
+    <div class="info-box"><div class="info-label">${t('voucher.guest')}</div><div class="info-value">${booking.nome_ospite}</div></div>
+    <div class="info-box"><div class="info-label">${t('voucher.dates')}</div><div class="info-value">${booking.data_inizio} → ${booking.data_fine}</div></div>
+    ${svc.indirizzo ? `<div class="info-box"><div class="info-label">${t('voucher.location')}</div><div class="info-value">${svc.indirizzo}</div></div>` : ''}
+    <div class="price-box"><div class="info-label">${t('voucher.price')}</div><div class="price">€${svc.prezzo}</div></div>
+    </div>
+    <hr class="divider">
+    </div>
+    <div class="footer"><p>${t('voucher.present')}</p><p style="margin-top:8px;color:#cbd5e1">${t('voucher.issued')} ${today}</p></div>
+    </div>
+    <script>setTimeout(()=>window.print(),300)</script>
+    </body></html>`;
+    w.document.write(html);
+    w.document.close();
   };
 
   if (isLoading || !booking) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-slate-400"/></div>;
@@ -340,34 +388,20 @@ function GuestPortalInner() {
                 <TabsContent value="experiences" className="space-y-4">
                     <div className="grid gap-3">
                         {services?.map((svc: any) => (
-                            <Card key={svc.id} className="overflow-hidden border-0 shadow-md">
-                                <div className="h-32 bg-cover bg-center" style={{ backgroundImage: `url(${svc.immagine_url || '/placeholder.svg'})` }} />
-                                <CardContent className="p-4">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <h3 className="font-bold text-lg"><T text={svc.titolo} /></h3>
-                                        <Badge className="bg-green-100 text-green-800">{t('badge.recommended')}</Badge>
-                                    </div>
-                                    <p className="text-sm text-slate-600 line-clamp-2"><T text={svc.descrizione} /></p>
-                                    {svc.indirizzo && (
-                                        <div className="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                                            <MapPin className="w-3 h-3 shrink-0" />
-                                            <span className="truncate">{svc.indirizzo}</span>
-                                            <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px] text-blue-600" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(svc.indirizzo)}`, '_blank')}>{t('button.navigate')}</Button>
+                            <Card key={svc.id} className="overflow-hidden border-0 shadow-md cursor-pointer hover:shadow-lg transition-shadow" onClick={() => { setServiceDetailOpen(svc); setShowContactForm(false); setServiceMessage(''); }}>
+                                <div className="flex">
+                                    <div className="w-28 h-28 shrink-0 bg-cover bg-center rounded-l-lg" style={{ backgroundImage: `url(${svc.immagine_url || '/placeholder.svg'})` }} />
+                                    <CardContent className="p-3 flex flex-col justify-between flex-1 min-w-0">
+                                        <div>
+                                            <h3 className="font-bold text-sm truncate"><T text={svc.titolo} /></h3>
+                                            <p className="text-xs text-slate-500 line-clamp-2 mt-1"><T text={svc.descrizione} /></p>
                                         </div>
-                                    )}
-                                    <div className="mt-3 flex items-center justify-between">
-                                        <span className="font-bold text-blue-600">€{svc.prezzo}</span>
-                                        <div className="flex gap-2">
-                                            {svc.link_prenotazione && (
-                                                <Button size="sm" variant="outline" onClick={() => window.open(svc.link_prenotazione, '_blank')}><ExternalLink className="w-3 h-3 mr-1" />{t('button.viewOffer')}</Button>
-                                            )}
-                                            <Button size="sm" onClick={() => {
-                                                setServiceContactOpen(svc);
-                                                setServiceMessage(t('booking.wantToBook'));
-                                            }}>{t('button.contactStructure')}</Button>
+                                        <div className="flex items-center justify-between mt-2">
+                                            <span className="font-bold text-blue-600">€{svc.prezzo}</span>
+                                            <Button size="sm" variant="outline" className="h-7 text-xs">{t('button.details')}</Button>
                                         </div>
-                                    </div>
-                                </CardContent>
+                                    </CardContent>
+                                </div>
                             </Card>
                         ))}
                         {services?.length === 0 && <p className="text-center text-gray-400 py-8">{t('empty.experiences')}</p>}
@@ -449,15 +483,54 @@ function GuestPortalInner() {
             </DialogContent>
         </Dialog>
 
-        {/* DIALOG CONTATTA STRUTTURA */}
-        <Dialog open={!!serviceContactOpen} onOpenChange={() => setServiceContactOpen(null)}>
-            <DialogContent className="max-w-[95vw] rounded-xl">
-                <DialogHeader><DialogTitle>{t('dialog.contactStructure')}</DialogTitle></DialogHeader>
-                <div className="space-y-4 py-2">
-                    <p className="text-sm text-gray-500">{t('dialog.contactServiceDesc', { service: serviceContactOpen?.titolo, price: serviceContactOpen?.prezzo })}</p>
-                    <Textarea placeholder={t('placeholder.yourMessage')} value={serviceMessage} onChange={e => setServiceMessage(e.target.value)} rows={4} />
+        {/* DIALOG DETTAGLIO SERVIZIO */}
+        <Dialog open={!!serviceDetailOpen} onOpenChange={() => { setServiceDetailOpen(null); setShowContactForm(false); setServiceMessage(''); }}>
+            <DialogContent className="max-w-[95vw] sm:max-w-md p-0 rounded-xl overflow-hidden">
+                {serviceDetailOpen?.immagine_url && (
+                    <div className="h-48 bg-cover bg-center" style={{ backgroundImage: `url(${serviceDetailOpen.immagine_url})` }} />
+                )}
+                <div className="p-5 space-y-4">
+                    <div className="flex justify-between items-start">
+                        <h2 className="font-bold text-xl text-slate-900"><T text={serviceDetailOpen?.titolo} /></h2>
+                        <span className="font-bold text-xl text-blue-600 shrink-0 ml-3">€{serviceDetailOpen?.prezzo}</span>
+                    </div>
+                    <p className="text-sm text-slate-600 leading-relaxed"><T text={serviceDetailOpen?.descrizione} /></p>
+
+                    {serviceDetailOpen?.indirizzo && (
+                        <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
+                            <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
+                            <span className="text-sm text-slate-700 flex-1">{serviceDetailOpen.indirizzo}</span>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-600 shrink-0" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(serviceDetailOpen.indirizzo)}`, '_blank')}>
+                                <MapPin className="w-3 h-3 mr-1" />{t('button.navigate')}
+                            </Button>
+                        </div>
+                    )}
+
+                    <div className="flex flex-col gap-2">
+                        {serviceDetailOpen?.link_prenotazione && (
+                            <Button variant="outline" className="w-full" onClick={() => window.open(serviceDetailOpen.link_prenotazione, '_blank')}>
+                                <ExternalLink className="w-4 h-4 mr-2" />{t('button.viewOffer')}
+                            </Button>
+                        )}
+                        <div className="grid grid-cols-2 gap-2">
+                            <Button variant="outline" onClick={() => generateVoucher(serviceDetailOpen)}>
+                                <Ticket className="w-4 h-4 mr-2" />{t('button.downloadVoucher')}
+                            </Button>
+                            <Button className="bg-slate-900 hover:bg-slate-800" onClick={() => { setShowContactForm(!showContactForm); if (!serviceMessage) setServiceMessage(t('booking.wantToBook')); }}>
+                                <MessageCircle className="w-4 h-4 mr-2" />{t('button.contactStructure')}
+                            </Button>
+                        </div>
+                    </div>
+
+                    {showContactForm && (
+                        <div className="space-y-3 pt-2 border-t">
+                            <Textarea placeholder={t('placeholder.yourMessage')} value={serviceMessage} onChange={e => setServiceMessage(e.target.value)} rows={3} />
+                            <Button onClick={() => sendServiceContact.mutate()} disabled={!serviceMessage} className="w-full">
+                                <Send className="w-4 h-4 mr-2" />{t('button.sendMessage')}
+                            </Button>
+                        </div>
+                    )}
                 </div>
-                <DialogFooter><Button onClick={() => sendServiceContact.mutate()} disabled={!serviceMessage} className="w-full"><Send className="w-4 h-4 mr-2" />{t('button.sendMessage')}</Button></DialogFooter>
             </DialogContent>
         </Dialog>
 
