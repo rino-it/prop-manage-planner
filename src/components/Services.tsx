@@ -39,7 +39,7 @@ export default function Services() {
       const payload = {
         titolo: serviceData.titolo,
         descrizione: serviceData.descrizione,
-        prezzo: parseFloat(serviceData.prezzo) || 0,
+        prezzo: serviceData.prezzo || '',
         immagine_url: serviceData.immagine_url,
         link_prenotazione: serviceData.link_prenotazione,
         indirizzo: serviceData.indirizzo,
@@ -135,7 +135,7 @@ export default function Services() {
 
               <div className="grid gap-2"><Label>Indirizzo / Posizione</Label><Input placeholder="Via Roma 1, Milano" value={formData.indirizzo} onChange={e => setFormData({...formData, indirizzo: e.target.value})} /></div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="grid gap-2"><Label>Prezzo (€)</Label><Input type="number" value={formData.prezzo} onChange={e => setFormData({...formData, prezzo: e.target.value})} /></div>
+                <div className="grid gap-2"><Label>Prezzo (€)</Label><Input placeholder="es. 30 oppure 30-60" value={formData.prezzo} onChange={e => setFormData({...formData, prezzo: e.target.value})} /></div>
                 <div className="grid gap-2"><Label>Link Partner/Pagamento</Label><Input placeholder="https://..." value={formData.link_prenotazione} onChange={e => setFormData({...formData, link_prenotazione: e.target.value})} /></div>
               </div>
               <div className="grid gap-2"><Label>URL Immagine</Label><Input placeholder="https://..." value={formData.immagine_url} onChange={e => setFormData({...formData, immagine_url: e.target.value})} /></div>
