@@ -17,6 +17,11 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import TicketManager from '@/components/TicketManager';
+import { useGeneratePaymentSchedule, useBookingPayments, useEmailLog } from '@/hooks/useStripePayments';
+import { usePaymentSettings } from '@/hooks/usePaymentSettings';
+import PaymentCard from '@/components/PaymentCard';
+import CauzioneManager from '@/components/CauzioneManager';
+import { Mail, Calendar as CalIcon } from 'lucide-react';
 
 interface BookingsProps {
   initialBookingId?: string | null;
@@ -39,9 +44,13 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
   const [formData, setFormData] = useState({
     property_id: '', nome_ospite: '', email_ospite: '', telefono_ospite: '',
-    data_inizio: undefined as Date | undefined, data_fine: undefined as Date | undefined, 
+    data_inizio: undefined as Date | undefined, data_fine: undefined as Date | undefined,
     tipo_affitto: 'breve'
   });
+
+  const generateSchedule = useGeneratePaymentSchedule();
+  const [formNumeroOspiti, setFormNumeroOspiti] = useState(1);
+  const [formTotalAmount, setFormTotalAmount] = useState('');
 
   // --- QUERY DATI ---
   const { data: bookings } = useQuery({
@@ -96,8 +105,16 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const createBooking = useMutation({
     mutationFn: async (newBooking: any) => {
       const { data: { user } } = await supabase.auth.getUser();
-      const { error } = await supabase.from('bookings').insert({ ...newBooking, user_id: user?.id });
+      const { error, data: createdBooking } = await supabase.from('bookings').insert({ ...newBooking, user_id: user?.id }).select().single();
       if (error) throw error;
+
+      if (createdBooking && newBooking.tipo_affitto === 'breve' && newBooking.total_amount > 0) {
+        try {
+          await supabase.functions.invoke('generate-payment-schedule', { body: { booking_id: createdBooking.id } });
+        } catch (e) {
+          console.error('Piano pagamenti non generato:', e);
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
@@ -107,6 +124,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         property_id: '', nome_ospite: '', email_ospite: '', telefono_ospite: '',
         data_inizio: undefined, data_fine: undefined, tipo_affitto: 'breve'
       });
+      setFormNumeroOspiti(1);
+      setFormTotalAmount('');
     },
     onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
   });
@@ -271,7 +290,19 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         </Popover>
                     </div>
                 </div>
-                <Button onClick={() => createBooking.mutate({...formData, data_inizio: format(formData.data_inizio!, 'yyyy-MM-dd'), data_fine: format(formData.data_fine!, 'yyyy-MM-dd')})} className="w-full bg-blue-600" disabled={!formData.property_id || !formData.data_inizio || !formData.data_fine}>Salva</Button>
+                {formData.tipo_affitto === 'breve' && (
+                    <div className="grid grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Ospiti</Label>
+                            <Input type="number" min={1} value={formNumeroOspiti} onChange={e => setFormNumeroOspiti(Number(e.target.value))} />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Totale Soggiorno (EUR)</Label>
+                            <Input type="number" min={0} step="0.01" placeholder="0.00" value={formTotalAmount} onChange={e => setFormTotalAmount(e.target.value)} />
+                        </div>
+                    </div>
+                )}
+                <Button onClick={() => createBooking.mutate({...formData, data_inizio: format(formData.data_inizio!, 'yyyy-MM-dd'), data_fine: format(formData.data_fine!, 'yyyy-MM-dd'), numero_ospiti: formNumeroOspiti, total_amount: formTotalAmount ? parseFloat(formTotalAmount) : null})} className="w-full bg-blue-600" disabled={!formData.property_id || !formData.data_inizio || !formData.data_fine}>Salva</Button>
             </div>
         </DialogContent>
       </Dialog>
@@ -453,23 +484,44 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             </div>
                         </TabsContent>
 
-                        <TabsContent value="payments" className="mt-0">
+                        <TabsContent value="payments" className="mt-0 space-y-4">
+                            {/* Riepilogo */}
+                            {activePayments && activePayments.length > 0 && (
+                                <div className="bg-slate-50 rounded-lg border p-4">
+                                    <div className="flex justify-between items-center text-sm">
+                                        <span className="text-gray-500">Totale: <strong className="text-gray-900">EUR {activePayments.reduce((acc, p) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
+                                        <span className="text-green-600">Pagato: <strong>EUR {activePayments.filter(p => p.stato === 'pagato').reduce((acc, p) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
+                                    </div>
+                                    <div className="mt-2 w-full bg-gray-200 rounded-full h-2">
+                                        <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${Math.round(activePayments.filter(p => p.stato === 'pagato').reduce((acc, p) => acc + Number(p.importo), 0) / activePayments.reduce((acc, p) => acc + Number(p.importo), 0) * 100)}%` }} />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Pagamenti */}
                             <div className="space-y-3">
                                 {activePayments?.map(pay => (
-                                    <div key={pay.id} className="flex justify-between items-center p-3 md:p-4 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
-                                        <div className="flex items-center gap-3 md:gap-4">
-                                            <div className={`p-2 rounded-full shrink-0 ${pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                                <CreditCard className="w-4 h-4 md:w-5 md:h-5" />
+                                    <div key={pay.id}>
+                                        <div className="flex justify-between items-center p-3 md:p-4 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
+                                            <div className="flex items-center gap-3 md:gap-4">
+                                                <div className={`p-2 rounded-full shrink-0 ${pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : pay.stato === 'pre_autorizzato' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
+                                                    <CreditCard className="w-4 h-4 md:w-5 md:h-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-gray-900 capitalize text-sm">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
+                                                    <p className="text-xs text-gray-500 font-medium">{format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                                                    {pay.is_preauth && <Badge variant="outline" className="text-[9px] text-blue-600 border-blue-200 mt-1">Pre-auth</Badge>}
+                                                </div>
                                             </div>
-                                            <div>
-                                                <p className="font-bold text-gray-900 capitalize text-sm">{pay.tipo?.replace('_', ' ') || 'Rata'}</p>
-                                                <p className="text-xs text-gray-500 font-medium">{format(new Date(pay.data_scadenza), 'dd MMM')}</p>
+                                            <div className="text-right space-y-1">
+                                                <p className="font-bold text-base md:text-lg text-slate-800">EUR {pay.importo}</p>
+                                                <Badge variant="outline" className={`text-[10px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : pay.stato === 'pre_autorizzato' ? 'text-blue-600 border-blue-200 bg-blue-50' : pay.stato === 'rilasciato' ? 'text-gray-600 border-gray-200 bg-gray-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato?.toUpperCase()}</Badge>
+                                                {pay.receipt_url && <Button size="sm" variant="ghost" className="h-6 text-[10px] text-blue-600" onClick={() => window.open(pay.receipt_url, '_blank')}>Ricevuta</Button>}
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <p className="font-bold text-base md:text-lg text-slate-800">€ {pay.importo}</p>
-                                            <Badge variant="outline" className={`text-[10px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato.toUpperCase()}</Badge>
-                                        </div>
+                                        {pay.is_preauth && pay.stato === 'pre_autorizzato' && (
+                                            <CauzioneManager payment={pay} bookingId={customerSheetOpen?.id} />
+                                        )}
                                     </div>
                                 ))}
                                 {activePayments?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun movimento.</p></div>}
@@ -528,11 +580,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-4">
+                        {booking.source === 'ical_import' && (
+                            <Badge variant="outline" className="text-[10px] text-cyan-600 border-cyan-200 bg-cyan-50 w-fit">iCal Import</Badge>
+                        )}
                         <div className="text-sm text-gray-600 flex items-center gap-2 bg-gray-50 p-2 rounded">
                             <CalendarIcon className="w-4 h-4 text-gray-400" />
                             {format(new Date(booking.data_inizio), 'dd MMM')} - {format(new Date(booking.data_fine), 'dd MMM yyyy')}
                         </div>
-                        
+
                         <div className="grid grid-cols-2 gap-2">
                             <Button variant="outline" size="sm" onClick={() => copyLink(booking)} className="text-xs">
                                 <Copy className="w-3 h-3 mr-2" /> Link

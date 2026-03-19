@@ -152,7 +152,7 @@ export default function Tickets() {
   // Fix Data Import
   const sanitizeDate = (dateStr: string | null) => {
       if (!dateStr || dateStr.trim() === '' || dateStr.toLowerCase().includes('mensile')) return null;
-      let clean = dateStr.trim();
+      const clean = dateStr.trim();
       // DD/MM/YYYY -> YYYY-MM-DD
       if (clean.includes('/')) {
           const parts = clean.split('/');

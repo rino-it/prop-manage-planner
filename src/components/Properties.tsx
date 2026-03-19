@@ -12,10 +12,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Switch } from '@/components/ui/switch';
-import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, X, Link2 } from 'lucide-react';
+import { MapPin, Pencil, Home, FileText, Trash2, Users, FolderOpen, Euro, Calendar as CalendarIcon, Eye, UserCog, User, AlertTriangle, Loader2, Plus, X, Link2, RefreshCw } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import TicketManager from '@/components/TicketManager';
+import PaymentSettingsComponent from '@/components/PaymentSettings';
 
 const Properties = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -429,26 +430,37 @@ const Properties = () => {
 
       {/* SHEET STORICO */}
       <Sheet open={!!detailsOpen} onOpenChange={() => setDetailsOpen(null)}>
-        <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-md overflow-y-auto flex flex-col">
             <SheetHeader className="mb-6">
                 <SheetTitle className="flex items-center gap-2"><Home className="w-5 h-5 text-blue-600"/> {detailsOpen?.nome}</SheetTitle>
-                <SheetDescription>Registro storico occupanti.</SheetDescription>
+                <SheetDescription>Gestione proprietà.</SheetDescription>
             </SheetHeader>
-            <div className="space-y-4">
-                {propertyHistory?.map((booking) => (
-                    <div key={booking.id} className="p-3 rounded-lg border bg-slate-50 cursor-pointer hover:bg-white hover:border-blue-300 transition-all" onClick={() => setSelectedTenant(booking)}>
-                        <div className="flex justify-between items-center">
-                            <p className="font-bold text-sm">{booking.nome_ospite}</p>
-                            <Badge variant="outline">{booking.tipo_affitto}</Badge>
-                        </div>
-                        <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                            <CalendarIcon className="w-3 h-3"/>
-                            {format(new Date(booking.data_inizio), 'dd/MM/yy')} - {format(new Date(booking.data_fine), 'dd/MM/yy')}
-                        </p>
+            <Tabs defaultValue="history" className="flex-1 flex flex-col">
+                <TabsList className="mb-4 w-full grid grid-cols-2">
+                    <TabsTrigger value="history">Storico</TabsTrigger>
+                    <TabsTrigger value="settings">Pagamenti & Email</TabsTrigger>
+                </TabsList>
+                <TabsContent value="history" className="flex-1 overflow-y-auto">
+                    <div className="space-y-4">
+                        {propertyHistory?.map((booking) => (
+                            <div key={booking.id} className="p-3 rounded-lg border bg-slate-50 cursor-pointer hover:bg-white hover:border-blue-300 transition-all" onClick={() => setSelectedTenant(booking)}>
+                                <div className="flex justify-between items-center">
+                                    <p className="font-bold text-sm">{booking.nome_ospite}</p>
+                                    <Badge variant="outline">{booking.tipo_affitto}</Badge>
+                                </div>
+                                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                                    <CalendarIcon className="w-3 h-3"/>
+                                    {format(new Date(booking.data_inizio), 'dd/MM/yy')} - {format(new Date(booking.data_fine), 'dd/MM/yy')}
+                                </p>
+                            </div>
+                        ))}
+                        {propertyHistory?.length === 0 && <p className="text-gray-400 text-center py-8">Nessun dato storico.</p>}
                     </div>
-                ))}
-                {propertyHistory?.length === 0 && <p className="text-gray-400 text-center py-8">Nessun dato storico.</p>}
-            </div>
+                </TabsContent>
+                <TabsContent value="settings" className="flex-1 overflow-y-auto">
+                    <PaymentSettingsComponent propertyId={detailsOpen?.id} />
+                </TabsContent>
+            </Tabs>
         </SheetContent>
       </Sheet>
 

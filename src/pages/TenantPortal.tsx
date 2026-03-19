@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils, Lock, MapPin, ExternalLink, Ticket, MessageCircle, Send } from 'lucide-react';
+import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils, Lock, MapPin, ExternalLink, Ticket, MessageCircle, Send, CreditCard } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -81,7 +81,8 @@ function TenantPortalInner() {
       if (error) return [];
       return data || [];
     },
-    enabled: !!booking?.id
+    enabled: !!booking?.id,
+    refetchInterval: 30000
   });
 
   const { data: tickets = [] } = useQuery({
@@ -344,16 +345,37 @@ function TenantPortalInner() {
                     <div className="space-y-3">
                         {payments.map((pay: any) => (
                             <Card key={pay.id} className="border-l-4 border-l-blue-500">
-                                <CardContent className="p-4 flex justify-between items-center">
-                                    <div>
-                                        <p className="font-bold text-sm capitalize"><T text={(pay.tipo || 'Rata').replace('_', ' ')} /></p>
-                                        <p className="text-xs text-gray-500">Scad: {pay.data_scadenza ? format(new Date(pay.data_scadenza), 'dd MMM yyyy') : 'N/D'}</p>
+                                <CardContent className="p-4 space-y-3">
+                                    <div className="flex justify-between items-center">
+                                        <div>
+                                            <p className="font-bold text-sm capitalize"><T text={(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')} /></p>
+                                            <p className="text-xs text-gray-500">Scad: {pay.data_scadenza ? format(new Date(pay.data_scadenza), 'dd MMM yyyy') : 'N/D'}</p>
+                                            {pay.is_preauth && <p className="text-[10px] text-blue-600 mt-1">{t('payment.preauthNote') || 'Pre-autorizzazione'}</p>}
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="font-bold text-lg">EUR {pay.importo}</p>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="font-bold text-lg">€ {pay.importo}</p>
-                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-700 border-0">{t('badge.paid')}</Badge> :
-                                            <Button size="sm" variant="outline" className="h-7 text-[10px] border-orange-200 text-orange-600" onClick={() => setPaymentTicketOpen(pay)}>{t('button.notify')}</Button>
-                                        }
+                                    <div>
+                                        {pay.stato === 'pagato' ? (
+                                            <div className="flex gap-2">
+                                                <Badge className="bg-green-100 text-green-700 border-0 flex-1 justify-center py-1">{t('badge.paid')}</Badge>
+                                                {pay.receipt_url && (
+                                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(pay.receipt_url, '_blank')}>
+                                                        {t('payment.receipt') || 'Ricevuta'}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ) : pay.stripe_checkout_url ? (
+                                            <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white" size="sm" onClick={() => window.open(pay.stripe_checkout_url, '_blank')}>
+                                                <CreditCard className="w-4 h-4 mr-2" />
+                                                {pay.is_preauth ? (t('payment.authorize') || 'Autorizza') : (t('payment.payNow') || 'Paga Ora')}
+                                            </Button>
+                                        ) : (
+                                            <Button size="sm" variant="outline" className="w-full h-7 text-[10px] border-orange-200 text-orange-600" onClick={() => setPaymentTicketOpen(pay)}>
+                                                {t('button.notify')}
+                                            </Button>
+                                        )}
                                     </div>
                                 </CardContent>
                             </Card>

@@ -687,6 +687,7 @@ export type Database = {
           valore_acquisto: number | null
           valore_catastale: number | null
           via: string
+          ical_url: string | null
         }
         Insert: {
           anno_costruzione?: number | null
@@ -718,6 +719,7 @@ export type Database = {
           valore_acquisto?: number | null
           valore_catastale?: number | null
           via: string
+          ical_url?: string | null
         }
         Update: {
           anno_costruzione?: number | null
@@ -749,8 +751,172 @@ export type Database = {
           valore_acquisto?: number | null
           valore_catastale?: number | null
           via?: string
+          ical_url?: string | null
         }
         Relationships: []
+      }
+      payment_settings: {
+        Row: {
+          id: string
+          property_id: string
+          user_id: string | null
+          stripe_account_id: string | null
+          stripe_configured: boolean
+          caparra_percentage: number
+          caparra_due_days: number
+          saldo_due_days_before: number
+          cauzione_amount: number
+          cauzione_preauth_days_before: number
+          cauzione_release_days_after: number
+          tassa_soggiorno_per_night: number
+          tassa_soggiorno_per_person: boolean
+          checkin_email_days_before: number
+          reminder_days_before: number
+          brand_logo_url: string | null
+          brand_color: string
+          email_from_name: string | null
+          email_reply_to: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          property_id: string
+          user_id?: string | null
+          stripe_account_id?: string | null
+          stripe_configured?: boolean
+          caparra_percentage?: number
+          caparra_due_days?: number
+          saldo_due_days_before?: number
+          cauzione_amount?: number
+          cauzione_preauth_days_before?: number
+          cauzione_release_days_after?: number
+          tassa_soggiorno_per_night?: number
+          tassa_soggiorno_per_person?: boolean
+          checkin_email_days_before?: number
+          reminder_days_before?: number
+          brand_logo_url?: string | null
+          brand_color?: string
+          email_from_name?: string | null
+          email_reply_to?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          property_id?: string
+          user_id?: string | null
+          stripe_account_id?: string | null
+          stripe_configured?: boolean
+          caparra_percentage?: number
+          caparra_due_days?: number
+          saldo_due_days_before?: number
+          cauzione_amount?: number
+          cauzione_preauth_days_before?: number
+          cauzione_release_days_after?: number
+          tassa_soggiorno_per_night?: number
+          tassa_soggiorno_per_person?: boolean
+          checkin_email_days_before?: number
+          reminder_days_before?: number
+          brand_logo_url?: string | null
+          brand_color?: string
+          email_from_name?: string | null
+          email_reply_to?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_settings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: true
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      email_log: {
+        Row: {
+          id: string
+          booking_id: string | null
+          recipient_email: string
+          template_type: string
+          subject: string | null
+          sent_at: string
+          status: string
+          error_message: string | null
+        }
+        Insert: {
+          id?: string
+          booking_id?: string | null
+          recipient_email: string
+          template_type: string
+          subject?: string | null
+          sent_at?: string
+          status?: string
+          error_message?: string | null
+        }
+        Update: {
+          id?: string
+          booking_id?: string | null
+          recipient_email?: string
+          template_type?: string
+          subject?: string | null
+          sent_at?: string
+          status?: string
+          error_message?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "email_log_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ical_sync_log: {
+        Row: {
+          id: string
+          property_id: string
+          synced_at: string
+          events_found: number
+          bookings_created: number
+          errors: string | null
+        }
+        Insert: {
+          id?: string
+          property_id: string
+          synced_at?: string
+          events_found?: number
+          bookings_created?: number
+          errors?: string | null
+        }
+        Update: {
+          id?: string
+          property_id?: string
+          synced_at?: string
+          events_found?: number
+          bookings_created?: number
+          errors?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ical_sync_log_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       refueling: {
         Row: {

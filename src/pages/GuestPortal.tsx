@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import {
   Wifi, MapPin, Lock, Unlock, Youtube, Copy, Loader2,
-  CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key, ExternalLink, Ticket, MessageCircle
+  CheckCircle, FileText, Clock, ShieldCheck, UploadCloud, Send, UserCog, Download, Key, ExternalLink, Ticket, MessageCircle, CreditCard, Receipt
 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, parseISO } from 'date-fns';
@@ -81,7 +81,8 @@ function GuestPortalInner() {
       const { data } = await supabase.from('tenant_payments').select('*').eq('booking_id', id).order('data_scadenza', { ascending: true });
       return data || [];
     },
-    enabled: !!id
+    enabled: !!id,
+    refetchInterval: 30000
   });
 
   const { data: myTickets } = useQuery({
@@ -411,15 +412,49 @@ function GuestPortalInner() {
                 <TabsContent value="payments" className="space-y-4">
                     <Card>
                         <CardHeader><CardTitle>{t('payments.extraExpenses')}</CardTitle><CardDescription>{t('payments.extraDesc')}</CardDescription></CardHeader>
-                        <CardContent>
+                        <CardContent className="space-y-3">
+                            {/* Riepilogo */}
+                            {payments && payments.length > 0 && (
+                                <div className="bg-slate-50 rounded-lg p-3 border">
+                                    <div className="flex justify-between text-sm">
+                                        <span>{t('payments.total') || 'Totale'}: <strong>EUR {payments.reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
+                                        <span className="text-green-600">{t('badge.paid')}: <strong>EUR {payments.filter((p: any) => p.stato === 'pagato').reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
+                                    </div>
+                                    <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
+                                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${payments.length > 0 ? Math.round(payments.filter((p: any) => p.stato === 'pagato').reduce((acc, p: any) => acc + Number(p.importo), 0) / payments.reduce((acc, p: any) => acc + Number(p.importo), 0) * 100) : 0}%` }} />
+                                    </div>
+                                </div>
+                            )}
                             {payments?.map((pay: any) => (
-                                <div key={pay.id} className="flex justify-between items-center p-3 border-b last:border-0">
-                                    <div><p className="font-medium capitalize"><T text={pay.tipo?.replace('_', ' ')} /></p><p className="text-xs text-gray-500">Scad: {format(parseISO(pay.data_scadenza), 'dd MMM')}</p></div>
-                                    <div className="text-right">
-                                        <p className="font-bold">€{pay.importo}</p>
-                                        {pay.stato === 'pagato' ? <Badge className="bg-green-100 text-green-800">{t('badge.paid')}</Badge> :
-                                            <Button size="sm" variant="outline" className="h-7 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>{t('button.notify')}</Button>
-                                        }
+                                <div key={pay.id} className="p-4 border rounded-xl bg-white shadow-sm space-y-3">
+                                    <div className="flex justify-between items-start">
+                                        <div>
+                                            <p className="font-bold capitalize text-sm">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
+                                            <p className="text-xs text-gray-500">Scad: {format(parseISO(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                                            {pay.is_preauth && <p className="text-[10px] text-blue-600 mt-1">{t('payment.preauthNote') || 'Non verra addebitata se non necessario'}</p>}
+                                        </div>
+                                        <p className="font-bold text-lg">EUR {pay.importo}</p>
+                                    </div>
+                                    <div>
+                                        {pay.stato === 'pagato' ? (
+                                            <div className="flex gap-2">
+                                                <Badge className="bg-green-100 text-green-800 flex-1 justify-center py-1">{t('badge.paid')}</Badge>
+                                                {pay.receipt_url && (
+                                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(pay.receipt_url, '_blank')}>
+                                                        <Download className="w-3 h-3 mr-1" /> {t('payment.receipt') || 'Ricevuta'}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        ) : pay.stripe_checkout_url ? (
+                                            <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white" onClick={() => window.open(pay.stripe_checkout_url, '_blank')}>
+                                                <CreditCard className="w-4 h-4 mr-2" />
+                                                {pay.is_preauth ? (t('payment.authorize') || 'Autorizza') : (t('payment.payNow') || 'Paga Ora')}
+                                            </Button>
+                                        ) : (
+                                            <Button size="sm" variant="outline" className="w-full h-8 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>
+                                                {t('button.notify')}
+                                            </Button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
