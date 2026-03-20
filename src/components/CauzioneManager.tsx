@@ -27,9 +27,8 @@ interface CauzioneManagerProps {
 type PreauthState = 'preauth' | 'released' | 'captured';
 
 const getPreauthState = (stato: string): PreauthState => {
-  if (stato === 'pagato') {
-    return 'captured';
-  }
+  if (stato === 'pagato') return 'captured';
+  if (stato === 'rilasciato') return 'released';
   return 'preauth';
 };
 

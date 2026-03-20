@@ -443,10 +443,10 @@ function GuestPortalInner() {
                                 <div className="bg-slate-50 rounded-lg p-3 border">
                                     <div className="flex justify-between text-sm">
                                         <span>{t('payments.total') || 'Totale'}: <strong>EUR {payments.reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
-                                        <span className="text-green-600">{t('badge.paid')}: <strong>EUR {payments.filter((p: any) => p.stato === 'pagato' || p.stato === 'pre_autorizzato').reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
+                                        <span className="text-green-600">{t('badge.paid')}: <strong>EUR {payments.filter((p: any) => ['pagato', 'pre_autorizzato', 'rilasciato'].includes(p.stato)).reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
                                     </div>
                                     <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
-                                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${payments.length > 0 ? Math.round(payments.filter((p: any) => p.stato === 'pagato' || p.stato === 'pre_autorizzato').reduce((acc, p: any) => acc + Number(p.importo), 0) / payments.reduce((acc, p: any) => acc + Number(p.importo), 0) * 100) : 0}%` }} />
+                                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${payments.length > 0 ? Math.round(payments.filter((p: any) => ['pagato', 'pre_autorizzato', 'rilasciato'].includes(p.stato)).reduce((acc, p: any) => acc + Number(p.importo), 0) / payments.reduce((acc, p: any) => acc + Number(p.importo), 0) * 100) : 0}%` }} />
                                     </div>
                                 </div>
                             )}
@@ -477,6 +477,11 @@ function GuestPortalInner() {
                                                     {t('badge.preAuthorized') || 'Pre-autorizzato'}
                                                 </Badge>
                                             </div>
+                                        ) : pay.stato === 'rilasciato' ? (
+                                            <Badge className="bg-gray-100 text-gray-600 flex-1 justify-center py-1">
+                                                <Unlock className="w-3 h-3 mr-1" />
+                                                {t('badge.released') || 'Cauzione rilasciata'}
+                                            </Badge>
                                         ) : pay.stripe_checkout_url ? (
                                             <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white" onClick={() => window.open(pay.stripe_checkout_url, '_blank')}>
                                                 <CreditCard className="w-4 h-4 mr-2" />
