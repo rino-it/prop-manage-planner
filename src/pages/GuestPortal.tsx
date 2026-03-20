@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -35,6 +35,7 @@ function GuestPortalInner() {
   const queryClient = useQueryClient();
   const { t } = useLanguage();
 
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState('experiences');
   const [contactForm, setContactForm] = useState({ email: '', phone: '' });
   const [ticketForm, setTicketForm] = useState({ titolo: '', descrizione: '' });
@@ -93,6 +94,30 @@ function GuestPortalInner() {
     },
     enabled: !!id
   });
+
+  useEffect(() => {
+    const paymentStatus = searchParams.get('payment');
+    if (!paymentStatus) return;
+
+    if (paymentStatus === 'success') {
+      setActiveTab('payments');
+      queryClient.invalidateQueries({ queryKey: ['tenant-payments', id] });
+      toast({
+        title: t('toast.paymentSuccess') || 'Pagamento completato',
+        description: t('toast.paymentSuccessDesc') || 'Il pagamento e stato elaborato correttamente.',
+      });
+    } else if (paymentStatus === 'cancelled') {
+      setActiveTab('payments');
+      toast({
+        title: t('toast.paymentCancelled') || 'Pagamento annullato',
+        description: t('toast.paymentCancelledDesc') || 'Il pagamento non e stato completato.',
+        variant: 'destructive',
+      });
+    }
+
+    searchParams.delete('payment');
+    setSearchParams(searchParams, { replace: true });
+  }, []);
 
   // --- LOGICA ---
   const hasContactInfo = booking?.telefono_ospite && booking?.email_ospite;
@@ -418,10 +443,10 @@ function GuestPortalInner() {
                                 <div className="bg-slate-50 rounded-lg p-3 border">
                                     <div className="flex justify-between text-sm">
                                         <span>{t('payments.total') || 'Totale'}: <strong>EUR {payments.reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
-                                        <span className="text-green-600">{t('badge.paid')}: <strong>EUR {payments.filter((p: any) => p.stato === 'pagato').reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
+                                        <span className="text-green-600">{t('badge.paid')}: <strong>EUR {payments.filter((p: any) => p.stato === 'pagato' || p.stato === 'pre_autorizzato').reduce((acc, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
                                     </div>
                                     <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5">
-                                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${payments.length > 0 ? Math.round(payments.filter((p: any) => p.stato === 'pagato').reduce((acc, p: any) => acc + Number(p.importo), 0) / payments.reduce((acc, p: any) => acc + Number(p.importo), 0) * 100) : 0}%` }} />
+                                        <div className="bg-green-500 h-1.5 rounded-full" style={{ width: `${payments.length > 0 ? Math.round(payments.filter((p: any) => p.stato === 'pagato' || p.stato === 'pre_autorizzato').reduce((acc, p: any) => acc + Number(p.importo), 0) / payments.reduce((acc, p: any) => acc + Number(p.importo), 0) * 100) : 0}%` }} />
                                     </div>
                                 </div>
                             )}
@@ -444,6 +469,13 @@ function GuestPortalInner() {
                                                         <Download className="w-3 h-3 mr-1" /> {t('payment.receipt') || 'Ricevuta'}
                                                     </Button>
                                                 )}
+                                            </div>
+                                        ) : pay.stato === 'pre_autorizzato' ? (
+                                            <div className="flex gap-2">
+                                                <Badge className="bg-blue-100 text-blue-800 flex-1 justify-center py-1">
+                                                    <ShieldCheck className="w-3 h-3 mr-1" />
+                                                    {t('badge.preAuthorized') || 'Pre-autorizzato'}
+                                                </Badge>
                                             </div>
                                         ) : pay.stripe_checkout_url ? (
                                             <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white" onClick={() => window.open(pay.stripe_checkout_url, '_blank')}>
