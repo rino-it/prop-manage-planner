@@ -47,7 +47,7 @@ async function createCheckoutSession(
 
   const { data: paymentSettings, error: settingsError } = await supabase
     .from("payment_settings")
-    .select("stripe_key")
+    .select("stripe_account_id, stripe_configured")
     .eq("property_id", booking.property_id)
     .maybeSingle();
 

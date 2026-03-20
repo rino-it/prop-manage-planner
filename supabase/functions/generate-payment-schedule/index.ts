@@ -47,7 +47,7 @@ async function generatePaymentSchedule(
   const { data: paymentSettings, error: settingsError } = await supabase
     .from("payment_settings")
     .select(
-      "caparra_percentage, caparra_due_days, saldo_due_days_before, cauzione_amount, cauzione_preauth_days_before, tassa_per_night, tassa_per_person, stripe_configured"
+      "caparra_percentage, caparra_due_days, saldo_due_days_before, cauzione_amount, cauzione_preauth_days_before, tassa_soggiorno_per_night, tassa_soggiorno_per_person, stripe_configured"
     )
     .eq("property_id", booking.property_id)
     .maybeSingle();
@@ -62,8 +62,8 @@ async function generatePaymentSchedule(
     saldo_due_days_before: 14,
     cauzione_amount: 500,
     cauzione_preauth_days_before: 7,
-    tassa_per_night: 3,
-    tassa_per_person: true,
+    tassa_soggiorno_per_night: 3,
+    tassa_soggiorno_per_person: true,
     stripe_configured: false,
   };
 
@@ -79,9 +79,9 @@ async function generatePaymentSchedule(
   const caparra = (totalAmount * settings.caparra_percentage) / 100;
   const saldo = totalAmount - caparra;
   const tassoAmount =
-    settings.tassa_per_night *
+    settings.tassa_soggiorno_per_night *
     nights *
-    (settings.tassa_per_person ? booking.numero_ospiti || 1 : 1);
+    (settings.tassa_soggiorno_per_person ? booking.numero_ospiti || 1 : 1);
 
   const caparra_due = new Date(today);
   caparra_due.setDate(caparra_due.getDate() + settings.caparra_due_days);
