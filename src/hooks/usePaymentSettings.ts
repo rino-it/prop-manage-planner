@@ -27,18 +27,32 @@ export interface PaymentSettings {
   updated_at: string;
 }
 
+type PaymentSettingsDbFields = Omit<PaymentSettings, 'ical_url'>;
+
 export const usePaymentSettings = (propertyId: string | undefined) => {
   return useQuery({
     queryKey: ['payment-settings', propertyId],
     queryFn: async () => {
       if (!propertyId) return null;
-      const { data, error } = await supabase
-        .from('payment_settings')
-        .select('*')
-        .eq('property_id', propertyId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as PaymentSettings | null;
+      const [settingsRes, propertyRes] = await Promise.all([
+        supabase
+          .from('payment_settings')
+          .select('*')
+          .eq('property_id', propertyId)
+          .maybeSingle(),
+        supabase
+          .from('properties_real')
+          .select('ical_url')
+          .eq('id', propertyId)
+          .single()
+      ]);
+      if (settingsRes.error) throw settingsRes.error;
+      if (propertyRes.error) throw propertyRes.error;
+      const merged = {
+        ...settingsRes.data,
+        ical_url: propertyRes.data?.ical_url || null
+      } as PaymentSettings | null;
+      return merged;
     },
     enabled: !!propertyId
   });
@@ -53,17 +67,27 @@ export const useSavePaymentSettings = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Utente non autenticato');
 
-      const { error } = await supabase
+      const { ical_url, ...paymentFields } = settings;
+
+      const { error: settingsError } = await supabase
         .from('payment_settings')
         .upsert(
           {
-            ...settings,
+            ...paymentFields,
             user_id: user.id,
             updated_at: new Date().toISOString()
           },
           { onConflict: 'property_id' }
         );
-      if (error) throw error;
+      if (settingsError) throw settingsError;
+
+      if (ical_url !== undefined) {
+        const { error: propertyError } = await supabase
+          .from('properties_real')
+          .update({ ical_url })
+          .eq('id', settings.property_id);
+        if (propertyError) throw propertyError;
+      }
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['payment-settings', variables.property_id] });
