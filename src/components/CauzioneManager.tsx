@@ -18,7 +18,7 @@ interface CauzioneManagerProps {
   payment: {
     id: string;
     importo: number;
-    stato: 'da_pagare' | 'pagato' | 'scaduto' | 'annullato';
+    stato: 'da_pagare' | 'pagato' | 'pre_autorizzato' | 'rilasciato' | 'scaduto' | 'annullato';
     is_preauth: boolean;
   };
   bookingId: string;
@@ -76,7 +76,7 @@ export default function CauzioneManager({
     managePreauth({
       payment_id: payment.id,
       booking_id: bookingId,
-      action: 'capture'
+      action: 'capture_full'
     });
   };
 

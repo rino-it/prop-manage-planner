@@ -9,7 +9,7 @@ export interface TenantPayment {
   category: string;
   data_scadenza: string;
   payment_date: string | null;
-  stato: 'da_pagare' | 'pagato' | 'scaduto' | 'annullato';
+  stato: 'da_pagare' | 'pagato' | 'pre_autorizzato' | 'rilasciato' | 'scaduto' | 'annullato';
   notes: string;
   is_preauth: boolean;
   stripe_checkout_url: string | null;
@@ -101,7 +101,7 @@ export const useManagePreauth = () => {
     mutationFn: async (params: {
       payment_id: string;
       booking_id: string;
-      action: 'release' | 'capture' | 'capture_partial';
+      action: 'release' | 'capture_full' | 'capture_partial';
       capture_amount?: number;
     }) => {
       const { data, error } = await supabase.functions.invoke('stripe-manage-preauth', {
@@ -114,7 +114,7 @@ export const useManagePreauth = () => {
       queryClient.invalidateQueries({ queryKey: ['booking-payments', variables.booking_id] });
       const actionLabel = {
         release: 'Cauzione rilasciata',
-        capture: 'Cauzione trattenuta',
+        capture_full: 'Cauzione trattenuta',
         capture_partial: 'Cauzione trattenuta parzialmente'
       };
       toast({ title: actionLabel[variables.action] });

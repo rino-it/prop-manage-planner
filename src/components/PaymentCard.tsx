@@ -12,7 +12,7 @@ interface PaymentCardProps {
     importo: number;
     category: string;
     data_scadenza: string;
-    stato: 'da_pagare' | 'pagato' | 'scaduto' | 'annullato';
+    stato: 'da_pagare' | 'pagato' | 'pre_autorizzato' | 'rilasciato' | 'scaduto' | 'annullato';
     is_preauth?: boolean;
     stripe_checkout_url?: string | null;
     receipt_url?: string | null;
