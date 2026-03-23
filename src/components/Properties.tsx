@@ -466,12 +466,13 @@ const Properties = () => {
 
       {/* DIALOG INQUILINO */}
       <Dialog open={!!selectedTenant} onOpenChange={(open) => !open && setSelectedTenant(null)}>
-        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0">
-            <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-center">
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] max-h-[85vh] p-0 !overflow-hidden">
+          <div className="flex flex-col h-full min-h-0">
+            <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-center shrink-0">
                 <DialogTitle className="flex items-center gap-2"><User className="w-5 h-5 text-blue-600"/> {selectedTenant?.nome_ospite}</DialogTitle>
                 <Button size="sm" variant="ghost" onClick={() => setSelectedTenant(null)}><X className="w-4 h-4"/></Button>
             </div>
-            <Tabs defaultValue="tickets" className="flex-1 p-4 md:p-6 overflow-hidden flex flex-col">
+            <Tabs defaultValue="tickets" className="flex-1 min-h-0 p-4 md:p-6 overflow-hidden flex flex-col">
                 <TabsList className="mb-4 w-full grid grid-cols-2">
                     <TabsTrigger value="tickets">Ticket</TabsTrigger>
                     <TabsTrigger value="payments">Pagamenti</TabsTrigger>
@@ -501,15 +502,17 @@ const Properties = () => {
                     {tenantDetails?.payments.length === 0 && <p className="text-gray-400 text-center py-4">Nessun pagamento.</p>}
                 </TabsContent>
             </Tabs>
+          </div>
         </DialogContent>
       </Dialog>
 
       {/* DIALOG DOCUMENTI AGGIORNATO CON RINOMINA */}
       <Dialog open={!!docsOpen} onOpenChange={() => setDocsOpen(null)}>
-        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col">
-            <DialogHeader><DialogTitle className="flex items-center gap-2 truncate"><FolderOpen className="w-5 h-5 text-blue-600"/> Archivio: {docsOpen?.nome}</DialogTitle></DialogHeader>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 overflow-hidden mt-2">
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] max-h-[85vh] !overflow-hidden">
+          <div className="flex flex-col h-full min-h-0">
+            <DialogHeader className="shrink-0"><DialogTitle className="flex items-center gap-2 truncate"><FolderOpen className="w-5 h-5 text-blue-600"/> Archivio: {docsOpen?.nome}</DialogTitle></DialogHeader>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 flex-1 min-h-0 overflow-hidden mt-2">
                 <div className="bg-slate-50 p-4 rounded-lg border flex flex-col gap-4 overflow-y-auto">
                     <h4 className="font-bold flex items-center gap-2 text-sm uppercase text-slate-500">Carica Nuovo</h4>
                     <div className="space-y-2">
@@ -635,6 +638,7 @@ const Properties = () => {
                     </Tabs>
                 </div>
             </div>
+          </div>
         </DialogContent>
       </Dialog>
 

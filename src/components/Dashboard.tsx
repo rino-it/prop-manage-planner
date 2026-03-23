@@ -436,15 +436,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
 
       {/* --- DIALOG 2: AGENDA COMPLETA (SECONDO LIVELLO) --- */}
       <Dialog open={isAgendaOpen} onOpenChange={setIsAgendaOpen}>
-        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col">
-            <DialogHeader>
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] max-h-[85vh] !overflow-hidden">
+          <div className="flex flex-col h-full min-h-0">
+            <DialogHeader className="shrink-0">
                 <DialogTitle className="flex items-center gap-2">
                     <CalendarIcon className="w-5 h-5 text-indigo-600"/> Agenda Mensile: {selectedDate ? format(selectedDate, 'MMMM yyyy') : ''}
                 </DialogTitle>
                 <DialogDescription>Gestione completa degli eventi del mese.</DialogDescription>
             </DialogHeader>
 
-            <Tabs defaultValue="all" className="flex-1 flex flex-col overflow-hidden" onValueChange={setAgendaFilter}>
+            <Tabs defaultValue="all" className="flex-1 min-h-0 flex flex-col overflow-hidden" onValueChange={setAgendaFilter}>
                 <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-slate-100 p-1">
                     <TabsTrigger value="all" className="text-xs">Tutti</TabsTrigger>
                     <TabsTrigger value="hospitality" className="text-xs">🏠 Ospitalità</TabsTrigger>
@@ -490,6 +491,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     </div>
                 </ScrollArea>
             </Tabs>
+          </div>
         </DialogContent>
       </Dialog>
 

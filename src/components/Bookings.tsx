@@ -309,9 +309,9 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
       {/* --- SCHEDA CLIENTE COMPLETA --- */}
       <Dialog open={!!customerSheetOpen} onOpenChange={(open) => !open && setCustomerSheetOpen(null)}>
-        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] flex flex-col p-0 overflow-hidden">
-            
-            <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-start">
+        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] max-h-[85vh] p-0 !overflow-hidden">
+          <div className="flex flex-col h-full min-h-0">
+            <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-start shrink-0">
                 <div className="flex gap-4 items-center overflow-hidden">
                     <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 border border-blue-200 shrink-0">
                         <User className="w-6 h-6" />
@@ -319,7 +319,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                     <div className="min-w-0">
                         <DialogTitle className="text-lg md:text-xl font-bold text-gray-900 truncate">{customerSheetOpen?.nome_ospite}</DialogTitle>
                         <p className="text-xs md:text-sm text-gray-500 flex flex-wrap items-center gap-2 mt-1">
-                            <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 truncate max-w-[150px]">{customerSheetOpen?.properties_real?.nome}</span> 
+                            <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 truncate max-w-[150px]">{customerSheetOpen?.properties_real?.nome}</span>
                             <span className="text-gray-400">|</span>
                             <span className="capitalize">{customerSheetOpen?.tipo_affitto} Termine</span>
                         </p>
@@ -335,9 +335,9 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 </div>
             </div>
 
-            <div className="flex-1 overflow-hidden flex flex-col">
-                <Tabs defaultValue="overview" className="flex-1 flex flex-col">
-                    <div className="px-4 md:px-6 pt-4 border-b bg-white">
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                <Tabs defaultValue="overview" className="flex-1 min-h-0 flex flex-col">
+                    <div className="px-4 md:px-6 pt-4 border-b bg-white shrink-0">
                         <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
                             <TabsTrigger value="overview" className="flex-1 min-w-[90px]">Panoramica</TabsTrigger>
                             <TabsTrigger value="docs" className="flex-1 min-w-[90px]">Documenti</TabsTrigger>
@@ -532,9 +532,10 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 </Tabs>
             </div>
             
-            <div className="p-4 border-t bg-slate-50 flex justify-end gap-2">
+            <div className="p-4 border-t bg-slate-50 flex justify-end gap-2 shrink-0">
                 <Button variant="outline" onClick={() => setCustomerSheetOpen(null)}>Chiudi Scheda</Button>
             </div>
+          </div>
         </DialogContent>
       </Dialog>
 

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLanguage } from './LanguageContext';
 
+const DEEPL_API_KEY = import.meta.env.VITE_DEEPL_API_KEY || '';
+const DEEPL_URL = 'https://api-free.deepl.com/v2/translate';
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
 
 const translationCache = new Map<string, string>();
@@ -8,16 +10,45 @@ const translationCache = new Map<string, string>();
 let batchQueue: { text: string; lang: string; resolve: (val: string) => void }[] = [];
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
 
-const langMap: Record<string, string> = {
-  it: 'it',
+const deeplLangMap: Record<string, string> = {
+  en: 'EN-GB',
+  de: 'DE',
+  fr: 'FR',
+};
+
+const mymemoryLangMap: Record<string, string> = {
   en: 'en-GB',
   de: 'de-DE',
   fr: 'fr-FR',
 };
 
-async function translateSingle(text: string, targetLang: string): Promise<string> {
-  const langPair = `it|${langMap[targetLang] || targetLang}`;
-  const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(langPair)}&de=kristian.rinaldi.01@gmail.com`;
+async function translateWithDeepL(texts: string[], targetLang: string): Promise<string[]> {
+  const target = deeplLangMap[targetLang];
+  if (!target || !DEEPL_API_KEY) throw new Error('DeepL not configured');
+
+  const params = new URLSearchParams();
+  texts.forEach(t => params.append('text', t));
+  params.append('source_lang', 'IT');
+  params.append('target_lang', target);
+
+  const res = await fetch(DEEPL_URL, {
+    method: 'POST',
+    headers: {
+      'Authorization': `DeepL-Auth-Key ${DEEPL_API_KEY}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+
+  if (!res.ok) throw new Error(`DeepL ${res.status}`);
+
+  const data = await res.json();
+  return data.translations.map((t: { text: string }) => t.text);
+}
+
+async function translateWithMyMemory(text: string, targetLang: string): Promise<string> {
+  const langPair = `it|${mymemoryLangMap[targetLang] || targetLang}`;
+  const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(langPair)}`;
 
   const res = await fetch(url);
   if (!res.ok) return text;
@@ -25,9 +56,7 @@ async function translateSingle(text: string, targetLang: string): Promise<string
   const data = await res.json();
   if (data.responseStatus === 200 && data.responseData?.translatedText) {
     const result = data.responseData.translatedText;
-    if (result.toUpperCase() === result && text.toUpperCase() !== text) {
-      return text;
-    }
+    if (result.toUpperCase() === result && text.toUpperCase() !== text) return text;
     return result;
   }
   return text;
@@ -48,9 +77,24 @@ async function processBatch() {
   }
 
   for (const [lang, items] of byLang) {
+    if (DEEPL_API_KEY) {
+      try {
+        const texts = items.map(i => i.text);
+        const results = await translateWithDeepL(texts, lang);
+        items.forEach((item, i) => {
+          const result = results[i] || item.text;
+          translationCache.set(`${lang}:${item.text}`, result);
+          item.resolve(result);
+        });
+        continue;
+      } catch {
+        // DeepL failed, fall through to MyMemory
+      }
+    }
+
     for (const item of items) {
       try {
-        const result = await translateSingle(item.text, lang);
+        const result = await translateWithMyMemory(item.text, lang);
         translationCache.set(`${lang}:${item.text}`, result);
         item.resolve(result);
       } catch {
@@ -69,7 +113,7 @@ function queueTranslation(text: string, lang: string): Promise<string> {
   return new Promise(resolve => {
     batchQueue.push({ text, lang, resolve });
     if (!batchTimer) {
-      batchTimer = setTimeout(processBatch, 100);
+      batchTimer = setTimeout(processBatch, DEEPL_API_KEY ? 80 : 100);
     }
   });
 }
