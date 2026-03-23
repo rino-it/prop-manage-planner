@@ -185,6 +185,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'payment.reasonLabel': 'Motivazione',
     'payment.withheldFull': 'Cauzione trattenuta integralmente',
     'payment.depositReleased': 'Cauzione rilasciata - nessun addebito',
+    'payment.dueDate': 'Scad',
 
     // Cauzione
     'cauzione.release': 'Rilascia Cauzione',
@@ -380,6 +381,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'payment.reasonLabel': 'Reason',
     'payment.withheldFull': 'Security deposit fully withheld',
     'payment.depositReleased': 'Deposit released - no charges',
+    'payment.dueDate': 'Due',
     'cauzione.release': 'Release Deposit',
     'cauzione.captureAll': 'Capture All',
     'cauzione.capturePartial': 'Capture Partial',
@@ -567,6 +569,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'payment.reasonLabel': 'Begründung',
     'payment.withheldFull': 'Kaution vollständig einbehalten',
     'payment.depositReleased': 'Kaution freigegeben - keine Belastung',
+    'payment.dueDate': 'Fällig',
     'cauzione.release': 'Kaution freigeben',
     'cauzione.captureAll': 'Alles einbehalten',
     'cauzione.capturePartial': 'Teilweise einbehalten',
@@ -754,6 +757,7 @@ export const translations: Record<Language, Record<string, string>> = {
     'payment.reasonLabel': 'Motif',
     'payment.withheldFull': 'Caution integralement retenue',
     'payment.depositReleased': 'Caution liberee - aucun frais',
+    'payment.dueDate': 'Ech',
     'cauzione.release': 'Liberer la caution',
     'cauzione.captureAll': 'Retenir tout',
     'cauzione.capturePartial': 'Retenir partiellement',

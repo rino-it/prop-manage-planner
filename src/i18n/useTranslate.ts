@@ -1,14 +1,37 @@
 import { useState, useEffect, useRef } from 'react';
 import { useLanguage } from './LanguageContext';
 
-const LIBRETRANSLATE_URL = 'https://libretranslate.com/translate';
+const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
 
-// Cache globale per sessione: "en:Testo originale" → "Translated text"
 const translationCache = new Map<string, string>();
 
-// Coda batch: accumula richieste e le invia insieme
 let batchQueue: { text: string; lang: string; resolve: (val: string) => void }[] = [];
 let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+const langMap: Record<string, string> = {
+  it: 'it',
+  en: 'en-GB',
+  de: 'de-DE',
+  fr: 'fr-FR',
+};
+
+async function translateSingle(text: string, targetLang: string): Promise<string> {
+  const langPair = `it|${langMap[targetLang] || targetLang}`;
+  const url = `${MYMEMORY_URL}?q=${encodeURIComponent(text)}&langpair=${encodeURIComponent(langPair)}&de=kristian.rinaldi.01@gmail.com`;
+
+  const res = await fetch(url);
+  if (!res.ok) return text;
+
+  const data = await res.json();
+  if (data.responseStatus === 200 && data.responseData?.translatedText) {
+    const result = data.responseData.translatedText;
+    if (result.toUpperCase() === result && text.toUpperCase() !== text) {
+      return text;
+    }
+    return result;
+  }
+  return text;
+}
 
 async function processBatch() {
   const currentBatch = [...batchQueue];
@@ -17,7 +40,6 @@ async function processBatch() {
 
   if (currentBatch.length === 0) return;
 
-  // Raggruppa per lingua
   const byLang = new Map<string, typeof currentBatch>();
   for (const item of currentBatch) {
     const group = byLang.get(item.lang) || [];
@@ -26,46 +48,15 @@ async function processBatch() {
   }
 
   for (const [lang, items] of byLang) {
-    const texts = items.map(i => i.text);
-    try {
-      const res = await fetch(LIBRETRANSLATE_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          q: texts,
-          source: 'it',
-          target: lang,
-          format: 'text',
-        }),
-      });
-
-      if (!res.ok) {
-        // Fallback: restituisci testo originale
-        items.forEach(item => {
-          translationCache.set(`${lang}:${item.text}`, item.text);
-          item.resolve(item.text);
-        });
-        continue;
-      }
-
-      const data = await res.json();
-
-      // LibreTranslate restituisce { translatedText: string | string[] }
-      const translated = Array.isArray(data.translatedText)
-        ? data.translatedText
-        : [data.translatedText];
-
-      items.forEach((item, i) => {
-        const result = translated[i] || item.text;
+    for (const item of items) {
+      try {
+        const result = await translateSingle(item.text, lang);
         translationCache.set(`${lang}:${item.text}`, result);
         item.resolve(result);
-      });
-    } catch {
-      // Errore rete: restituisci testo originale
-      items.forEach(item => {
+      } catch {
         translationCache.set(`${lang}:${item.text}`, item.text);
         item.resolve(item.text);
-      });
+      }
     }
   }
 }
@@ -78,16 +69,11 @@ function queueTranslation(text: string, lang: string): Promise<string> {
   return new Promise(resolve => {
     batchQueue.push({ text, lang, resolve });
     if (!batchTimer) {
-      // Aspetta 50ms per accumulare più richieste nello stesso tick
-      batchTimer = setTimeout(processBatch, 50);
+      batchTimer = setTimeout(processBatch, 100);
     }
   });
 }
 
-/**
- * Hook per tradurre un testo dal DB.
- * Se lingua = 'it', restituisce il testo originale senza chiamate API.
- */
 export function useTranslate(text: string | null | undefined): string {
   const { language } = useLanguage();
   const [translated, setTranslated] = useState(text || '');
@@ -104,11 +90,8 @@ export function useTranslate(text: string | null | undefined): string {
       return;
     }
 
-    // Evita richieste duplicate per lo stesso testo
     const requestId = cacheKey;
     lastRequest.current = requestId;
-
-    // Mostra testo originale durante il caricamento
     setTranslated(text);
 
     queueTranslation(text, language).then(result => {

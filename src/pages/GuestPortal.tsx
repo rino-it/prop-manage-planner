@@ -471,8 +471,8 @@ function GuestPortalInner() {
                                 <div key={pay.id} className="p-4 border rounded-xl bg-white shadow-sm space-y-3">
                                     <div className="flex justify-between items-start">
                                         <div>
-                                            <p className="font-bold capitalize text-sm">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
-                                            <p className="text-xs text-gray-500">Scad: {format(parseISO(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                                            <p className="font-bold capitalize text-sm"><T text={(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')} /></p>
+                                            <p className="text-xs text-gray-500">{t('payment.dueDate') || 'Scad'}: {format(parseISO(pay.data_scadenza), 'dd MMM yyyy')}</p>
                                             {pay.is_preauth && <p className="text-[10px] text-blue-600 mt-1">{t('payment.preauthNote') || 'Non verra addebitata se non necessario'}</p>}
                                         </div>
                                         <p className="font-bold text-lg">EUR {pay.importo}</p>
@@ -503,7 +503,7 @@ function GuestPortalInner() {
                                                         {pay.preauth_reason && (
                                                             <div className="bg-gray-50 px-2.5 py-2 border-t border-gray-200">
                                                                 <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.reasonLabel') || 'Motivazione'}</p>
-                                                                <p className="text-gray-700">{pay.preauth_reason}</p>
+                                                                <p className="text-gray-700"><T text={pay.preauth_reason} /></p>
                                                             </div>
                                                         )}
                                                     </div>
@@ -517,7 +517,7 @@ function GuestPortalInner() {
                                                         {pay.preauth_reason && (
                                                             <div className="bg-gray-50 px-2.5 py-2 border-t border-red-200">
                                                                 <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.reasonLabel') || 'Motivazione'}</p>
-                                                                <p className="text-gray-700">{pay.preauth_reason}</p>
+                                                                <p className="text-gray-700"><T text={pay.preauth_reason} /></p>
                                                             </div>
                                                         )}
                                                     </div>
@@ -537,7 +537,7 @@ function GuestPortalInner() {
                                                     {t('payment.depositReleased') || 'Cauzione rilasciata - nessun addebito'}
                                                 </div>
                                                 {pay.preauth_reason && (
-                                                    <p className="text-gray-500 mt-1">{pay.preauth_reason}</p>
+                                                    <p className="text-gray-500 mt-1"><T text={pay.preauth_reason} /></p>
                                                 )}
                                             </div>
                                         ) : pay.stato === 'da_pagare' ? (
