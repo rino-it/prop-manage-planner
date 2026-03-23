@@ -46,6 +46,23 @@ function GuestPortalInner() {
   const [serviceDetailOpen, setServiceDetailOpen] = useState<any>(null);
   const [serviceMessage, setServiceMessage] = useState('');
   const [showContactForm, setShowContactForm] = useState(false);
+  const [loadingPaymentId, setLoadingPaymentId] = useState<string | null>(null);
+
+  const handlePayNow = async (paymentId: string) => {
+    setLoadingPaymentId(paymentId);
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-create-checkout', {
+        body: { payment_id: paymentId }
+      });
+      if (error) throw error;
+      if (data?.checkout_url) {
+        window.location.href = data.checkout_url;
+      }
+    } catch (e: any) {
+      toast({ title: t('toast.error') || 'Errore', description: e.message, variant: 'destructive' });
+      setLoadingPaymentId(null);
+    }
+  };
 
   // --- QUERIES ---
   const { data: booking, isLoading } = useQuery({
@@ -462,12 +479,26 @@ function GuestPortalInner() {
                                     </div>
                                     <div>
                                         {pay.stato === 'pagato' ? (
-                                            <div className="flex gap-2">
-                                                <Badge className="bg-green-100 text-green-800 flex-1 justify-center py-1">{t('badge.paid')}</Badge>
-                                                {pay.receipt_url && (
-                                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(pay.receipt_url, '_blank')}>
-                                                        <Download className="w-3 h-3 mr-1" /> {t('payment.receipt') || 'Ricevuta'}
-                                                    </Button>
+                                            <div className="space-y-2">
+                                                <div className="flex gap-2">
+                                                    <Badge className="bg-green-100 text-green-800 flex-1 justify-center py-1">{t('badge.paid')}</Badge>
+                                                    {pay.receipt_url && (
+                                                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(pay.receipt_url, '_blank')}>
+                                                            <Download className="w-3 h-3 mr-1" /> {t('payment.receipt') || 'Ricevuta'}
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                                {pay.is_preauth && pay.preauth_captured_amount && Number(pay.preauth_captured_amount) < Number(pay.importo) && (
+                                                    <div className="text-xs bg-red-50 rounded p-2 border border-red-100">
+                                                        <p className="text-red-700">{t('payment.capturedPartial') || 'Trattenuti'}: <strong>EUR {Number(pay.preauth_captured_amount).toFixed(2)}</strong> su EUR {Number(pay.importo).toFixed(2)}</p>
+                                                        <p className="text-green-700">{t('payment.releasedToYou') || 'Rilasciati'}: <strong>EUR {(Number(pay.importo) - Number(pay.preauth_captured_amount)).toFixed(2)}</strong></p>
+                                                        {pay.preauth_reason && <p className="text-gray-500 mt-1">{t('payment.reason') || 'Motivo'}: {pay.preauth_reason}</p>}
+                                                    </div>
+                                                )}
+                                                {pay.is_preauth && pay.preauth_captured_amount && Number(pay.preauth_captured_amount) >= Number(pay.importo) && pay.preauth_reason && (
+                                                    <div className="text-xs bg-red-50 rounded p-2 border border-red-100">
+                                                        <p className="text-gray-500">{t('payment.reason') || 'Motivo'}: {pay.preauth_reason}</p>
+                                                    </div>
                                                 )}
                                             </div>
                                         ) : pay.stato === 'pre_autorizzato' ? (
@@ -482,9 +513,17 @@ function GuestPortalInner() {
                                                 <Unlock className="w-3 h-3 mr-1" />
                                                 {t('badge.released') || 'Cauzione rilasciata'}
                                             </Badge>
-                                        ) : pay.stripe_checkout_url ? (
-                                            <Button className="w-full bg-slate-900 hover:bg-slate-800 text-white" onClick={() => window.open(pay.stripe_checkout_url, '_blank')}>
-                                                <CreditCard className="w-4 h-4 mr-2" />
+                                        ) : pay.stato === 'da_pagare' ? (
+                                            <Button
+                                                className="w-full bg-slate-900 hover:bg-slate-800 text-white"
+                                                disabled={loadingPaymentId === pay.id}
+                                                onClick={() => handlePayNow(pay.id)}
+                                            >
+                                                {loadingPaymentId === pay.id ? (
+                                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                ) : (
+                                                    <CreditCard className="w-4 h-4 mr-2" />
+                                                )}
                                                 {pay.is_preauth ? (t('payment.authorize') || 'Autorizza') : (t('payment.payNow') || 'Paga Ora')}
                                             </Button>
                                         ) : (

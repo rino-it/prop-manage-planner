@@ -519,7 +519,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                                 {pay.receipt_url && <Button size="sm" variant="ghost" className="h-6 text-[10px] text-blue-600" onClick={() => window.open(pay.receipt_url, '_blank')}>Ricevuta</Button>}
                                             </div>
                                         </div>
-                                        {pay.is_preauth && pay.stato === 'pre_autorizzato' && (
+                                        {pay.is_preauth && ['pre_autorizzato', 'pagato', 'rilasciato'].includes(pay.stato) && (
                                             <CauzioneManager payment={pay} bookingId={customerSheetOpen?.id} />
                                         )}
                                     </div>

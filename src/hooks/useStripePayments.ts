@@ -103,6 +103,7 @@ export const useManagePreauth = () => {
       booking_id: string;
       action: 'release' | 'capture_full' | 'capture_partial';
       capture_amount?: number;
+      reason?: string;
     }) => {
       const { data, error } = await supabase.functions.invoke('stripe-manage-preauth', {
         body: params

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Dialog,
   DialogContent,
@@ -11,7 +12,7 @@ import {
   DialogTitle,
   DialogFooter
 } from '@/components/ui/dialog';
-import { Lock, Unlock, Scissors } from 'lucide-react';
+import { Lock, Unlock, Scissors, AlertTriangle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface CauzioneManagerProps {
@@ -20,6 +21,9 @@ interface CauzioneManagerProps {
     importo: number;
     stato: 'da_pagare' | 'pagato' | 'pre_autorizzato' | 'rilasciato' | 'scaduto' | 'annullato';
     is_preauth: boolean;
+    preauth_captured_amount?: number | null;
+    preauth_reason?: string | null;
+    preauth_released?: boolean | null;
   };
   bookingId: string;
 }
@@ -32,193 +36,238 @@ const getPreauthState = (stato: string): PreauthState => {
   return 'preauth';
 };
 
-const getPreauthDisplay = (
-  state: PreauthState,
-  amount: number
-): { label: string; color: string } => {
-  switch (state) {
-    case 'preauth':
-      return { label: `Pre-autorizzata EUR${amount.toFixed(2)}`, color: 'bg-blue-100 text-blue-800' };
-    case 'released':
-      return { label: 'Rilasciata', color: 'bg-green-100 text-green-800' };
-    case 'captured':
-      return { label: `Trattenuta EUR${amount.toFixed(2)}`, color: 'bg-red-100 text-red-800' };
-    default:
-      return { label: 'Sconosciuto', color: 'bg-gray-100 text-gray-800' };
-  }
-};
+type DialogMode = 'release' | 'capture_full' | 'capture_partial' | null;
 
-export default function CauzioneManager({
-  payment,
-  bookingId
-}: CauzioneManagerProps) {
+export default function CauzioneManager({ payment, bookingId }: CauzioneManagerProps) {
   const { mutate: managePreauth, isPending } = useManagePreauth();
-  const [showPartialDialog, setShowPartialDialog] = useState(false);
+  const [dialogMode, setDialogMode] = useState<DialogMode>(null);
   const [partialAmount, setPartialAmount] = useState<string>(payment.importo.toFixed(2));
+  const [reason, setReason] = useState('');
 
-  if (!payment.is_preauth) {
-    return null;
-  }
+  if (!payment.is_preauth) return null;
 
   const state = getPreauthState(payment.stato);
-  const display = getPreauthDisplay(state, payment.importo);
+  const capturedAmount = payment.preauth_captured_amount ? Number(payment.preauth_captured_amount) : null;
+  const releasedAmount = capturedAmount !== null ? payment.importo - capturedAmount : null;
 
-  const handleRelease = () => {
-    managePreauth({
+  const handleConfirm = () => {
+    if (!dialogMode) return;
+
+    const baseParams = {
       payment_id: payment.id,
       booking_id: bookingId,
-      action: 'release'
-    });
-  };
+      reason: reason.trim() || undefined,
+    };
 
-  const handleCaptureAll = () => {
-    managePreauth({
-      payment_id: payment.id,
-      booking_id: bookingId,
-      action: 'capture_full'
-    });
-  };
-
-  const handleCapturePartial = () => {
-    const amount = parseFloat(partialAmount);
-    if (isNaN(amount) || amount <= 0 || amount > payment.importo) {
-      return;
+    if (dialogMode === 'release') {
+      managePreauth({ ...baseParams, action: 'release' });
+    } else if (dialogMode === 'capture_full') {
+      managePreauth({ ...baseParams, action: 'capture_full' });
+    } else if (dialogMode === 'capture_partial') {
+      const amount = parseFloat(partialAmount);
+      if (isNaN(amount) || amount <= 0 || amount > payment.importo) return;
+      managePreauth({ ...baseParams, action: 'capture_partial', capture_amount: amount });
     }
-    managePreauth({
-      payment_id: payment.id,
-      booking_id: bookingId,
-      action: 'capture_partial',
-      capture_amount: amount
-    });
-    setShowPartialDialog(false);
+
+    setDialogMode(null);
+    setReason('');
   };
+
+  const dialogConfig = {
+    release: {
+      title: 'Rilascia Cauzione',
+      description: 'Nessun danno riscontrato. I fondi verranno sbloccati sulla carta del cliente.',
+      confirmLabel: 'Rilascia Cauzione',
+      confirmClass: 'bg-green-600 hover:bg-green-700',
+      reasonRequired: false,
+      reasonLabel: 'Note (facoltativo)',
+    },
+    capture_full: {
+      title: 'Trattieni Cauzione Completa',
+      description: `L'intero importo di EUR ${payment.importo.toFixed(2)} verra addebitato al cliente.`,
+      confirmLabel: 'Conferma Trattenuta',
+      confirmClass: 'bg-red-600 hover:bg-red-700',
+      reasonRequired: true,
+      reasonLabel: 'Motivo della trattenuta (obbligatorio)',
+    },
+    capture_partial: {
+      title: 'Trattieni Cauzione Parziale',
+      description: 'Specifica importo e motivo della trattenuta parziale.',
+      confirmLabel: 'Conferma Trattenuta',
+      confirmClass: 'bg-red-600 hover:bg-red-700',
+      reasonRequired: true,
+      reasonLabel: 'Motivo della trattenuta (obbligatorio)',
+    },
+  };
+
+  const currentConfig = dialogMode ? dialogConfig[dialogMode] : null;
+  const isReasonValid = !currentConfig?.reasonRequired || reason.trim().length > 0;
 
   return (
-    <Card className="border-blue-200 bg-blue-50">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base flex items-center gap-2">
-            <Lock className="h-4 w-4" />
-            Gestione Cauzione
-          </CardTitle>
-          <Badge className={display.color}>
-            {display.label}
-          </Badge>
-        </div>
-      </CardHeader>
+    <>
+      <Card className={`border-2 ${state === 'preauth' ? 'border-blue-200 bg-blue-50' : state === 'released' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lock className="h-4 w-4" />
+              Gestione Cauzione
+            </CardTitle>
+            {state === 'preauth' && (
+              <Badge className="bg-blue-100 text-blue-800">
+                Pre-autorizzata EUR {payment.importo.toFixed(2)}
+              </Badge>
+            )}
+            {state === 'released' && (
+              <Badge className="bg-green-100 text-green-800">Rilasciata</Badge>
+            )}
+            {state === 'captured' && (
+              <Badge className="bg-red-100 text-red-800">
+                Trattenuta EUR {capturedAmount !== null ? capturedAmount.toFixed(2) : payment.importo.toFixed(2)}
+              </Badge>
+            )}
+          </div>
+        </CardHeader>
 
-      {state === 'preauth' && (
         <CardContent className="space-y-3">
-          <p className="text-sm text-gray-700">
-            La cauzione è pre-autorizzata. È possibile rilasciarla oppure trattenerla (totalmente o parzialmente).
-          </p>
+          {state === 'preauth' && (
+            <>
+              <p className="text-sm text-gray-700">
+                La cauzione e pre-autorizzata sulla carta del cliente. Puoi rilasciarla (nessun danno) o trattenerla in caso di danni alla proprieta.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  onClick={() => setDialogMode('release')}
+                  disabled={isPending}
+                  variant="outline"
+                  className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
+                >
+                  <Unlock className="h-4 w-4 mr-2" />
+                  Rilascia
+                </Button>
+                <Button
+                  onClick={() => setDialogMode('capture_full')}
+                  disabled={isPending}
+                  className="flex-1 bg-red-600 hover:bg-red-700"
+                >
+                  <Lock className="h-4 w-4 mr-2" />
+                  Trattieni Tutto
+                </Button>
+                <Button
+                  onClick={() => { setPartialAmount(''); setDialogMode('capture_partial'); }}
+                  disabled={isPending}
+                  variant="outline"
+                  className="flex-1"
+                >
+                  <Scissors className="h-4 w-4 mr-2" />
+                  Parziale
+                </Button>
+              </div>
+            </>
+          )}
 
-          <div className="flex gap-2">
-            <Button
-              onClick={handleRelease}
-              disabled={isPending}
-              variant="outline"
-              className="flex-1"
-            >
-              <Unlock className="h-4 w-4 mr-2" />
-              Rilascia
-            </Button>
+          {state === 'released' && (
+            <div className="space-y-1">
+              <p className="text-sm text-green-700">La cauzione e stata rilasciata integralmente all'ospite.</p>
+              {payment.preauth_reason && (
+                <p className="text-xs text-gray-500">Note: {payment.preauth_reason}</p>
+              )}
+            </div>
+          )}
 
-            <Button
-              onClick={handleCaptureAll}
-              disabled={isPending}
-              className="flex-1 bg-red-600 hover:bg-red-700"
-            >
-              <Lock className="h-4 w-4 mr-2" />
-              Trattieni Tutto
-            </Button>
-
-            <Button
-              onClick={() => setShowPartialDialog(true)}
-              disabled={isPending}
-              variant="outline"
-              className="flex-1"
-            >
-              <Scissors className="h-4 w-4 mr-2" />
-              Trattieni Parziale
-            </Button>
-          </div>
+          {state === 'captured' && (
+            <div className="space-y-2">
+              {capturedAmount !== null && capturedAmount < payment.importo ? (
+                <div className="text-sm space-y-1">
+                  <p className="text-red-700">Trattenuti: <strong>EUR {capturedAmount.toFixed(2)}</strong> su EUR {payment.importo.toFixed(2)}</p>
+                  <p className="text-green-700">Rilasciati all'ospite: <strong>EUR {releasedAmount?.toFixed(2)}</strong></p>
+                </div>
+              ) : (
+                <p className="text-sm text-red-700">Cauzione trattenuta integralmente: <strong>EUR {payment.importo.toFixed(2)}</strong></p>
+              )}
+              {payment.preauth_reason && (
+                <div className="bg-white/60 rounded p-2 border border-red-100">
+                  <p className="text-xs text-gray-500 font-medium mb-0.5">Motivo:</p>
+                  <p className="text-sm text-gray-800">{payment.preauth_reason}</p>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
-      )}
+      </Card>
 
-      {state === 'released' && (
-        <CardContent>
-          <p className="text-sm text-green-700">
-            La cauzione è stata rilasciata all'ospite.
-          </p>
-        </CardContent>
-      )}
-
-      {state === 'captured' && (
-        <CardContent>
-          <p className="text-sm text-red-700">
-            La cauzione è stata trattenuta per importo totale o parziale.
-          </p>
-        </CardContent>
-      )}
-
-      {/* PARTIAL CAPTURE DIALOG */}
-      <Dialog open={showPartialDialog} onOpenChange={setShowPartialDialog}>
+      <Dialog open={dialogMode !== null} onOpenChange={(open) => { if (!open) { setDialogMode(null); setReason(''); } }}>
         <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Trattieni Cauzione Parziale</DialogTitle>
-          </DialogHeader>
+          {currentConfig && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  {dialogMode !== 'release' && <AlertTriangle className="h-5 w-5 text-red-500" />}
+                  {currentConfig.title}
+                </DialogTitle>
+              </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="bg-blue-50 p-3 rounded text-sm">
-              <p className="font-semibold mb-1">Cauzione totale:</p>
-              <p className="text-lg font-bold text-blue-900">
-                EUR {payment.importo.toFixed(2)}
-              </p>
-            </div>
+              <div className="space-y-4">
+                <p className="text-sm text-gray-600">{currentConfig.description}</p>
 
-            <div>
-              <Label htmlFor="capture_amount">Importo da trattenere (EUR)</Label>
-              <Input
-                id="capture_amount"
-                type="number"
-                min="0.01"
-                max={payment.importo}
-                step="0.01"
-                value={partialAmount}
-                onChange={(e) => setPartialAmount(e.target.value)}
-                className="mt-2"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                Massimo: EUR {payment.importo.toFixed(2)}
-              </p>
-            </div>
+                {dialogMode === 'capture_partial' && (
+                  <>
+                    <div className="bg-blue-50 p-3 rounded text-sm">
+                      <p className="text-xs text-gray-500">Cauzione totale</p>
+                      <p className="text-lg font-bold text-blue-900">EUR {payment.importo.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="capture_amount">Importo da trattenere (EUR)</Label>
+                      <Input
+                        id="capture_amount"
+                        type="number"
+                        min="0.01"
+                        max={payment.importo}
+                        step="0.01"
+                        value={partialAmount}
+                        onChange={(e) => setPartialAmount(e.target.value)}
+                        className="mt-1"
+                      />
+                      {partialAmount && parseFloat(partialAmount) > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">
+                          Rilasciato al cliente: EUR {(payment.importo - parseFloat(partialAmount || '0')).toFixed(2)}
+                        </p>
+                      )}
+                    </div>
+                  </>
+                )}
 
-            <div className="bg-gray-50 p-3 rounded text-sm">
-              <p className="text-gray-700">
-                Rilasciato: EUR {(payment.importo - parseFloat(partialAmount || '0')).toFixed(2)}
-              </p>
-            </div>
-          </div>
+                <div>
+                  <Label htmlFor="preauth_reason">{currentConfig.reasonLabel}</Label>
+                  <Textarea
+                    id="preauth_reason"
+                    value={reason}
+                    onChange={(e) => setReason(e.target.value)}
+                    placeholder={dialogMode === 'release' ? 'Es: Nessun danno riscontrato al checkout' : 'Es: Danni al pavimento della camera, macchia divano soggiorno'}
+                    className="mt-1"
+                    rows={3}
+                  />
+                  {currentConfig.reasonRequired && !reason.trim() && (
+                    <p className="text-xs text-red-500 mt-1">Il motivo e obbligatorio per trattenere la cauzione</p>
+                  )}
+                </div>
+              </div>
 
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowPartialDialog(false)}
-              disabled={isPending}
-            >
-              Annulla
-            </Button>
-            <Button
-              onClick={handleCapturePartial}
-              disabled={isPending || !partialAmount || parseFloat(partialAmount) <= 0}
-              className="bg-red-600 hover:bg-red-700"
-            >
-              {isPending ? 'Elaborazione...' : 'Trattieni'}
-            </Button>
-          </DialogFooter>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => { setDialogMode(null); setReason(''); }} disabled={isPending}>
+                  Annulla
+                </Button>
+                <Button
+                  onClick={handleConfirm}
+                  disabled={isPending || !isReasonValid || (dialogMode === 'capture_partial' && (!partialAmount || parseFloat(partialAmount) <= 0 || parseFloat(partialAmount) > payment.importo))}
+                  className={currentConfig.confirmClass}
+                >
+                  {isPending ? 'Elaborazione...' : currentConfig.confirmLabel}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
-    </Card>
+    </>
   );
 }
