@@ -251,7 +251,7 @@ export default function TenantManager() {
                                         <Badge variant={p.stato === 'pagato' ? 'default' : 'outline'}>{p.stato}</Badge>
                                     </div>
                                 </div>
-                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                                <div className="grid grid-cols-3 gap-2">
                                     <Button size="sm" className="bg-green-600 hover:bg-green-700 text-white text-xs" onClick={() => sendWhatsApp(phone || '', p.importo, p.data_scadenza, p.tipo || 'rata')}>
                                         <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
                                     </Button>

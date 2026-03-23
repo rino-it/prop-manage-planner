@@ -332,7 +332,7 @@ function TenantPortalInner() {
         </Card>
 
         <Tabs defaultValue="status" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-4">
+            <TabsList className="grid w-full grid-cols-4 mb-4">
                 <TabsTrigger value="status" className="text-xs">{t('tab.status')}</TabsTrigger>
                 <TabsTrigger value="services" className="text-xs">{t('tab.services')}</TabsTrigger>
                 <TabsTrigger value="docs" className="text-xs">{t('tab.files')}</TabsTrigger>

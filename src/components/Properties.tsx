@@ -378,7 +378,7 @@ const Properties = () => {
                     </CardTitle>
                     <p className="text-xs text-gray-500 flex items-center"><MapPin className="w-3 h-3 mr-1"/> {prop.citta}</p>
                 </CardHeader>
-                <CardFooter className="bg-slate-50 p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <CardFooter className="bg-slate-50 p-3 grid grid-cols-3 gap-2">
                     <Button variant="outline" className="w-full text-xs h-9 md:h-8" onClick={() => setDetailsOpen(prop)}>Analytics</Button>
                     <Button variant="outline" className="w-full text-xs h-9 md:h-8 bg-white hover:text-blue-700 border-blue-200 text-blue-600" onClick={() => setDocsOpen(prop)}>
                         <FolderOpen className="w-3 h-3 mr-1" /> Documenti

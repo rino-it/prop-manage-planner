@@ -421,7 +421,7 @@ function GuestPortalInner() {
         {/* TABS */}
         {(isCheckinUnlocked || payments?.length > 0 || myTickets?.length > 0) && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4">
+                <TabsList className="w-full grid grid-cols-4">
                     <TabsTrigger value="experiences" className="text-xs">{t('tab.experiences')}</TabsTrigger>
                     <TabsTrigger value="payments" className="text-xs">{t('tab.extra')}</TabsTrigger>
                     <TabsTrigger value="docs" className="text-xs">{t('tab.documents')}</TabsTrigger>

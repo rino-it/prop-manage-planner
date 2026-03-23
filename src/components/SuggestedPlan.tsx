@@ -114,7 +114,7 @@ export default function SuggestedPlan() {
         </div>
 
         {/* KPI BOX */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-6 mb-10">
+        <div className="grid grid-cols-3 gap-6 mb-10">
             <div className="p-5 bg-green-50 rounded-xl border border-green-100 print:border-gray-200">
                 <p className="text-xs font-bold text-green-700 uppercase mb-2">Totale Incassi</p>
                 <p className="text-3xl font-bold text-green-900">+ € {totalIncome.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
