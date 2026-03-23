@@ -489,15 +489,37 @@ function GuestPortalInner() {
                                                     )}
                                                 </div>
                                                 {pay.is_preauth && pay.preauth_captured_amount && Number(pay.preauth_captured_amount) < Number(pay.importo) && (
-                                                    <div className="text-xs bg-red-50 rounded p-2 border border-red-100">
-                                                        <p className="text-red-700">{t('payment.capturedPartial') || 'Trattenuti'}: <strong>EUR {Number(pay.preauth_captured_amount).toFixed(2)}</strong> su EUR {Number(pay.importo).toFixed(2)}</p>
-                                                        <p className="text-green-700">{t('payment.releasedToYou') || 'Rilasciati'}: <strong>EUR {(Number(pay.importo) - Number(pay.preauth_captured_amount)).toFixed(2)}</strong></p>
-                                                        {pay.preauth_reason && <p className="text-gray-500 mt-1">{t('payment.reason') || 'Motivo'}: {pay.preauth_reason}</p>}
+                                                    <div className="text-xs rounded-lg overflow-hidden border border-gray-200">
+                                                        <div className="flex">
+                                                            <div className="flex-1 bg-red-50 p-2.5 border-r border-gray-200">
+                                                                <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.withheld') || 'Trattenuto'}</p>
+                                                                <p className="text-red-700 font-semibold">EUR {Number(pay.preauth_captured_amount).toFixed(2)}</p>
+                                                            </div>
+                                                            <div className="flex-1 bg-green-50 p-2.5">
+                                                                <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.refunded') || 'Rimborsato'}</p>
+                                                                <p className="text-green-700 font-semibold">EUR {(Number(pay.importo) - Number(pay.preauth_captured_amount)).toFixed(2)}</p>
+                                                            </div>
+                                                        </div>
+                                                        {pay.preauth_reason && (
+                                                            <div className="bg-gray-50 px-2.5 py-2 border-t border-gray-200">
+                                                                <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.reasonLabel') || 'Motivazione'}</p>
+                                                                <p className="text-gray-700">{pay.preauth_reason}</p>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
-                                                {pay.is_preauth && pay.preauth_captured_amount && Number(pay.preauth_captured_amount) >= Number(pay.importo) && pay.preauth_reason && (
-                                                    <div className="text-xs bg-red-50 rounded p-2 border border-red-100">
-                                                        <p className="text-gray-500">{t('payment.reason') || 'Motivo'}: {pay.preauth_reason}</p>
+                                                {pay.is_preauth && pay.preauth_captured_amount && Number(pay.preauth_captured_amount) >= Number(pay.importo) && (
+                                                    <div className="text-xs rounded-lg overflow-hidden border border-red-200">
+                                                        <div className="bg-red-50 p-2.5">
+                                                            <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.withheldFull') || 'Cauzione trattenuta integralmente'}</p>
+                                                            <p className="text-red-700 font-semibold">EUR {Number(pay.importo).toFixed(2)}</p>
+                                                        </div>
+                                                        {pay.preauth_reason && (
+                                                            <div className="bg-gray-50 px-2.5 py-2 border-t border-red-200">
+                                                                <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.reasonLabel') || 'Motivazione'}</p>
+                                                                <p className="text-gray-700">{pay.preauth_reason}</p>
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
@@ -509,10 +531,15 @@ function GuestPortalInner() {
                                                 </Badge>
                                             </div>
                                         ) : pay.stato === 'rilasciato' ? (
-                                            <Badge className="bg-gray-100 text-gray-600 flex-1 justify-center py-1">
-                                                <Unlock className="w-3 h-3 mr-1" />
-                                                {t('badge.released') || 'Cauzione rilasciata'}
-                                            </Badge>
+                                            <div className="w-full text-xs rounded-lg overflow-hidden border border-green-200 bg-green-50 p-2.5 text-center">
+                                                <div className="flex items-center justify-center gap-1.5 text-green-700 font-medium">
+                                                    <CheckCircle className="w-3.5 h-3.5" />
+                                                    {t('payment.depositReleased') || 'Cauzione rilasciata - nessun addebito'}
+                                                </div>
+                                                {pay.preauth_reason && (
+                                                    <p className="text-gray-500 mt-1">{pay.preauth_reason}</p>
+                                                )}
+                                            </div>
                                         ) : pay.stato === 'da_pagare' ? (
                                             <Button
                                                 className="w-full bg-slate-900 hover:bg-slate-800 text-white"
