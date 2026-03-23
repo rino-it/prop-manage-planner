@@ -432,16 +432,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
                             <div className="space-y-3">
                                 {activeDocs?.map(doc => (
-                                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
-                                        <div className="flex items-center gap-3 overflow-hidden">
-                                            <div className="p-2 bg-slate-100 rounded text-slate-500 shrink-0"><FileText className="w-5 h-5" /></div>
-                                            <div className="min-w-0">
-                                                <p className="font-medium text-sm text-gray-900 truncate">{doc.filename}</p>
-                                                <p className="text-xs text-gray-500">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
-                                            </div>
+                                    <div key={doc.id} className="flex items-center gap-2 p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
+                                        <div className="p-2 bg-slate-100 rounded text-slate-500 shrink-0"><FileText className="w-4 h-4" /></div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-medium text-sm text-gray-900 break-all line-clamp-2">{doc.filename}</p>
+                                            <p className="text-xs text-gray-500">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <Button variant="ghost" size="sm" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
                                             {doc.status === 'in_revisione' ? (
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-600 hover:bg-green-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })} title="Approva"><Check className="w-4 h-4" /></Button>

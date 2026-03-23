@@ -106,62 +106,59 @@ export default function CauzioneManager({ payment, bookingId }: CauzioneManagerP
   return (
     <>
       <Card className={`border-2 ${state === 'preauth' ? 'border-blue-200 bg-blue-50' : state === 'released' ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}`}>
-        <CardHeader className="pb-2 px-3 md:px-6">
-          <div className="flex flex-wrap items-center gap-2">
-            <CardTitle className="text-sm md:text-base flex items-center gap-2">
-              <Lock className="h-4 w-4 shrink-0" />
+        <CardHeader className="pb-2">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Lock className="h-4 w-4" />
               Gestione Cauzione
             </CardTitle>
             {state === 'preauth' && (
-              <Badge className="bg-blue-100 text-blue-800 text-[10px]">
-                Pre-auth EUR {payment.importo.toFixed(2)}
+              <Badge className="bg-blue-100 text-blue-800">
+                Pre-autorizzata EUR {payment.importo.toFixed(2)}
               </Badge>
             )}
             {state === 'released' && (
-              <Badge className="bg-green-100 text-green-800 text-[10px]">Rilasciata</Badge>
+              <Badge className="bg-green-100 text-green-800">Rilasciata</Badge>
             )}
             {state === 'captured' && (
-              <Badge className="bg-red-100 text-red-800 text-[10px]">
+              <Badge className="bg-red-100 text-red-800">
                 Trattenuta EUR {capturedAmount !== null ? capturedAmount.toFixed(2) : payment.importo.toFixed(2)}
               </Badge>
             )}
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-3 px-3 md:px-6">
+        <CardContent className="space-y-3">
           {state === 'preauth' && (
             <>
               <p className="text-sm text-gray-700">
                 La cauzione e pre-autorizzata sulla carta del cliente. Puoi rilasciarla (nessun danno) o trattenerla in caso di danni alla proprieta.
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className="flex gap-2">
                 <Button
                   onClick={() => setDialogMode('release')}
                   disabled={isPending}
                   variant="outline"
-                  size="sm"
-                  className="border-green-300 text-green-700 hover:bg-green-50 text-xs"
+                  className="flex-1 border-green-300 text-green-700 hover:bg-green-50"
                 >
-                  <Unlock className="h-3.5 w-3.5 mr-1.5" />
+                  <Unlock className="h-4 w-4 mr-2" />
                   Rilascia
                 </Button>
                 <Button
                   onClick={() => setDialogMode('capture_full')}
                   disabled={isPending}
-                  size="sm"
-                  className="bg-red-600 hover:bg-red-700 text-xs"
+                  className="flex-1 bg-red-600 hover:bg-red-700"
                 >
-                  <Lock className="h-3.5 w-3.5 mr-1.5" />
+                  <Lock className="h-4 w-4 mr-2" />
                   Trattieni Tutto
                 </Button>
                 <Button
                   onClick={() => { setPartialAmount(''); setDialogMode('capture_partial'); }}
                   disabled={isPending}
                   variant="outline"
-                  size="sm"
-                  className="text-xs"
+                  className="flex-1"
                 >
-                  <Scissors className="h-3.5 w-3.5 mr-1.5" />
+                  <Scissors className="h-4 w-4 mr-2" />
                   Parziale
                 </Button>
               </div>
