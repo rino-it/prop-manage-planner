@@ -96,7 +96,7 @@ export default function AdminNotificationBell() {
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[420px] p-0 mr-2 sm:mr-4 shadow-2xl border-slate-200" align="end">
+      <PopoverContent className="w-[420px] p-0 mr-4 shadow-2xl border-slate-200" align="end">
         {/* Header */}
         <div className="p-4 border-b bg-gradient-to-r from-slate-50 to-slate-100">
           <div className="flex justify-between items-center">
