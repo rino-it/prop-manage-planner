@@ -422,7 +422,7 @@ export default function Tickets() {
                 </div>
 
                 {/* 3. Ricerca & Priorità (NUOVI) */}
-                <div className="flex flex-1 gap-2 min-w-[250px]">
+                <div className="flex flex-1 gap-2 md:min-w-[250px]">
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"/>
                         <Input className="pl-9 h-9 bg-white text-sm" placeholder="Cerca ticket, proprietà..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />

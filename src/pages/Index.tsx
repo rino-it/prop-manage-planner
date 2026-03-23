@@ -75,7 +75,7 @@ const Index = () => {
   if (userStatus === null) return <div className="min-h-screen flex items-center justify-center bg-slate-50 text-slate-400">Caricamento profilo...</div>;
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50 max-w-[100vw] overflow-x-hidden">
       {/* Sidebar Desktop */}
       <div className="hidden md:block h-screen sticky top-0 border-r bg-white z-10 w-64">
         <Sidebar activeTab={activeTab} setActiveTab={(tab) => navigate(tab === 'dashboard' ? '/' : `/${tab}`)} />
@@ -111,7 +111,7 @@ const Index = () => {
         </div>
         
         {/* Area Contenuto */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6">
             <Outlet />
         </main>
       </div>
