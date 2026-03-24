@@ -7,7 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { Home, Car, FileText, Loader2 } from 'lucide-react';
-import { useQueryClient } from '@tanstack/react-query'; // <--- 1. IMPORT AGGIUNTO
+import { useQueryClient } from '@tanstack/react-query';
+import { AddressAutocomplete } from '@/components/AddressAutocomplete';
+import { compressImage, isImageFile } from '@/utils/imageCompression';
 
 interface AddPropertyDialogProps {
   isOpen: boolean;
@@ -60,8 +62,9 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
   }, [propertyToEdit, isOpen]);
 
   const uploadFile = async (file: File, path: string) => {
-    const fileName = `${path}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-    const { error } = await supabase.storage.from('vehicle-docs').upload(fileName, file);
+    const processedFile = isImageFile(file) ? await compressImage(file) : file;
+    const fileName = `${path}_${Date.now()}_${processedFile.name.replace(/\s+/g, '_')}`;
+    const { error } = await supabase.storage.from('vehicle-docs').upload(fileName, processedFile);
     if (error) throw error;
     return fileName;
   };
@@ -170,7 +173,11 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
               </div>
               <div className="space-y-2">
                 <Label>Indirizzo Completo</Label>
-                <Input placeholder="Via Roma 1, Milano" value={formData.indirizzo} onChange={e => setFormData({...formData, indirizzo: e.target.value})} />
+                <AddressAutocomplete
+                  value={formData.indirizzo}
+                  onChange={(addr) => setFormData({...formData, indirizzo: addr})}
+                  onSelect={(result) => setFormData({...formData, indirizzo: result.display_name})}
+                />
               </div>
             </>
           ) : (

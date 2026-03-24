@@ -20,6 +20,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { LanguageProvider, useLanguage } from '@/i18n/LanguageContext';
 import LanguagePicker from '@/components/LanguagePicker';
 import T from '@/components/TranslatedText';
+import { compressImage, isImageFile } from '@/utils/imageCompression';
+import { validateEmail, suggestEmailCorrection } from '@/utils/emailValidation';
 
 export default function GuestPortal() {
   return (
@@ -47,6 +49,15 @@ function GuestPortalInner() {
   const [serviceMessage, setServiceMessage] = useState('');
   const [showContactForm, setShowContactForm] = useState(false);
   const [loadingPaymentId, setLoadingPaymentId] = useState<string | null>(null);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
+
+  const handleGuestEmailChange = (email: string) => {
+    setContactForm({ ...contactForm, email });
+    const validation = validateEmail(email);
+    setEmailError(email.length > 0 && !validation.valid ? (validation.error || null) : null);
+    setEmailSuggestion(suggestEmailCorrection(email));
+  };
 
   const handlePayNow = async (paymentId: string) => {
     setLoadingPaymentId(paymentId);
@@ -173,8 +184,9 @@ function GuestPortalInner() {
       }
 
       setIsUploading(true);
-      const fileName = `doc_${booking.id}_${Date.now()}.${file.name.split('.').pop()}`;
-      const { error: upError } = await supabase.storage.from('documents').upload(fileName, file);
+      const processedFile = isImageFile(file) ? await compressImage(file) : file;
+      const fileName = `doc_${booking.id}_${Date.now()}.${processedFile.name.split('.').pop()}`;
+      const { error: upError } = await supabase.storage.from('documents').upload(fileName, processedFile);
       if (upError) throw upError;
 
       const { error: dbError } = await supabase.from('booking_documents').insert({
@@ -354,10 +366,19 @@ function GuestPortalInner() {
                     <div className="space-y-4 animate-in fade-in">
                         <p className="text-sm text-slate-600 text-center">{t('contact.prompt')}</p>
                         <div className="space-y-3">
-                            <div><Label className="text-xs uppercase text-slate-500">{t('label.email')}</Label><Input placeholder={t('placeholder.email')} value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
+                            <div>
+                              <Label className="text-xs uppercase text-slate-500">{t('label.email')}</Label>
+                              <Input placeholder={t('placeholder.email')} value={contactForm.email} onChange={e => handleGuestEmailChange(e.target.value)} className={emailError ? 'border-red-400' : ''} />
+                              {emailError && <p className="text-xs text-red-600 mt-1">{emailError}</p>}
+                              {emailSuggestion && (
+                                <button type="button" className="text-xs text-blue-600 mt-1 underline" onClick={() => handleGuestEmailChange(emailSuggestion)}>
+                                  Forse intendevi: {emailSuggestion}?
+                                </button>
+                              )}
+                            </div>
                             <div><Label className="text-xs uppercase text-slate-500">{t('label.phone')}</Label><Input placeholder={t('placeholder.phone')} value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
                         </div>
-                        <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact}>{isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : t('button.next')}</Button>
+                        <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact || !!emailError}>{isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : t('button.next')}</Button>
                     </div>
                 )}
 
@@ -421,7 +442,7 @@ function GuestPortalInner() {
         {/* TABS */}
         {(isCheckinUnlocked || payments?.length > 0 || myTickets?.length > 0) && (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-                <TabsList className="w-full grid grid-cols-4">
+                <TabsList className="w-full grid grid-cols-2 sm:grid-cols-4">
                     <TabsTrigger value="experiences" className="text-xs">{t('tab.experiences')}</TabsTrigger>
                     <TabsTrigger value="payments" className="text-xs">{t('tab.extra')}</TabsTrigger>
                     <TabsTrigger value="docs" className="text-xs">{t('tab.documents')}</TabsTrigger>

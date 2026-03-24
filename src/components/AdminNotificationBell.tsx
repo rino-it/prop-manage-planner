@@ -20,32 +20,33 @@ export default function AdminNotificationBell() {
     isRealtimeConnected,
   } = useAdminNotifications();
 
-  // Request browser notification permission on mount
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
 
-  const getNotificationIcon = (tipo: string) => {
-    switch (tipo) {
-      case 'documento_caricato':
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case 'info':
         return <FileText className="w-4 h-4 text-blue-500" />;
-      case 'scadenza_preventivo':
+      case 'error':
+        return <AlertTriangle className="w-4 h-4 text-red-500" />;
+      case 'warning':
         return <AlertTriangle className="w-4 h-4 text-orange-500" />;
       default:
         return <Clock className="w-4 h-4 text-gray-500" />;
     }
   };
 
-  const getPriorityColor = (priorita: string) => {
-    switch (priorita) {
-      case 'critica':
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'error':
         return 'bg-red-100 border-red-500 hover:bg-red-50';
-      case 'alta':
+      case 'warning':
         return 'bg-orange-100 border-orange-500 hover:bg-orange-50';
-      case 'media':
-        return 'bg-yellow-100 border-yellow-500 hover:bg-yellow-50';
+      case 'info':
+        return 'bg-blue-100 border-blue-500 hover:bg-blue-50';
       default:
         return 'bg-gray-100 border-gray-500 hover:bg-gray-50';
     }
@@ -55,11 +56,12 @@ export default function AdminNotificationBell() {
     markAsRead(notification.id);
     setIsOpen(false);
 
-    // Navigate based on notification type
-    if (notification.tipo === 'documento_caricato' && notification.booking_id) {
-      navigate(`/bookings?highlight=${notification.booking_id}`);
-    } else if (notification.tipo === 'scadenza_preventivo' && notification.ticket_id) {
+    if (notification.link) {
+      navigate(notification.link);
+    } else if (notification.ticket_id) {
       navigate(`/tickets?highlight=${notification.ticket_id}`);
+    } else if (notification.booking_id) {
+      navigate(`/bookings?highlight=${notification.booking_id}`);
     }
   };
 
@@ -74,7 +76,6 @@ export default function AdminNotificationBell() {
         >
           <Bell className="h-5 w-5" />
 
-          {/* Unread badge with pulse */}
           {unreadCount > 0 && (
             <>
               <span className="absolute top-1 right-1 h-3 w-3 rounded-full bg-red-500 animate-pulse border-2 border-white" />
@@ -86,7 +87,6 @@ export default function AdminNotificationBell() {
             </>
           )}
 
-          {/* Connection status indicator */}
           {!isRealtimeConnected && (
             <WifiOff
               className="absolute bottom-0 right-0 h-3 w-3 text-yellow-600"
@@ -96,12 +96,11 @@ export default function AdminNotificationBell() {
         </Button>
       </PopoverTrigger>
 
-      <PopoverContent className="w-[420px] p-0 mr-4 shadow-2xl border-slate-200" align="end">
-        {/* Header */}
+      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[420px] p-0 mr-2 sm:mr-4 shadow-2xl border-slate-200" align="end">
         <div className="p-4 border-b bg-gradient-to-r from-slate-50 to-slate-100">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <h4 className="font-bold text-slate-800 text-lg">Notifiche Admin</h4>
+              <h4 className="font-bold text-slate-800 text-lg">Notifiche</h4>
               {unreadCount > 0 && (
                 <Badge variant="destructive" className="px-2 h-6">
                   {unreadCount}
@@ -110,7 +109,7 @@ export default function AdminNotificationBell() {
               {isRealtimeConnected ? (
                 <Wifi className="h-4 w-4 text-green-500" title="Realtime connesso" />
               ) : (
-                <WifiOff className="h-4 w-4 text-yellow-600" title="Modalità offline" />
+                <WifiOff className="h-4 w-4 text-yellow-600" title="Modalita offline" />
               )}
             </div>
             {unreadCount > 0 && (
@@ -127,7 +126,6 @@ export default function AdminNotificationBell() {
           </div>
         </div>
 
-        {/* Notification list */}
         <ScrollArea className="h-[500px]">
           {notifications.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full py-16 text-slate-400">
@@ -139,26 +137,26 @@ export default function AdminNotificationBell() {
               {notifications.map((notification) => (
                 <div
                   key={notification.id}
-                  className={`p-4 hover:bg-blue-50 cursor-pointer transition-all border-l-4 ${getPriorityColor(
-                    notification.priorita
+                  className={`p-4 hover:bg-blue-50 cursor-pointer transition-all border-l-4 ${getTypeColor(
+                    notification.type
                   )}`}
                   onClick={() => handleNotificationClick(notification)}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="mt-1">{getNotificationIcon(notification.tipo)}</div>
+                    <div className="mt-1">{getNotificationIcon(notification.type)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-start mb-1">
                         <p className="font-semibold text-sm text-slate-900 line-clamp-1">
-                          {notification.titolo}
+                          {notification.title}
                         </p>
-                        {notification.priorita === 'critica' && (
+                        {notification.type === 'error' && (
                           <Badge variant="destructive" className="ml-2 text-[10px] shrink-0">
                             URGENTE
                           </Badge>
                         )}
                       </div>
                       <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed mb-2">
-                        {notification.messaggio}
+                        {notification.message}
                       </p>
                       <div className="flex justify-between items-center">
                         <span className="text-[10px] text-slate-400">
@@ -168,7 +166,7 @@ export default function AdminNotificationBell() {
                           })}
                         </span>
                         <Badge variant="outline" className="text-[9px] uppercase">
-                          {notification.tipo.replace('_', ' ')}
+                          {notification.type}
                         </Badge>
                       </div>
                     </div>

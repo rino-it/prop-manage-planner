@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { WeatherWidget } from '@/components/WeatherWidget';
+import { geocodeAddress } from '@/utils/geocoding';
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
@@ -45,6 +47,23 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
+
+  const { data: weatherCoords } = useQuery({
+    queryKey: ['dashboard-weather-coords'],
+    queryFn: async () => {
+      const { data: props } = await supabase
+        .from('properties_real')
+        .select('nome, via, citta, provincia')
+        .limit(1)
+        .maybeSingle();
+      if (!props?.via) return null;
+      const address = `${props.via}, ${props.citta || ''} ${props.provincia || ''}`.trim();
+      const geo = await geocodeAddress(address);
+      if (!geo) return null;
+      return { lat: geo.lat, lon: geo.lon, name: props.nome };
+    },
+    staleTime: 24 * 60 * 60 * 1000,
+  });
 
   // --- FETCH DATI ---
   const { data: rawData } = useQuery({
@@ -289,7 +308,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                     />
                 </div>
             </Card>
-            
+
+            {weatherCoords && (
+              <WeatherWidget
+                latitude={weatherCoords.lat}
+                longitude={weatherCoords.lon}
+                propertyName={weatherCoords.name}
+                days={5}
+              />
+            )}
+
             <Card className="shadow-sm border-l-4 border-l-blue-600 h-[300px] flex flex-col">
                 <CardHeader className="py-3 border-b bg-slate-50/50">
                     <CardTitle className="text-base flex items-center gap-2">

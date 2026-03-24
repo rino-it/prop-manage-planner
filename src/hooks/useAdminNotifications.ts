@@ -8,18 +8,14 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 interface AdminNotification {
   id: string;
   user_id: string;
-  tipo: string;
-  titolo: string;
-  messaggio: string;
-  data_scadenza: string;
-  priorita: 'bassa' | 'media' | 'alta' | 'critica';
-  inviata: boolean;
-  data_invio: string | null;
+  type: string;
+  title: string;
+  message: string;
+  link: string | null;
+  is_read: boolean;
   created_at: string;
   booking_id?: string | null;
   ticket_id?: string | null;
-  property_real_id?: string | null;
-  property_mobile_id?: string | null;
 }
 
 export const useAdminNotifications = () => {
@@ -29,7 +25,6 @@ export const useAdminNotifications = () => {
   const [channel, setChannel] = useState<RealtimeChannel | null>(null);
   const [connectionAttempts, setConnectionAttempts] = useState(0);
 
-  // Fetch unread notifications
   const { data: notifications = [], isLoading, error } = useQuery<AdminNotification[]>({
     queryKey: ['admin-notifications', user?.id],
     queryFn: async () => {
@@ -39,17 +34,16 @@ export const useAdminNotifications = () => {
         .from('notifications')
         .select('*')
         .eq('user_id', user.id)
-        .eq('inviata', false)
+        .eq('is_read', false)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
       return data as AdminNotification[];
     },
     enabled: !!user,
-    refetchInterval: 30000, // Fallback polling every 30s if WebSocket fails
+    refetchInterval: 30000,
   });
 
-  // Setup Realtime WebSocket subscription
   useEffect(() => {
     if (!user) return;
 
@@ -67,28 +61,23 @@ export const useAdminNotifications = () => {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('📬 New notification received:', payload.new);
-
           const newNotification = payload.new as AdminNotification;
 
-          // Play sound for high-priority notifications
-          if (['critica', 'alta'].includes(newNotification.priorita)) {
+          if (['error'].includes(newNotification.type)) {
             playNotificationSound();
           }
 
-          // Optimistically update cache (instant UI update)
           queryClient.setQueryData<AdminNotification[]>(
             ['admin-notifications', user.id],
             (old = []) => [newNotification, ...old]
           );
 
-          // Browser notification (if permission granted)
           if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification(newNotification.titolo, {
-              body: newNotification.messaggio,
+            new Notification(newNotification.title, {
+              body: newNotification.message,
               icon: '/logo.png',
               tag: newNotification.id,
-              requireInteraction: newNotification.priorita === 'critica',
+              requireInteraction: newNotification.type === 'error',
             });
           }
         }
@@ -102,9 +91,6 @@ export const useAdminNotifications = () => {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          console.log('🔄 Notification updated:', payload.new);
-
-          // Update cache
           queryClient.setQueryData<AdminNotification[]>(
             ['admin-notifications', user.id],
             (old = []) =>
@@ -117,44 +103,37 @@ export const useAdminNotifications = () => {
         }
       )
       .subscribe((status, err) => {
-        console.log('WebSocket status:', status);
-
         if (status === 'CHANNEL_ERROR') {
-          console.error('❌ Realtime error:', err);
+          console.error('Realtime error:', err);
 
           if (connectionAttempts < MAX_RECONNECT_ATTEMPTS) {
             const delay = RECONNECT_DELAY_BASE * Math.pow(2, connectionAttempts);
-            console.log(`Reconnecting in ${delay}ms (attempt ${connectionAttempts + 1})`);
-
             setTimeout(() => {
               setConnectionAttempts((prev) => prev + 1);
               notificationChannel.subscribe();
             }, delay);
           } else {
             toast({
-              title: 'Notifiche in modalità offline',
+              title: 'Notifiche in modalita offline',
               description: 'Le notifiche saranno aggiornate ogni 30 secondi',
             });
           }
         } else if (status === 'SUBSCRIBED') {
-          console.log('✅ Realtime connected');
-          setConnectionAttempts(0); // Reset on successful connection
+          setConnectionAttempts(0);
         }
       });
 
     setChannel(notificationChannel);
 
     return () => {
-      console.log('Unsubscribing from notifications channel');
       notificationChannel.unsubscribe();
     };
   }, [user, queryClient, connectionAttempts, toast]);
 
-  // Mark single notification as read
   const markAsRead = async (notificationId: string) => {
     const { error } = await supabase
       .from('notifications')
-      .update({ inviata: true, data_invio: new Date().toISOString() })
+      .update({ is_read: true })
       .eq('id', notificationId);
 
     if (error) {
@@ -168,15 +147,14 @@ export const useAdminNotifications = () => {
     }
   };
 
-  // Mark all notifications as read
   const markAllAsRead = async () => {
     if (!user) return;
 
     const { error } = await supabase
       .from('notifications')
-      .update({ inviata: true, data_invio: new Date().toISOString() })
+      .update({ is_read: true })
       .eq('user_id', user.id)
-      .eq('inviata', false);
+      .eq('is_read', false);
 
     if (error) {
       toast({
@@ -200,7 +178,6 @@ export const useAdminNotifications = () => {
   };
 };
 
-// Helper: Play notification sound
 function playNotificationSound() {
   try {
     const audio = new Audio('/notification.mp3');

@@ -17,6 +17,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LanguageProvider, useLanguage } from '@/i18n/LanguageContext';
 import LanguagePicker from '@/components/LanguagePicker';
 import T from '@/components/TranslatedText';
+import { CodiceFiscaleInput } from '@/components/CodiceFiscaleInput';
+import { validateEmail, suggestEmailCorrection } from '@/utils/emailValidation';
 
 export default function TenantPortal() {
   return (
@@ -36,8 +38,10 @@ function TenantPortalInner() {
   const [ticketData, setTicketData] = useState({ titolo: '', descrizione: '', priorita: 'bassa' });
   const [paymentTicketOpen, setPaymentTicketOpen] = useState<any>(null);
   const [payPromise, setPayPromise] = useState({ date: '', method: '' });
-  const [contactForm, setContactForm] = useState({ email: '', phone: '' });
+  const [contactForm, setContactForm] = useState({ email: '', phone: '', codiceFiscale: '' });
   const [isSavingContact, setIsSavingContact] = useState(false);
+  const [emailError, setEmailError] = useState<string | null>(null);
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const [serviceDetailOpen, setServiceDetailOpen] = useState<any>(null);
   const [serviceMessage, setServiceMessage] = useState('');
   const [showContactForm, setShowContactForm] = useState(false);
@@ -118,11 +122,30 @@ function TenantPortalInner() {
 
   const hasContactInfo = booking?.telefono_ospite && booking?.email_ospite;
 
+  const handleEmailChange = (email: string) => {
+    setContactForm({ ...contactForm, email });
+    const validation = validateEmail(email);
+    setEmailError(email.length > 0 && !validation.valid ? (validation.error || null) : null);
+    setEmailSuggestion(suggestEmailCorrection(email));
+  };
+
   const saveContactInfo = async () => {
     if (!contactForm.email || !contactForm.phone) return;
+    const emailCheck = validateEmail(contactForm.email);
+    if (!emailCheck.valid) {
+      setEmailError(emailCheck.error || 'Email non valida');
+      return;
+    }
     setIsSavingContact(true);
     try {
-      const { error } = await supabase.from('bookings').update({ email_ospite: contactForm.email, telefono_ospite: contactForm.phone }).eq('id', id);
+      const updatePayload: Record<string, string> = {
+        email_ospite: contactForm.email,
+        telefono_ospite: contactForm.phone,
+      };
+      if (contactForm.codiceFiscale) {
+        updatePayload.codice_fiscale_ospite = contactForm.codiceFiscale;
+      }
+      const { error } = await supabase.from('bookings').update(updatePayload).eq('id', id);
       if (error) throw error;
       toast({ title: t('toast.contactsSaved') });
       queryClient.invalidateQueries({ queryKey: ['tenant-booking'] });
@@ -300,10 +323,23 @@ function TenantPortalInner() {
             <CardContent className="pt-6 space-y-4">
               <p className="text-sm text-slate-600 text-center">{t('contact.accessPrompt')}</p>
               <div className="space-y-3">
-                <div><Label className="text-xs uppercase text-slate-500">{t('label.email')}</Label><Input placeholder={t('placeholder.email')} value={contactForm.email} onChange={e => setContactForm({...contactForm, email: e.target.value})} /></div>
+                <div>
+                  <Label className="text-xs uppercase text-slate-500">{t('label.email')}</Label>
+                  <Input placeholder={t('placeholder.email')} value={contactForm.email} onChange={e => handleEmailChange(e.target.value)} className={emailError ? 'border-red-400' : ''} />
+                  {emailError && <p className="text-xs text-red-600 mt-1">{emailError}</p>}
+                  {emailSuggestion && (
+                    <button type="button" className="text-xs text-blue-600 mt-1 underline" onClick={() => { handleEmailChange(emailSuggestion); }}>
+                      Forse intendevi: {emailSuggestion}?
+                    </button>
+                  )}
+                </div>
                 <div><Label className="text-xs uppercase text-slate-500">{t('label.phone')}</Label><Input placeholder={t('placeholder.phone')} value={contactForm.phone} onChange={e => setContactForm({...contactForm, phone: e.target.value})} /></div>
+                <div>
+                  <Label className="text-xs uppercase text-slate-500">Codice Fiscale</Label>
+                  <CodiceFiscaleInput value={contactForm.codiceFiscale} onChange={(val) => setContactForm({...contactForm, codiceFiscale: val})} />
+                </div>
               </div>
-              <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact || !contactForm.email || !contactForm.phone}>
+              <Button className="w-full bg-slate-900 hover:bg-slate-800" onClick={saveContactInfo} disabled={isSavingContact || !contactForm.email || !contactForm.phone || !!emailError}>
                 {isSavingContact ? <Loader2 className="animate-spin w-4 h-4"/> : t('button.sendContacts')}
               </Button>
             </CardContent>
@@ -332,7 +368,7 @@ function TenantPortalInner() {
         </Card>
 
         <Tabs defaultValue="status" className="w-full">
-            <TabsList className="grid w-full grid-cols-4 mb-4">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-4">
                 <TabsTrigger value="status" className="text-xs">{t('tab.status')}</TabsTrigger>
                 <TabsTrigger value="services" className="text-xs">{t('tab.services')}</TabsTrigger>
                 <TabsTrigger value="docs" className="text-xs">{t('tab.files')}</TabsTrigger>

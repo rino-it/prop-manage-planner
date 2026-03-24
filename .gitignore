@@ -25,3 +25,13 @@ dist-ssr
 .env
 .env.local
 .env.production
+
+# Build artifacts
+*.timestamp-*.mjs
+vite.config.ts.timestamp-*.mjs
+
+# Duplicate source folder (downloads/backups)
+prop-manage-planner-main/
+
+# Supabase dump
+supabase_dump.sql

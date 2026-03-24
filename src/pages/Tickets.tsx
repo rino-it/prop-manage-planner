@@ -83,6 +83,7 @@ export default function Tickets() {
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
+  const [triagingTicketId, setTriagingTicketId] = useState<string | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
 
   // FETCH DATI (INVARIATO)
@@ -250,13 +251,29 @@ export default function Tickets() {
       if (targetType === 'real') { payload.property_real_id = newTicket.target_id; payload.property_mobile_id = null; } 
       else { payload.property_real_id = null; payload.property_mobile_id = newTicket.target_id; }
       
-      const { error } = await supabase.from('tickets').insert(payload);
+      const { data: inserted, error } = await supabase.from('tickets').insert(payload).select('id').single();
       if (error) throw error;
+
+      // Analisi AI asincrona (fire-and-forget)
+      if (inserted?.id) {
+        const propertyName = targetType === 'real'
+          ? realProperties.find(p => p.id === newTicket.target_id)?.nome
+          : mobileProperties?.find((p: any) => p.id === newTicket.target_id)?.veicolo;
+
+        supabase.functions.invoke('ai-triage-ticket', {
+          body: {
+            ticket_id: inserted.id,
+            titolo: newTicket.titolo,
+            descrizione: newTicket.descrizione,
+            property_name: propertyName || '',
+          }
+        }).catch(err => console.error('AI triage error:', err));
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] }); setIsDialogOpen(false);
       setFormData({ titolo: '', descrizione: '', priorita: 'media', target_id: '', booking_id: 'none', assigned_to: [], scadenza: '' });
-      setUploadFiles([]); setIsUploading(false); toast({ title: "Ticket creato" });
+      setUploadFiles([]); setIsUploading(false); toast({ title: "Ticket creato con analisi AI" });
     },
     onError: (err: any) => { setIsUploading(false); toast({ title: "Errore", description: err.message, variant: "destructive" }); }
   });
@@ -294,6 +311,28 @@ export default function Tickets() {
           window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
           toast({ title: "Inviato!", description: "WhatsApp aperto con link PDF." });
       } catch (e: any) { toast({ title: "Errore", description: "Fallita generazione PDF: " + e.message, variant: "destructive" }); } finally { setGeneratingPdfId(null); }
+  };
+
+  const runAiTriage = async (ticket: any) => {
+    setTriagingTicketId(ticket.id);
+    try {
+      const propertyName = ticket.properties_real?.nome || ticket.bookings?.properties_real?.nome || '';
+      const { error } = await supabase.functions.invoke('ai-triage-ticket', {
+        body: {
+          ticket_id: ticket.id,
+          titolo: ticket.titolo,
+          descrizione: ticket.descrizione || '',
+          property_name: propertyName,
+        }
+      });
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      toast({ title: "Analisi AI completata", description: "Categoria, priorita e suggerimento aggiornati." });
+    } catch (err: any) {
+      toast({ title: "Errore AI", description: err.message || "Analisi non riuscita", variant: "destructive" });
+    } finally {
+      setTriagingTicketId(null);
+    }
   };
 
   const getPriorityColor = (p: string) => {
@@ -422,7 +461,7 @@ export default function Tickets() {
                 </div>
 
                 {/* 3. Ricerca & Priorità (NUOVI) */}
-                <div className="flex flex-1 gap-2 min-w-[250px]">
+                <div className="flex flex-1 gap-2 md:min-w-[250px]">
                     <div className="relative flex-1">
                         <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"/>
                         <Input className="pl-9 h-9 bg-white text-sm" placeholder="Cerca ticket, proprietà..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
@@ -467,7 +506,13 @@ export default function Tickets() {
                                                 {ticket.creato_da === 'ospite' && <Badge className="bg-blue-100 text-blue-800 border-blue-200">Ospite</Badge>}
                                                 {ticket.stato === 'risolto' && <Badge className="bg-green-100 text-green-800 border-green-200">Risolto</Badge>}
                                                 {ticket.quote_status === 'pending' && <Badge className="bg-orange-100 text-orange-800 border-orange-200">Preventivo</Badge>}
-                                                
+                                                {ticket.source === 'whatsapp' && <Badge className="bg-green-50 text-green-700 border-green-200">WhatsApp</Badge>}
+                                                {ticket.ai_categoria && (
+                                                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-[10px]">
+                                                        AI: {ticket.ai_categoria.replace(/_/g, ' ')}
+                                                    </Badge>
+                                                )}
+
                                                 {assignees.length > 0 && (
                                                     <div className="flex -space-x-2 ml-2">
                                                         {assignees.map((u: any, i) => (
@@ -485,8 +530,16 @@ export default function Tickets() {
                                                 <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
                                                     <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
                                                     <div className="text-xs text-yellow-900 break-all">
-                                                        <span className="font-bold block mb-1">Note Staff:</span> 
+                                                        <span className="font-bold block mb-1">Note Staff:</span>
                                                         {renderTextWithLinks(ticket.admin_notes)}
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {ticket.ai_suggerimento && (
+                                                <div className="mt-1 mb-3 p-2 bg-purple-50 border border-purple-100 rounded-md flex items-start gap-2">
+                                                    <Info className="w-3.5 h-3.5 text-purple-500 mt-0.5 shrink-0" />
+                                                    <div className="text-xs text-purple-800">
+                                                        <span className="font-semibold">Suggerimento AI:</span> {ticket.ai_suggerimento}
                                                     </div>
                                                 </div>
                                             )}
@@ -503,6 +556,12 @@ export default function Tickets() {
 
                                             {/* AZIONI RAPIDE (INALTERATE) */}
                                             <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
+                                                {ticket.stato !== 'risolto' && (
+                                                    <Button size="sm" variant="outline" disabled={triagingTicketId === ticket.id} className="h-7 text-xs gap-1 border-purple-200 text-purple-700 hover:bg-purple-50" onClick={() => runAiTriage(ticket)}>
+                                                        {triagingTicketId === ticket.id ? <span className="animate-pulse">Analisi...</span> : <><AlertCircle className="w-3 h-3" /> AI Triage</>}
+                                                    </Button>
+                                                )}
+
                                                 {ticket.supplier_contact && (
                                                     <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
                                                         <Phone className="w-3 h-3" /> Fornitore
