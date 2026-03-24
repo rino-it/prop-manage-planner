@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import TicketManager from '@/components/TicketManager';
 import PaymentSettingsComponent from '@/components/PaymentSettings';
+import { PropertyMapWidget } from '@/components/PropertyMapWidget';
 
 const Properties = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -378,7 +379,7 @@ const Properties = () => {
                     </CardTitle>
                     <p className="text-xs text-gray-500 flex items-center"><MapPin className="w-3 h-3 mr-1"/> {prop.citta}</p>
                 </CardHeader>
-                <CardFooter className="bg-slate-50 p-3 grid grid-cols-3 gap-2">
+                <CardFooter className="bg-slate-50 p-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
                     <Button variant="outline" className="w-full text-xs h-9 md:h-8" onClick={() => setDetailsOpen(prop)}>Analytics</Button>
                     <Button variant="outline" className="w-full text-xs h-9 md:h-8 bg-white hover:text-blue-700 border-blue-200 text-blue-600" onClick={() => setDocsOpen(prop)}>
                         <FolderOpen className="w-3 h-3 mr-1" /> Documenti
@@ -431,10 +432,20 @@ const Properties = () => {
       {/* SHEET STORICO */}
       <Sheet open={!!detailsOpen} onOpenChange={() => setDetailsOpen(null)}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto flex flex-col">
-            <SheetHeader className="mb-6">
+            <SheetHeader className="mb-4">
                 <SheetTitle className="flex items-center gap-2"><Home className="w-5 h-5 text-blue-600"/> {detailsOpen?.nome}</SheetTitle>
                 <SheetDescription>Gestione proprietà.</SheetDescription>
             </SheetHeader>
+            {detailsOpen?.latitude && detailsOpen?.longitude && (
+              <div className="mb-4">
+                <PropertyMapWidget
+                  latitude={detailsOpen.latitude}
+                  longitude={detailsOpen.longitude}
+                  address={detailsOpen.indirizzo}
+                  height={180}
+                />
+              </div>
+            )}
             <Tabs defaultValue="history" className="flex-1 flex flex-col">
                 <TabsList className="mb-4 w-full grid grid-cols-2">
                     <TabsTrigger value="history">Storico</TabsTrigger>

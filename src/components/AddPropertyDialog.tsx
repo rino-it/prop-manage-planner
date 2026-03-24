@@ -28,13 +28,15 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
   // STATO FORM GENERALE
   const [formData, setFormData] = useState({
     nome: '',
-    indirizzo: '', // Solo Real
-    veicolo: '',   // Solo Mobile
-    targa: '',     // Solo Mobile
-    proprietario: '', 
-    scadenza_bollo: '', 
+    indirizzo: '',
+    veicolo: '',
+    targa: '',
+    proprietario: '',
+    scadenza_bollo: '',
     scadenza_assicurazione: '',
-    scadenza_revisione: ''
+    scadenza_revisione: '',
+    latitude: null as number | null,
+    longitude: null as number | null,
   });
 
   // GESTIONE FILE
@@ -52,10 +54,12 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
         proprietario: propertyToEdit.proprietario || '',
         scadenza_bollo: propertyToEdit.scadenza_bollo || '',
         scadenza_assicurazione: propertyToEdit.scadenza_assicurazione || '',
-        scadenza_revisione: propertyToEdit.scadenza_revisione || ''
+        scadenza_revisione: propertyToEdit.scadenza_revisione || '',
+        latitude: propertyToEdit.latitude ?? null,
+        longitude: propertyToEdit.longitude ?? null,
       });
     } else {
-      setFormData({ nome: '', indirizzo: '', veicolo: '', targa: '', proprietario: '', scadenza_bollo: '', scadenza_assicurazione: '', scadenza_revisione: '' });
+      setFormData({ nome: '', indirizzo: '', veicolo: '', targa: '', proprietario: '', scadenza_bollo: '', scadenza_assicurazione: '', scadenza_revisione: '', latitude: null, longitude: null });
       setLibrettoFile(null);
       setInsuranceFile(null);
     }
@@ -84,12 +88,14 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
       }
 
       if (type === 'real') {
-        const payload = {
+        const payload: Record<string, unknown> = {
           user_id: user.id,
           nome: formData.nome,
           indirizzo: formData.indirizzo,
-          stato: 'uso_personale'
+          stato: 'uso_personale',
         };
+        if (formData.latitude !== null) payload.latitude = formData.latitude;
+        if (formData.longitude !== null) payload.longitude = formData.longitude;
 
         if (propertyToEdit) {
           const { error } = await supabase.from('properties_real').update(payload).eq('id', propertyToEdit.id);
@@ -175,8 +181,13 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
                 <Label>Indirizzo Completo</Label>
                 <AddressAutocomplete
                   value={formData.indirizzo}
-                  onChange={(addr) => setFormData({...formData, indirizzo: addr})}
-                  onSelect={(result) => setFormData({...formData, indirizzo: result.display_name})}
+                  onChange={(addr) => setFormData({ ...formData, indirizzo: addr, latitude: null, longitude: null })}
+                  onSelect={(result) => setFormData({
+                    ...formData,
+                    indirizzo: result.display_name,
+                    latitude: parseFloat(result.lat),
+                    longitude: parseFloat(result.lon),
+                  })}
                 />
               </div>
             </>

@@ -90,6 +90,72 @@ export async function autocompleteAddress(
   }
 }
 
+export interface ReverseGeocodingResult {
+  display_name: string;
+  address: {
+    road?: string;
+    house_number?: string;
+    city?: string;
+    town?: string;
+    village?: string;
+    state?: string;
+    postcode?: string;
+    country?: string;
+  };
+}
+
+export async function reverseGeocode(
+  lat: number,
+  lon: number
+): Promise<ReverseGeocodingResult | null> {
+  if (!LOCATIONIQ_API_KEY) return null;
+
+  try {
+    const params = new URLSearchParams({
+      key: LOCATIONIQ_API_KEY,
+      lat: lat.toString(),
+      lon: lon.toString(),
+      format: "json",
+      addressdetails: "1",
+    });
+
+    const response = await fetch(`${LOCATIONIQ_BASE}/reverse?${params}`);
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    if (!data || data.error) return null;
+
+    return {
+      display_name: data.display_name,
+      address: data.address || {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function buildStaticMapUrl(
+  lat: number,
+  lon: number,
+  width = 600,
+  height = 200,
+  zoom = 15
+): string | null {
+  if (!LOCATIONIQ_API_KEY) return null;
+
+  const marker = `icon:small-red-cutout|${lat},${lon}`;
+  const params = new URLSearchParams({
+    key: LOCATIONIQ_API_KEY,
+    center: `${lat},${lon}`,
+    zoom: zoom.toString(),
+    size: `${width}x${height}`,
+    format: "png",
+    markers: marker,
+  });
+
+  return `https://maps.locationiq.com/v3/staticmap?${params}`;
+}
+
 export function debouncedAutocomplete(
   query: string,
   callback: (results: AutocompleteResult[]) => void,
