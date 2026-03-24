@@ -1,8 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
-
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -15,6 +13,7 @@ interface AnalyzeRequest {
   property_name?: string;
   property_address?: string;
   guest_name?: string;
+  source?: string;
 }
 
 interface AiAnalysis {
@@ -22,6 +21,18 @@ interface AiAnalysis {
   categoria: string;
   suggerimento: string;
   confidence: number;
+}
+
+async function getAnthropicKey(supabase: any): Promise<string> {
+  const envKey = Deno.env.get("ANTHROPIC_API_KEY") || "";
+  if (envKey) return envKey;
+
+  const { data, error } = await supabase.rpc("get_secret", { secret_name: "ANTHROPIC_API_KEY" });
+  if (error) {
+    console.error("Vault RPC error:", error.message);
+    return "";
+  }
+  return data || "";
 }
 
 Deno.serve(async (req: Request) => {
@@ -35,14 +46,17 @@ Deno.serve(async (req: Request) => {
 
   try {
     const payload: AnalyzeRequest = await req.json();
-    const { ticket_id, titolo, descrizione, property_name, property_address, guest_name } = payload;
+    const { ticket_id, titolo, descrizione, property_name, property_address, guest_name, source } = payload;
 
     if (!ticket_id) {
       throw new Error("ticket_id obbligatorio");
     }
 
+    const apiKey = await getAnthropicKey(supabase);
+    console.log(`API key present: ${!!apiKey}, length: ${apiKey.length}, source: ${source || "admin"}`);
+
     const message = `${titolo}. ${descrizione || ""}`;
-    const analysis = await analyzeWithClaude(message, property_name, property_address, guest_name);
+    const analysis = await analyzeWithClaude(apiKey, message, property_name, property_address, guest_name);
 
     const { error: updateError } = await supabase
       .from("tickets")
@@ -52,6 +66,7 @@ Deno.serve(async (req: Request) => {
         ai_suggerimento: analysis.suggerimento,
         ai_confidence: analysis.confidence,
         priorita: analysis.priorita,
+        source: source || "webapp",
       })
       .eq("id", ticket_id);
 
@@ -59,7 +74,6 @@ Deno.serve(async (req: Request) => {
       throw new Error(`Errore aggiornamento ticket: ${updateError.message}`);
     }
 
-    // Crea notifica per il proprietario (colonne reali del DB: title, message, type, is_read, link)
     const { data: ticket } = await supabase
       .from("tickets")
       .select("user_id")
@@ -68,10 +82,11 @@ Deno.serve(async (req: Request) => {
 
     if (ticket?.user_id) {
       const priorityLabel = analysis.priorita === "alta" ? "ALTA" : analysis.priorita === "media" ? "MEDIA" : "BASSA";
+      const sourceLabel = source === "tenant" ? " [Inquilino]" : source === "guest" ? " [Ospite]" : "";
       await supabase.from("notifications").insert({
         user_id: ticket.user_id,
         type: analysis.priorita === "alta" ? "error" : "warning",
-        title: `[${priorityLabel}] ${titolo.substring(0, 60)}`,
+        title: `[${priorityLabel}]${sourceLabel} ${titolo.substring(0, 50)}`,
         message: `Categoria: ${analysis.categoria.replace(/_/g, " ")} | ${analysis.suggerimento}`,
         link: `/tickets`,
         is_read: false,
@@ -93,12 +108,16 @@ Deno.serve(async (req: Request) => {
 });
 
 async function analyzeWithClaude(
+  apiKey: string,
   message: string,
   propertyName?: string,
   propertyAddress?: string,
   guestName?: string
 ): Promise<AiAnalysis> {
-  if (!ANTHROPIC_API_KEY) return fallbackAnalysis(message);
+  if (!apiKey) {
+    console.log("No API key available, using fallback");
+    return fallbackAnalysis(message);
+  }
 
   const month = new Date().getMonth() + 1;
   const season = month >= 11 || month <= 3 ? "inverno" : month <= 5 ? "primavera" : month <= 8 ? "estate" : "autunno";
@@ -131,7 +150,7 @@ Criteri priorita:
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
         "content-type": "application/json",
       },
@@ -143,7 +162,8 @@ Criteri priorita:
     });
 
     if (!response.ok) {
-      console.error(`Claude API error: ${response.status}`);
+      const errBody = await response.text();
+      console.error(`Claude API error: ${response.status} - ${errBody}`);
       return fallbackAnalysis(message);
     }
 

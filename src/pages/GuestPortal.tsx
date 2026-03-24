@@ -204,9 +204,23 @@ function GuestPortalInner() {
   const createTicket = useMutation({
     mutationFn: async () => {
       if (!booking) return;
-      await supabase.from('tickets').insert({
+      const { data: inserted, error } = await supabase.from('tickets').insert({
         booking_id: booking.id, property_real_id: booking.property_id, titolo: ticketForm.titolo, descrizione: ticketForm.descrizione, stato: 'aperto', creato_da: 'ospite'
-      });
+      }).select('id').single();
+      if (error) throw error;
+
+      if (inserted?.id) {
+        supabase.functions.invoke('analyze-ticket', {
+          body: {
+            ticket_id: inserted.id,
+            titolo: ticketForm.titolo,
+            descrizione: ticketForm.descrizione,
+            property_name: booking.properties_real?.nome || '',
+            guest_name: booking.nome_ospite || '',
+            source: 'guest',
+          }
+        }).catch(err => console.error('AI analysis error:', err));
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
@@ -218,14 +232,30 @@ function GuestPortalInner() {
   const sendServiceContact = useMutation({
     mutationFn: async () => {
       if (!booking || !serviceDetailOpen) return;
-      await supabase.from('tickets').insert({
+      const ticketTitle = `${t('booking.prefix')} ${serviceDetailOpen.titolo}`;
+      const ticketDesc = serviceMessage || t('booking.wantToBook');
+      const { data: inserted, error } = await supabase.from('tickets').insert({
         booking_id: booking.id,
         property_real_id: booking.property_id,
-        titolo: `${t('booking.prefix')} ${serviceDetailOpen.titolo}`,
-        descrizione: serviceMessage || t('booking.wantToBook'),
+        titolo: ticketTitle,
+        descrizione: ticketDesc,
         stato: 'aperto',
         creato_da: 'ospite'
-      });
+      }).select('id').single();
+      if (error) throw error;
+
+      if (inserted?.id) {
+        supabase.functions.invoke('analyze-ticket', {
+          body: {
+            ticket_id: inserted.id,
+            titolo: ticketTitle,
+            descrizione: ticketDesc,
+            property_name: booking.properties_real?.nome || '',
+            guest_name: booking.nome_ospite || '',
+            source: 'guest',
+          }
+        }).catch(err => console.error('AI analysis error:', err));
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
@@ -238,17 +268,33 @@ function GuestPortalInner() {
   const sendPaymentNotice = useMutation({
       mutationFn: async () => {
           if (!booking || !paymentTicketOpen) return;
-          await supabase.from('tickets').insert({
+          const ticketTitle = `${t('payment.prefix')} ${paymentTicketOpen.tipo}`;
+          const ticketDesc = t('payment.tenantWillPay', { date: format(parseISO(payPromise.date), 'dd/MM/yyyy'), method: payPromise.method });
+          const { data: inserted, error } = await supabase.from('tickets').insert({
               booking_id: booking.id,
               property_real_id: booking.property_id,
-              titolo: `${t('payment.prefix')} ${paymentTicketOpen.tipo}`,
-              descrizione: t('payment.tenantWillPay', { date: format(parseISO(payPromise.date), 'dd/MM/yyyy'), method: payPromise.method }),
+              titolo: ticketTitle,
+              descrizione: ticketDesc,
               stato: 'aperto',
               creato_da: 'ospite',
               related_payment_id: paymentTicketOpen.id,
               promised_payment_date: payPromise.date,
               promised_payment_method: payPromise.method
-          });
+          }).select('id').single();
+          if (error) throw error;
+
+          if (inserted?.id) {
+            supabase.functions.invoke('analyze-ticket', {
+              body: {
+                ticket_id: inserted.id,
+                titolo: ticketTitle,
+                descrizione: ticketDesc,
+                property_name: booking.properties_real?.nome || '',
+                guest_name: booking.nome_ospite || '',
+                source: 'guest',
+              }
+            }).catch(err => console.error('AI analysis error:', err));
+          }
       },
       onSuccess: () => {
           queryClient.invalidateQueries({ queryKey: ['tenant-tickets'] });
