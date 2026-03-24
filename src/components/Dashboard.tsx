@@ -17,11 +17,18 @@ import {
 } from 'lucide-react';
 import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { WeatherWidget } from '@/components/WeatherWidget';
 import { geocodeAddress } from '@/utils/geocoding';
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
+}
+
+interface WeatherProperty {
+  id: string;
+  nome: string;
+  address: string;
 }
 
 type EventType = 'checkin' | 'checkout' | 'payment' | 'expense' | 'maintenance' | 'deadline' | 'activity';
@@ -48,21 +55,41 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
 
-  const { data: weatherCoords } = useQuery({
-    queryKey: ['dashboard-weather-coords'],
+  const [selectedWeatherProperty, setSelectedWeatherProperty] = useState<string>('');
+
+  const { data: weatherProperties = [] } = useQuery({
+    queryKey: ['dashboard-weather-properties'],
     queryFn: async () => {
-      const { data: props } = await supabase
+      const { data } = await supabase
         .from('properties_real')
-        .select('nome, via, citta, provincia')
-        .limit(1)
-        .maybeSingle();
-      if (!props?.via) return null;
-      const address = `${props.via}, ${props.citta || ''} ${props.provincia || ''}`.trim();
-      const geo = await geocodeAddress(address);
-      if (!geo) return null;
-      return { lat: geo.lat, lon: geo.lon, name: props.nome };
+        .select('id, nome, via, citta, provincia, indirizzo')
+        .order('nome');
+      if (!data) return [];
+      return data
+        .filter((p) => p.via || p.indirizzo || p.citta)
+        .map((p): WeatherProperty => ({
+          id: p.id,
+          nome: p.nome || 'Senza nome',
+          address: p.via
+            ? `${p.via}, ${p.citta || ''} ${p.provincia || ''}`.trim()
+            : p.indirizzo || p.citta || '',
+        }));
     },
     staleTime: 24 * 60 * 60 * 1000,
+  });
+
+  const activeWeatherProp = weatherProperties.find((p) => p.id === selectedWeatherProperty) || weatherProperties[0];
+
+  const { data: weatherCoords } = useQuery({
+    queryKey: ['dashboard-weather-coords', activeWeatherProp?.id],
+    queryFn: async () => {
+      if (!activeWeatherProp) return null;
+      const geo = await geocodeAddress(activeWeatherProp.address);
+      if (!geo) return null;
+      return { lat: geo.lat, lon: geo.lon, name: activeWeatherProp.nome };
+    },
+    staleTime: 24 * 60 * 60 * 1000,
+    enabled: !!activeWeatherProp,
   });
 
   // --- FETCH DATI ---
@@ -309,13 +336,34 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 </div>
             </Card>
 
-            {weatherCoords && (
-              <WeatherWidget
-                latitude={weatherCoords.lat}
-                longitude={weatherCoords.lon}
-                propertyName={weatherCoords.name}
-                days={5}
-              />
+            {weatherProperties.length > 0 && (
+              <div className="space-y-2">
+                {weatherProperties.length > 1 && (
+                  <Select
+                    value={activeWeatherProp?.id || ''}
+                    onValueChange={setSelectedWeatherProperty}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="Seleziona proprietà" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {weatherProperties.map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                          {p.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                {weatherCoords && (
+                  <WeatherWidget
+                    latitude={weatherCoords.lat}
+                    longitude={weatherCoords.lon}
+                    propertyName={weatherCoords.name}
+                    days={5}
+                  />
+                )}
+              </div>
             )}
 
             <Card className="shadow-sm border-l-4 border-l-blue-600 h-[300px] flex flex-col">
