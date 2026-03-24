@@ -419,7 +419,7 @@ export default function TicketManager({ ticket, isOpen, onClose, onUpdate, isRea
             </DialogHeader>
 
             <Tabs defaultValue="management" className="w-full mt-2">
-                <TabsList className="grid w-full grid-cols-4 h-auto">
+                <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 h-auto">
                     <TabsTrigger value="management" className="text-xs px-1">1. Gestione</TabsTrigger>
                     <TabsTrigger value="quote" className="text-xs px-1">2. Preventivo</TabsTrigger>
                     <TabsTrigger value="delega" className="text-xs px-1">3. Delega</TabsTrigger>

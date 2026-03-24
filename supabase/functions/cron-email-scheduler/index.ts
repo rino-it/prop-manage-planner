@@ -226,6 +226,38 @@ async function processCheckinEmails(supabase: ReturnType<typeof createClient>): 
   return sentCount;
 }
 
+async function triggerAiDigest(
+  supabase: ReturnType<typeof createClient>
+): Promise<{ sent: boolean; error?: string }> {
+  const functionUrl =
+    Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "") + "/functions/v1/ai-digest";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!functionUrl || !serviceKey) {
+    return { sent: false, error: "Missing configuration" };
+  }
+
+  const response = await fetch(functionUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      send_email: true,
+      send_whatsapp: true,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    return { sent: false, error: errorData };
+  }
+
+  const result = await response.json();
+  return { sent: result.success || false };
+}
+
 serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -264,11 +296,19 @@ serve(async (req: Request) => {
       processCheckinEmails(supabase),
     ]);
 
+    let digestResult = null;
+    try {
+      digestResult = await triggerAiDigest(supabase);
+    } catch (digestError) {
+      console.error("AI digest trigger failed (non-blocking):", digestError);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         payment_reminders_sent: remindersSent,
         checkin_emails_sent: checkinsSent,
+        ai_digest: digestResult,
         timestamp: new Date().toISOString(),
       }),
       {

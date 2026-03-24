@@ -180,7 +180,7 @@ export default function NotificationBell() {
       </PopoverTrigger>
       
       {/* Popover più largo (w-96) */}
-      <PopoverContent className="w-[400px] p-0 mr-4 shadow-2xl border-slate-200" align="end">
+      <PopoverContent className="w-[calc(100vw-2rem)] sm:w-[400px] p-0 mr-2 sm:mr-4 shadow-2xl border-slate-200" align="end">
         
         {/* HEADER CON FILTRI */}
         <div className="p-3 border-b bg-slate-50 space-y-3">

@@ -22,6 +22,7 @@ import LanguagePicker from '@/components/LanguagePicker';
 import T from '@/components/TranslatedText';
 import { compressImage, isImageFile } from '@/utils/imageCompression';
 import { validateEmail, suggestEmailCorrection } from '@/utils/emailValidation';
+import { OcrDocumentUpload } from '@/components/OcrDocumentUpload';
 
 export default function GuestPortal() {
   return (
@@ -392,10 +393,17 @@ function GuestPortalInner() {
                             )}
                           </div>
                           {!isPendingApproval && (
+                            <div className="space-y-3">
                              <div className="border-2 border-dashed border-slate-200 rounded-xl p-6 text-center hover:bg-slate-50 transition-colors relative">
                                 <Input type="file" accept="image/*,.pdf" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleFileUpload} disabled={isUploading} />
                                 {isUploading ? <Loader2 className="animate-spin w-6 h-6 mx-auto text-blue-600"/> : <p className="text-blue-600 font-bold">{t('docs.takePhoto')}</p>}
                              </div>
+                             <OcrDocumentUpload compact onExtracted={(data) => {
+                               if (data.codice_fiscale) {
+                                 supabase.from('bookings').update({ codice_fiscale_ospite: data.codice_fiscale }).eq('id', id);
+                               }
+                             }} />
+                            </div>
                           )}
                           <div className="space-y-2">
                              {documents?.filter((d:any) => d.status === 'in_revisione').map((doc: any) => (

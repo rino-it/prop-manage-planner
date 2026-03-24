@@ -92,16 +92,15 @@ async function callOcrSpace(base64Image: string): Promise<string> {
     throw new Error("OCR_SPACE_API_KEY not configured");
   }
 
+  const formData = new FormData();
+  formData.append("base64Image", `data:image/jpeg;base64,${base64Image}`);
+  formData.append("apikey", apiKey);
+  formData.append("language", "ita");
+  formData.append("isOverlayRequired", "false");
+
   const response = await fetch("https://api.ocr.space/parse/image", {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      base64Image: `data:image/jpeg;base64,${base64Image}`,
-      apikey: apiKey,
-      language: "ita",
-    }),
+    body: formData,
   });
 
   if (!response.ok) {
@@ -112,13 +111,23 @@ async function callOcrSpace(base64Image: string): Promise<string> {
 
   const data = await response.json();
 
-  if (!data.IsErroredOnProcessing && data.ParsedText) {
-    return data.ParsedText;
+  if (data.ParsedResults && data.ParsedResults.length > 0) {
+    const parsed = data.ParsedResults[0];
+    if (parsed.ParsedText) {
+      return parsed.ParsedText;
+    }
+    if (parsed.ErrorMessage) {
+      throw new Error(`OCR parsing failed: ${parsed.ErrorMessage}`);
+    }
   }
 
-  throw new Error(
-    `OCR parsing failed: ${data.ErrorMessage || "Unknown error"}`
-  );
+  if (data.IsErroredOnProcessing) {
+    throw new Error(
+      `OCR processing error: ${data.ErrorMessage?.[0] || "Unknown error"}`
+    );
+  }
+
+  throw new Error("OCR returned no results");
 }
 
 serve(async (req: Request): Promise<Response> => {

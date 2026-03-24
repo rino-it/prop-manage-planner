@@ -311,38 +311,38 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       <Dialog open={!!customerSheetOpen} onOpenChange={(open) => !open && setCustomerSheetOpen(null)}>
         <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] max-h-[85vh] p-0 !overflow-hidden">
           <div className="flex flex-col h-full min-h-0">
-            <div className="p-4 md:p-6 border-b bg-slate-50 flex justify-between items-start shrink-0">
-                <div className="flex gap-4 items-center overflow-hidden">
-                    <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 border border-blue-200 shrink-0">
-                        <User className="w-6 h-6" />
+            <div className="p-3 md:p-6 border-b bg-slate-50 shrink-0">
+                <div className="flex gap-3 items-center">
+                    <div className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 border border-blue-200 shrink-0">
+                        <User className="w-5 h-5 md:w-6 md:h-6" />
                     </div>
-                    <div className="min-w-0">
-                        <DialogTitle className="text-lg md:text-xl font-bold text-gray-900 truncate">{customerSheetOpen?.nome_ospite}</DialogTitle>
-                        <p className="text-xs md:text-sm text-gray-500 flex flex-wrap items-center gap-2 mt-1">
-                            <span className="font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100 truncate max-w-[150px]">{customerSheetOpen?.properties_real?.nome}</span>
+                    <div className="min-w-0 flex-1">
+                        <DialogTitle className="text-base md:text-xl font-bold text-gray-900 truncate">{customerSheetOpen?.nome_ospite}</DialogTitle>
+                        <p className="text-xs text-gray-500 flex flex-wrap items-center gap-1 mt-0.5">
+                            <span className="font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 truncate max-w-[120px] sm:max-w-[200px]">{customerSheetOpen?.properties_real?.nome}</span>
                             <span className="text-gray-400">|</span>
                             <span className="capitalize">{customerSheetOpen?.tipo_affitto} Termine</span>
                         </p>
                     </div>
-                </div>
-                <div className="flex flex-col items-end gap-2 shrink-0">
-                    <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200 h-8 text-xs">
-                        <Copy className="w-3 h-3 mr-2" /> <span className="hidden sm:inline">Link Portale</span><span className="sm:hidden">Link</span>
-                    </Button>
-                    <Badge className={`text-[10px] sm:text-xs ${customerSheetOpen?.documents_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                        {customerSheetOpen?.documents_approved ? '✅ Sbloccato' : '🔒 Bloccato'}
-                    </Badge>
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                        <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200 h-7 text-[10px] px-2">
+                            <Copy className="w-3 h-3 mr-1" /> Link
+                        </Button>
+                        <Badge className={`text-[9px] ${customerSheetOpen?.documents_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                            {customerSheetOpen?.documents_approved ? 'Sbloccato' : 'Bloccato'}
+                        </Badge>
+                    </div>
                 </div>
             </div>
 
             <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
                 <Tabs defaultValue="overview" className="flex-1 min-h-0 flex flex-col">
                     <div className="px-4 md:px-6 pt-4 border-b bg-white shrink-0">
-                        <TabsList className="w-full justify-start overflow-x-auto flex-nowrap">
-                            <TabsTrigger value="overview" className="flex-1 min-w-[90px]">Panoramica</TabsTrigger>
-                            <TabsTrigger value="docs" className="flex-1 min-w-[90px]">Documenti</TabsTrigger>
-                            <TabsTrigger value="tickets" className="flex-1 min-w-[90px]">Ticket</TabsTrigger>
-                            <TabsTrigger value="payments" className="flex-1 min-w-[90px]">Contabilità</TabsTrigger>
+                        <TabsList className="w-full grid grid-cols-4">
+                            <TabsTrigger value="overview" className="text-xs sm:text-sm px-1">Panoramica</TabsTrigger>
+                            <TabsTrigger value="docs" className="text-xs sm:text-sm px-1">Documenti</TabsTrigger>
+                            <TabsTrigger value="tickets" className="text-xs sm:text-sm px-1">Ticket</TabsTrigger>
+                            <TabsTrigger value="payments" className="text-xs sm:text-sm px-1">Contabilita</TabsTrigger>
                         </TabsList>
                     </div>
 
@@ -432,16 +432,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
                             <div className="space-y-3">
                                 {activeDocs?.map(doc => (
-                                    <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
-                                        <div className="flex items-center gap-3 overflow-hidden">
-                                            <div className="p-2 bg-slate-100 rounded text-slate-500 shrink-0"><FileText className="w-5 h-5" /></div>
-                                            <div className="min-w-0">
-                                                <p className="font-medium text-sm text-gray-900 truncate">{doc.filename}</p>
-                                                <p className="text-xs text-gray-500">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
-                                            </div>
+                                    <div key={doc.id} className="flex items-center gap-2 p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
+                                        <div className="p-2 bg-slate-100 rounded text-slate-500 shrink-0"><FileText className="w-4 h-4" /></div>
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-medium text-sm text-gray-900 break-all line-clamp-2">{doc.filename}</p>
+                                            <p className="text-xs text-gray-500">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
                                         </div>
-                                        <div className="flex items-center gap-2 shrink-0">
-                                            <Button variant="ghost" size="sm" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
+                                        <div className="flex items-center gap-1 shrink-0">
+                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
                                             {doc.status === 'in_revisione' ? (
                                                 <div className="flex gap-1">
                                                     <Button size="icon" className="h-7 w-7 bg-green-600 hover:bg-green-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })} title="Approva"><Check className="w-4 h-4" /></Button>
@@ -487,8 +485,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         <TabsContent value="payments" className="mt-0 space-y-4">
                             {/* Riepilogo */}
                             {activePayments && activePayments.length > 0 && (
-                                <div className="bg-slate-50 rounded-lg border p-4">
-                                    <div className="flex justify-between items-center text-sm">
+                                <div className="bg-slate-50 rounded-lg border p-3 md:p-4">
+                                    <div className="flex flex-col sm:flex-row sm:justify-between gap-1 text-sm">
                                         <span className="text-gray-500">Totale: <strong className="text-gray-900">EUR {activePayments.reduce((acc, p) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
                                         <span className="text-green-600">Pagato: <strong>EUR {activePayments.filter(p => p.stato === 'pagato').reduce((acc, p) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
                                     </div>
@@ -502,21 +500,21 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             <div className="space-y-3">
                                 {activePayments?.map(pay => (
                                     <div key={pay.id}>
-                                        <div className="flex justify-between items-center p-3 md:p-4 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
-                                            <div className="flex items-center gap-3 md:gap-4">
+                                        <div className="p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
+                                            <div className="flex items-center gap-2 md:gap-4">
                                                 <div className={`p-2 rounded-full shrink-0 ${pay.stato === 'pagato' ? 'bg-green-100 text-green-700' : pay.stato === 'pre_autorizzato' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
-                                                    <CreditCard className="w-4 h-4 md:w-5 md:h-5" />
+                                                    <CreditCard className="w-4 h-4" />
                                                 </div>
-                                                <div>
-                                                    <p className="font-bold text-gray-900 capitalize text-sm">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
+                                                <div className="min-w-0 flex-1">
+                                                    <p className="font-bold text-gray-900 capitalize text-sm truncate">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
                                                     <p className="text-xs text-gray-500 font-medium">{format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
                                                     {pay.is_preauth && <Badge variant="outline" className="text-[9px] text-blue-600 border-blue-200 mt-1">Pre-auth</Badge>}
                                                 </div>
-                                            </div>
-                                            <div className="text-right space-y-1">
-                                                <p className="font-bold text-base md:text-lg text-slate-800">EUR {pay.importo}</p>
-                                                <Badge variant="outline" className={`text-[10px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : pay.stato === 'pre_autorizzato' ? 'text-blue-600 border-blue-200 bg-blue-50' : pay.stato === 'rilasciato' ? 'text-gray-600 border-gray-200 bg-gray-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato?.toUpperCase()}</Badge>
-                                                {pay.receipt_url && <Button size="sm" variant="ghost" className="h-6 text-[10px] text-blue-600" onClick={() => window.open(pay.receipt_url, '_blank')}>Ricevuta</Button>}
+                                                <div className="text-right shrink-0">
+                                                    <p className="font-bold text-sm md:text-lg text-slate-800">EUR {pay.importo}</p>
+                                                    <Badge variant="outline" className={`text-[9px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : pay.stato === 'pre_autorizzato' ? 'text-blue-600 border-blue-200 bg-blue-50' : pay.stato === 'rilasciato' ? 'text-gray-600 border-gray-200 bg-gray-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato?.toUpperCase()}</Badge>
+                                                    {pay.receipt_url && <Button size="sm" variant="ghost" className="h-6 text-[10px] text-blue-600 px-1" onClick={() => window.open(pay.receipt_url, '_blank')}>Ricevuta</Button>}
+                                                </div>
                                             </div>
                                         </div>
                                         {pay.is_preauth && ['pre_autorizzato', 'pagato', 'rilasciato'].includes(pay.stato) && (
@@ -532,8 +530,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 </Tabs>
             </div>
             
-            <div className="p-4 border-t bg-slate-50 flex justify-end gap-2 shrink-0">
-                <Button variant="outline" onClick={() => setCustomerSheetOpen(null)}>Chiudi Scheda</Button>
+            <div className="p-3 md:p-4 border-t bg-slate-50 flex justify-end shrink-0">
+                <Button variant="outline" size="sm" onClick={() => setCustomerSheetOpen(null)}>Chiudi Scheda</Button>
             </div>
           </div>
         </DialogContent>

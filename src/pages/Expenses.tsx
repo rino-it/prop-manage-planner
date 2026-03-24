@@ -208,7 +208,7 @@ export default function Expenses() {
         <CardContent className="p-3 flex flex-wrap gap-3 items-end">
             
             {/* Ricerca */}
-            <div className="grid gap-1 min-w-[200px] flex-1">
+            <div className="grid gap-1 md:min-w-[200px] flex-1">
                 <Label className="text-xs font-semibold text-slate-500">Cerca</Label>
                 <div className="relative">
                     <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"/>
@@ -245,7 +245,7 @@ export default function Expenses() {
                 <TableRow>
                   <TableHead className="w-[100px] whitespace-nowrap">Scadenza</TableHead>
                   <TableHead className="min-w-[140px] whitespace-nowrap">Riferimento</TableHead>
-                  <TableHead className="min-w-[200px]">Descrizione</TableHead>
+                  <TableHead className="md:min-w-[200px]">Descrizione</TableHead>
                   <TableHead className="hidden md:table-cell whitespace-nowrap">Metodo</TableHead>
                   <TableHead className="text-right whitespace-nowrap">Importo</TableHead>
                   <TableHead className="text-right w-[90px]">Azioni</TableHead>
