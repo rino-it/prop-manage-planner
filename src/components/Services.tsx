@@ -12,6 +12,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Plus, ExternalLink, Image as ImageIcon, MapPin, Trash2, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function Services() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -107,10 +108,11 @@ export default function Services() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-3xl font-bold text-gray-900">Servizi & Esperienze</h1><p className="text-gray-500">Gestisci i servizi per gli ospiti.</p></div>
-        <Button className="bg-blue-600 hover:bg-blue-700" onClick={openNew}><Plus className="w-4 h-4 mr-2" /> Nuovo Servizio</Button>
-      </div>
+      <PageHeader title="Servizi & Esperienze" count={services?.length}>
+        <Button size="sm" onClick={openNew}>
+          <Plus className="w-4 h-4 mr-1.5" /> Nuovo Servizio
+        </Button>
+      </PageHeader>
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">

@@ -14,6 +14,7 @@ import { DollarSign, Calendar as CalendarIcon, Trash2, CheckCircle, RefreshCw, C
 import { format, isPast, isToday } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function Revenue() {
   const { revenues, createPaymentPlan, markAsPaid, deletePayment, isLoading } = useRevenue();
@@ -160,16 +161,13 @@ export default function Revenue() {
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      <div className="flex items-center justify-between">
-        <div>
-            <h1 className="text-3xl font-bold text-gray-900">Incassi & Piani</h1>
-            <p className="text-gray-500">Gestisci i flussi di cassa e le date di scadenza.</p>
-        </div>
-        
+      <PageHeader title="Incassi & Piani" count={revenues?.length}>
+        <Button size="sm" onClick={handleOpenCreate}>
+          <Plus className="w-4 h-4 mr-1.5" /> Nuovo Incasso
+        </Button>
+      </PageHeader>
+
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <Button onClick={handleOpenCreate} className="bg-green-600 hover:bg-green-700 shadow-sm">
-            <Plus className="w-4 h-4 mr-2" /> Nuovo Incasso
-          </Button>
           
           <DialogContent className="sm:max-w-[500px]">
             <DialogHeader>
@@ -246,7 +244,6 @@ export default function Revenue() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
 
       {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

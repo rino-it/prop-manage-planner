@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Car, Plus, Trash2, FileText, Shield, Loader2, Calendar, AlertTriangle, Pencil } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format, isPast, parseISO } from 'date-fns';
+import { PageHeader } from '@/components/ui/page-header';
 
 // Tipo completo
 type MobileProperty = {
@@ -183,16 +184,13 @@ export default function MobileProperties() {
 
   return (
     <div className="space-y-6 animate-in fade-in pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Gestione Flotta</h1>
-          <p className="text-gray-500">Documenti, scadenze e manutenzione veicoli.</p>
-        </div>
+      <PageHeader title="Gestione Flotta" count={vehicles.length}>
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="w-4 h-4 mr-1.5" /> Aggiungi Veicolo
+        </Button>
+      </PageHeader>
 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm w-full md:w-auto" onClick={openCreate}>
-              <Plus className="w-4 h-4 mr-2" /> Aggiungi Veicolo
-          </Button>
           <DialogContent className="sm:max-w-[600px] w-[95vw] max-h-[90vh] overflow-y-auto">
             <DialogHeader><DialogTitle>{editingId ? 'Modifica Veicolo' : 'Nuovo Veicolo'}</DialogTitle></DialogHeader>
             <div className="grid gap-4 py-4">
@@ -260,7 +258,6 @@ export default function MobileProperties() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
-      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {isLoading ? <p>Caricamento...</p> : vehicles.map((v) => (

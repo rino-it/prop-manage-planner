@@ -15,6 +15,9 @@ import { format } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useToast } from '@/hooks/use-toast';
+import { PageHeader } from '@/components/ui/page-header';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { StatusDot } from '@/components/ui/status-dot';
 
 export default function Expenses() {
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -183,65 +186,39 @@ export default function Expenses() {
   return (
     <div className="space-y-6 animate-in fade-in pb-20"> 
       
-      {/* HEADER E KPI */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Gestione Spese</h1>
-          <p className="text-gray-500 text-sm">Uscite immobili e veicoli</p>
+      <PageHeader title="Spese" count={filteredExpenses.length}>
+        <div className="text-right bg-destructive/5 px-3 py-1 rounded-lg border border-destructive/10">
+            <p className="text-[10px] text-destructive uppercase font-semibold tracking-wider">Totale Filtrato</p>
+            <p className="text-lg font-bold text-destructive">-{totalAmount.toLocaleString('it-IT', { minimumFractionDigits: 2 })} EUR</p>
         </div>
+        <Button size="sm" onClick={openCreate}>
+            <Plus className="w-4 h-4 mr-1.5" /> Nuova Spesa
+        </Button>
+      </PageHeader>
 
-        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-4 w-full md:w-auto">
-            {/* KPI Totale Filtrato */}
-            <div className="text-right bg-red-50 px-3 py-1 rounded-lg border border-red-100 w-full sm:w-auto">
-                <p className="text-[10px] text-red-500 uppercase font-bold tracking-wider">Totale Filtrato</p>
-                <p className="text-lg font-bold text-red-700">- € {totalAmount.toLocaleString('it-IT', { minimumFractionDigits: 2 })}</p>
-            </div>
-            
-            <Button className="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={openCreate}>
-                <Plus className="w-4 h-4 mr-2" /> Nuova Spesa
-            </Button>
+      {/* FILTER BAR */}
+      <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+        <div className="relative flex-1 max-w-sm">
+            <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground"/>
+            <Input className="pl-9 h-9 bg-card" placeholder="Descrizione, proprieta, targa..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
         </div>
+        <Input type="month" className="h-9 bg-card w-full sm:w-[140px]" value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); setCurrentPage(1); }} />
+        <div className="flex bg-card p-0.5 rounded-md border h-9 w-full sm:w-auto">
+            <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('all'); setCurrentPage(1); }} className="flex-1 px-3 text-xs h-8">Tutti</Button>
+            <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('real'); setCurrentPage(1); }} className="flex-1 px-3 text-xs h-8"><Home className="w-3 h-3"/></Button>
+            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('mobile'); setCurrentPage(1); }} className="flex-1 px-3 text-xs h-8"><Car className="w-3 h-3"/></Button>
+        </div>
+        <Button variant="outline" size="sm" className="h-9 text-xs w-full sm:w-auto" onClick={() => { setSearchTerm(''); setSelectedMonth(''); setFilterType('all'); setCurrentPage(1); }}>
+            Reset
+        </Button>
       </div>
 
-      {/* --- BARRA FILTRI --- */}
-      <Card className="bg-slate-50 border-slate-200">
-        <CardContent className="p-3 flex flex-wrap gap-3 items-end">
-            
-            {/* Ricerca */}
-            <div className="grid gap-1 md:min-w-[200px] flex-1">
-                <Label className="text-xs font-semibold text-slate-500">Cerca</Label>
-                <div className="relative">
-                    <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"/>
-                    <Input className="pl-9 h-9 bg-white text-sm" placeholder="Descrizione, proprietà, targa..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
-                </div>
-            </div>
-
-            {/* Filtro Mese */}
-            <div className="grid gap-1 w-full sm:w-[140px]">
-                <Label className="text-xs font-semibold text-slate-500">Mese</Label>
-                <Input type="month" className="h-9 bg-white text-sm" value={selectedMonth} onChange={e => { setSelectedMonth(e.target.value); setCurrentPage(1); }} />
-            </div>
-
-            {/* Toggle Tipo */}
-            <div className="flex bg-white p-1 rounded-md border shadow-sm h-9 w-full sm:w-auto">
-                <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('all'); setCurrentPage(1); }} className="flex-1 px-3 text-xs">Tutti</Button>
-                <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('real'); setCurrentPage(1); }} className="flex-1 px-3 text-xs"><Home className="w-3 h-3"/></Button>
-                <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => { setFilterType('mobile'); setCurrentPage(1); }} className="flex-1 px-3 text-xs"><Car className="w-3 h-3"/></Button>
-            </div>
-
-            {/* Reset */}
-            <Button variant="outline" size="sm" className="h-9 text-xs w-full sm:w-auto" onClick={() => { setSearchTerm(''); setSelectedMonth(''); setFilterType('all'); setCurrentPage(1); }}>
-                Reset
-            </Button>
-        </CardContent>
-      </Card>
-
-      {/* TABELLA DATI */}
-      <Card className="border-t-4 border-t-blue-500 shadow-md overflow-hidden">
-        <CardContent className="p-0">
+      {/* DATA TABLE */}
+      <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden">
+        <div className="p-0">
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-slate-50">
+              <TableHeader>
                 <TableRow>
                   <TableHead className="w-[100px] whitespace-nowrap">Scadenza</TableHead>
                   <TableHead className="min-w-[140px] whitespace-nowrap">Riferimento</TableHead>
@@ -258,7 +235,7 @@ export default function Expenses() {
                   <TableRow><TableCell colSpan={6} className="text-center py-8 text-gray-400">Nessuna spesa trovata.</TableCell></TableRow>
                 ) : (
                   paginatedExpenses.map((ex: any) => (
-                    <TableRow key={ex.id} className="hover:bg-slate-50 group transition-colors">
+                    <TableRow key={ex.id} className="group transition-colors">
                       <TableCell className="font-mono text-xs text-slate-500 whitespace-nowrap">
                           {ex.scadenza ? format(new Date(ex.scadenza), 'dd MMM yy', { locale: it }) : '-'}
                       </TableCell>
@@ -331,8 +308,8 @@ export default function Expenses() {
           
           {/* PAGINAZIONE */}
           {filteredExpenses.length > 0 && (
-            <div className="flex items-center justify-between p-3 border-t bg-slate-50">
-                <p className="text-xs text-gray-500 pl-2">
+            <div className="flex items-center justify-between p-3 border-t">
+                <p className="text-xs text-muted-foreground pl-2">
                     Pagina {currentPage} di {totalPages}
                 </p>
                 <div className="flex gap-2 pr-2">
@@ -345,8 +322,8 @@ export default function Expenses() {
                 </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </div>
 
       {/* DIALOG (MODALE PER NUOVA/MODIFICA SPESA) */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

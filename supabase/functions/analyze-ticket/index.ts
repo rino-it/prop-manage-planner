@@ -23,11 +23,11 @@ interface AiAnalysis {
   confidence: number;
 }
 
-async function getAnthropicKey(supabase: any): Promise<string> {
-  const envKey = Deno.env.get("ANTHROPIC_API_KEY") || "";
+async function getGoogleApiKey(supabase: any): Promise<string> {
+  const envKey = Deno.env.get("GOOGLE_API_KEY") || "";
   if (envKey) return envKey;
 
-  const { data, error } = await supabase.rpc("get_secret", { secret_name: "ANTHROPIC_API_KEY" });
+  const { data, error } = await supabase.rpc("get_secret", { secret_name: "GOOGLE_API_KEY" });
   if (error) {
     console.error("Vault RPC error:", error.message);
     return "";
@@ -52,11 +52,11 @@ Deno.serve(async (req: Request) => {
       throw new Error("ticket_id obbligatorio");
     }
 
-    const apiKey = await getAnthropicKey(supabase);
+    const apiKey = await getGoogleApiKey(supabase);
     console.log(`API key present: ${!!apiKey}, length: ${apiKey.length}, source: ${source || "admin"}`);
 
     const message = `${titolo}. ${descrizione || ""}`;
-    const analysis = await analyzeWithClaude(apiKey, message, property_name, property_address, guest_name);
+    const analysis = await analyzeWithGemini(apiKey, message, property_name, property_address, guest_name);
 
     const { error: updateError } = await supabase
       .from("tickets")
@@ -107,7 +107,7 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-async function analyzeWithClaude(
+async function analyzeWithGemini(
   apiKey: string,
   message: string,
   propertyName?: string,
@@ -147,32 +147,43 @@ Criteri priorita:
 - BASSA: richieste informative, problemi minori, documenti`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
       method: "POST",
       headers: {
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 300,
-        messages: [{ role: "user", content: prompt }],
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json",
+        },
       }),
     });
 
     if (!response.ok) {
       const errBody = await response.text();
-      console.error(`Claude API error: ${response.status} - ${errBody}`);
+      console.error(`Gemini API error: ${response.status} - ${errBody}`);
       return fallbackAnalysis(message);
     }
 
     const data = await response.json();
-    const text = data.content?.[0]?.text || "";
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return fallbackAnalysis(message);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    if (!text) {
+      return fallbackAnalysis(message);
+    }
+
+    const parsed = JSON.parse(text);
     return {
       priorita: parsed.priorita || "media",
       categoria: parsed.categoria || "altro",
@@ -180,7 +191,7 @@ Criteri priorita:
       confidence: Math.min(1, Math.max(0, parsed.confidence || 0.5)),
     };
   } catch (err) {
-    console.error("Claude analysis error:", err);
+    console.error("Gemini analysis error:", err);
     return fallbackAnalysis(message);
   }
 }

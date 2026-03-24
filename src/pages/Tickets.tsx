@@ -25,6 +25,8 @@ import TicketManager from '@/components/TicketManager';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer';
 import { TicketDocument } from '@/components/TicketPDF';
+import { PageHeader } from '@/components/ui/page-header';
+import { StatusDot } from '@/components/ui/status-dot';
 
 // --- MAPPING ESATTO PER IL TUO DB ---
 const PROPERTY_SHORTCUTS = [
@@ -387,15 +389,15 @@ export default function Tickets() {
   return (
     <div className="space-y-6 animate-in fade-in pb-20"> 
       
-      {/* HEADER E KPI */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Ticket e Guasti</h1>
-          <div className="flex gap-4 mt-1 text-sm text-gray-500">
-             <span>Attivi: <strong className="text-gray-900">{openCount}</strong></span>
-             <span>Urgenti: <strong className="text-red-600">{urgentCount}</strong></span>
-          </div>
+      <PageHeader title="Ticket & Guasti" count={openCount} countLabel="Aperti">
+        <div className="flex items-center gap-2">
+          {urgentCount > 0 && (
+            <div className="text-right bg-destructive/5 px-3 py-1 rounded-lg border border-destructive/10">
+              <span className="text-xs font-semibold text-destructive">{urgentCount} urgenti</span>
+            </div>
+          )}
         </div>
+      </PageHeader>
 
         <div className="flex flex-wrap gap-2 w-full md:w-auto">
             {/* PULISCI ORFANI */}
@@ -419,8 +421,8 @@ export default function Tickets() {
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
               <DialogTrigger asChild>
-                <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm">
-                  <Plus className="w-4 h-4 mr-2" /> Nuovo Ticket
+                <Button size="sm">
+                  <Plus className="w-4 h-4 mr-1.5" /> Nuovo Ticket
                 </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-[600px]">
@@ -439,40 +441,33 @@ export default function Tickets() {
               </DialogContent>
             </Dialog>
         </div>
-      </div>
 
       <Tabs defaultValue="open" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        
-        {/* --- BARRA FILTRI (AGGIORNATA E POTENZIATA) --- */}
-        <Card className="bg-slate-50 border-slate-200 mb-4">
-            <CardContent className="p-3 flex flex-wrap gap-3 items-end">
-                
-                {/* 1. Tabs Open/Closed */}
-                <TabsList className="grid w-[200px] grid-cols-2 h-9">
-                    <TabsTrigger value="open" className="text-xs">Aperti</TabsTrigger>
-                    <TabsTrigger value="closed" className="text-xs">Chiusi</TabsTrigger>
-                </TabsList>
 
-                {/* 2. Filtri Tipo (ORIGINALI) */}
-                <div className="flex items-center gap-1 bg-white p-1 rounded-md border shadow-sm h-9">
-                    <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="text-xs px-3"><Filter className="w-3 h-3 mr-1"/> Tutti</Button>
-                    <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="text-xs px-3"><Home className="w-3 h-3 mr-1"/> Case</Button>
-                    <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs px-3"><Car className="w-3 h-3 mr-1"/> Auto</Button>
-                </div>
+        {/* FILTER BAR */}
+        <div className="flex flex-col sm:flex-row gap-2 sm:items-center mb-4">
+            <TabsList className="grid w-[200px] grid-cols-2 h-9">
+                <TabsTrigger value="open" className="text-xs">Aperti</TabsTrigger>
+                <TabsTrigger value="closed" className="text-xs">Chiusi</TabsTrigger>
+            </TabsList>
 
-                {/* 3. Ricerca & Priorità (NUOVI) */}
-                <div className="flex flex-1 gap-2 md:min-w-[250px]">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400"/>
-                        <Input className="pl-9 h-9 bg-white text-sm" placeholder="Cerca ticket, proprietà..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
-                    </div>
-                    <Select value={filterPriority} onValueChange={(v) => { setFilterPriority(v); setCurrentPage(1); }}>
-                        <SelectTrigger className="h-9 w-[110px] bg-white text-xs"><SelectValue placeholder="Priorità" /></SelectTrigger>
-                        <SelectContent><SelectItem value="all">Tutte</SelectItem><SelectItem value="alta">Alta</SelectItem><SelectItem value="media">Media</SelectItem><SelectItem value="bassa">Bassa</SelectItem></SelectContent>
-                    </Select>
+            <div className="flex bg-card p-0.5 rounded-md border h-9 w-full sm:w-auto">
+                <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="text-xs px-3 h-8"><Filter className="w-3 h-3 mr-1"/> Tutti</Button>
+                <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="text-xs px-3 h-8"><Home className="w-3 h-3 mr-1"/> Case</Button>
+                <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs px-3 h-8"><Car className="w-3 h-3 mr-1"/> Auto</Button>
+            </div>
+
+            <div className="flex flex-1 gap-2 sm:max-w-sm">
+                <div className="relative flex-1">
+                    <Search className="absolute left-2.5 top-2.5 w-4 h-4 text-muted-foreground"/>
+                    <Input className="pl-9 h-9 bg-card" placeholder="Cerca ticket, proprieta..." value={searchTerm} onChange={e => { setSearchTerm(e.target.value); setCurrentPage(1); }} />
                 </div>
-            </CardContent>
-        </Card>
+                <Select value={filterPriority} onValueChange={(v) => { setFilterPriority(v); setCurrentPage(1); }}>
+                    <SelectTrigger className="h-9 w-[110px] bg-card text-xs"><SelectValue placeholder="Priorita" /></SelectTrigger>
+                    <SelectContent><SelectItem value="all">Tutte</SelectItem><SelectItem value="alta">Alta</SelectItem><SelectItem value="media">Media</SelectItem><SelectItem value="bassa">Bassa</SelectItem></SelectContent>
+                </Select>
+            </div>
+        </div>
 
         <TabsContent value={activeTab} className="space-y-4">
             <div className="grid gap-4">

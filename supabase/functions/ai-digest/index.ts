@@ -1,8 +1,13 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
+const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") || "";
 const WHATSAPP_ACCESS_TOKEN = Deno.env.get("WHATSAPP_ACCESS_TOKEN") || "";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 interface DigestData {
   payments_due: { id: string; tipo: string; importo: number; data_scadenza: string; guest_name: string; property_name: string }[];
@@ -11,13 +16,10 @@ interface DigestData {
   pending_documents: { booking_id: string; guest_name: string; property_name: string }[];
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
+      headers: corsHeaders,
     });
   }
 
@@ -60,7 +62,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const digestText = await formatDigestWithClaude(digestData);
+    const digestText = await formatDigestWithGemini(digestData);
 
     const results: { email?: boolean; whatsapp?: boolean } = {};
 
@@ -110,7 +112,6 @@ async function collectDigestData(supabase: ReturnType<typeof createClient>): Pro
   const in48h = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString().split("T")[0];
   const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-  // 1. Pagamenti in scadenza oggi
   const { data: payments } = await supabase
     .from("tenant_payments")
     .select(`
@@ -132,7 +133,6 @@ async function collectDigestData(supabase: ReturnType<typeof createClient>): Pro
     property_name: p.bookings?.properties_real?.nome || "N/A",
   }));
 
-  // 2. Ticket aperti da >3 giorni senza risposta
   const { data: tickets } = await supabase
     .from("tickets")
     .select(`
@@ -156,7 +156,6 @@ async function collectDigestData(supabase: ReturnType<typeof createClient>): Pro
     };
   });
 
-  // 3. Booking in arrivo nelle prossime 48h
   const { data: bookings } = await supabase
     .from("bookings")
     .select(`
@@ -176,7 +175,6 @@ async function collectDigestData(supabase: ReturnType<typeof createClient>): Pro
     documents_approved: b.documents_approved || false,
   }));
 
-  // 4. Documenti in attesa di approvazione
   const { data: pendingDocs } = await supabase
     .from("bookings")
     .select(`
@@ -200,8 +198,8 @@ async function collectDigestData(supabase: ReturnType<typeof createClient>): Pro
   };
 }
 
-async function formatDigestWithClaude(data: DigestData): Promise<string> {
-  if (!ANTHROPIC_API_KEY) {
+async function formatDigestWithGemini(data: DigestData): Promise<string> {
+  if (!GOOGLE_API_KEY) {
     return formatDigestFallback(data);
   }
 
@@ -230,29 +228,38 @@ Regole:
 - NON inventare dati, usa SOLO quelli forniti sopra`;
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Content-Type": "application/json",
+        "x-goog-api-key": GOOGLE_API_KEY,
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 800,
-        messages: [{ role: "user", content: prompt }],
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt,
+              },
+            ],
+          },
+        ],
+        generationConfig: {
+          temperature: 0.1,
+          responseMimeType: "application/json",
+        },
       }),
     });
 
     if (!response.ok) {
-      console.error(`Claude API error: ${response.status}`);
+      console.error(`Gemini API error: ${response.status}`);
       return formatDigestFallback(data);
     }
 
     const result = await response.json();
-    return result.content?.[0]?.text || formatDigestFallback(data);
+    return result.candidates?.[0]?.content?.parts?.[0]?.text || formatDigestFallback(data);
   } catch (err) {
-    console.error("Claude digest error:", err);
+    console.error("Gemini digest error:", err);
     return formatDigestFallback(data);
   }
 }

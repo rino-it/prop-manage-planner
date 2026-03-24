@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { CheckCircle, XCircle, Shield, User, Lock, Crown, Ban, Clock } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import { PageHeader } from '@/components/ui/page-header';
 
 export default function Team() {
   const { toast } = useToast();
@@ -54,9 +55,7 @@ export default function Team() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div><h1 className="text-3xl font-bold text-gray-900">Gestione Team</h1><p className="text-gray-500">{amIAdmin ? "Gestisci accessi e ruoli." : "Visualizza i membri del team."}</p></div>
-      </div>
+      <PageHeader title="Gestione Team" count={team?.length} />
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {team?.map((member) => {

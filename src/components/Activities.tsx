@@ -19,6 +19,7 @@ import {
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
+import { PageHeader } from '@/components/ui/page-header';
 import TicketManager from '@/components/TicketManager';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
 import { pdf } from '@react-pdf/renderer'; // Import PDF
@@ -264,16 +265,11 @@ export default function Activities() {
   return (
     <div className="space-y-6 animate-in fade-in">
       
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-gray-900">Attività e Ticket</h1>
-          <p className="text-gray-500">Panoramica operativa e segnalazioni.</p>
-        </div>
-        
+      <PageHeader title="Attività e Ticket" count={tickets?.length}>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-blue-600 hover:bg-blue-700 shadow-sm">
-              <Plus className="w-4 h-4 mr-2" /> Nuovo Ticket
+            <Button size="sm">
+              <Plus className="w-4 h-4 mr-1.5" /> Nuovo Ticket
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[500px]">
@@ -375,7 +371,7 @@ export default function Activities() {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+      </PageHeader>
 
       {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati: {(error as any)?.message}</div>}
 

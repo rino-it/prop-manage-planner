@@ -1,7 +1,12 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
-const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") || "";
+const GOOGLE_API_KEY = Deno.env.get("GOOGLE_API_KEY") || "";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+};
 
 interface AnalyzeRequest {
   document_url: string;
@@ -19,13 +24,10 @@ interface DocumentAnalysis {
   confidence: number;
 }
 
-serve(async (req: Request) => {
+Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
+      headers: corsHeaders,
     });
   }
 
@@ -56,7 +58,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const analysis = await analyzeDocumentWithClaude(imageData.base64, imageData.mediaType);
+    const analysis = await analyzeDocumentWithGemini(imageData.base64, imageData.mediaType);
 
     if (analysis.confidence >= 0.6) {
       const updateData: Record<string, unknown> = {};
@@ -147,15 +149,13 @@ async function fetchDocumentImage(
   }
 }
 
-async function analyzeDocumentWithClaude(
+async function analyzeDocumentWithGemini(
   base64: string,
   mediaType: string
 ): Promise<DocumentAnalysis> {
-  if (!ANTHROPIC_API_KEY) {
+  if (!GOOGLE_API_KEY) {
     return emptyAnalysis();
   }
-
-  const isPdf = mediaType === "application/pdf";
 
   const prompt = `Analizza questo documento d'identita italiano. Estrai le informazioni e rispondi SOLO con un JSON valido.
 
@@ -177,48 +177,50 @@ Note:
 - Le date devono essere nel formato YYYY-MM-DD`;
 
   try {
-    const content: any[] = [];
+    const requestBody: any = {
+      contents: [
+        {
+          parts: [
+            {
+              inline_data: {
+                mime_type: mediaType,
+                data: base64,
+              },
+            },
+            {
+              text: prompt,
+            },
+          ],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.1,
+        responseMimeType: "application/json",
+      },
+    };
 
-    if (isPdf) {
-      content.push({
-        type: "document",
-        source: { type: "base64", media_type: mediaType, data: base64 },
-      });
-    } else {
-      content.push({
-        type: "image",
-        source: { type: "base64", media_type: mediaType, data: base64 },
-      });
-    }
-
-    content.push({ type: "text", text: prompt });
-
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+    const response = await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent", {
       method: "POST",
       headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
+        "Content-Type": "application/json",
+        "x-goog-api-key": GOOGLE_API_KEY,
       },
-      body: JSON.stringify({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 500,
-        messages: [{ role: "user", content }],
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {
-      console.error(`Claude API error: ${response.status}`);
+      console.error(`Gemini API error: ${response.status}`);
       return emptyAnalysis();
     }
 
     const data = await response.json();
-    const text = data.content?.[0]?.text || "";
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return emptyAnalysis();
+    if (!text) {
+      return emptyAnalysis();
+    }
 
-    const parsed = JSON.parse(jsonMatch[0]);
+    const parsed = JSON.parse(text);
     return {
       tipo_documento: parsed.tipo_documento || "altro",
       nome_completo: parsed.nome_completo || "",
@@ -229,7 +231,7 @@ Note:
       confidence: Math.min(1, Math.max(0, parsed.confidence || 0.3)),
     };
   } catch (err) {
-    console.error("Claude document analysis error:", err);
+    console.error("Gemini document analysis error:", err);
     return emptyAnalysis();
   }
 }

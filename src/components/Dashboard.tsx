@@ -20,6 +20,8 @@ import { it } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { WeatherWidget } from '@/components/WeatherWidget';
 import { geocodeAddress } from '@/utils/geocoding';
+import { KpiCard } from '@/components/ui/kpi-card';
+import { PageHeader } from '@/components/ui/page-header';
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
@@ -267,54 +269,30 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
-        <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">Torre di Controllo</h1>
-          <p className="text-gray-500 text-sm">Panoramica operativa e finanziaria</p>
-        </div>
-        <div className="text-right hidden md:block">
-            <p className="text-sm font-medium text-gray-900">{format(new Date(), 'EEEE d MMMM', { locale: it })}</p>
-        </div>
-      </div>
+      <PageHeader title="Dashboard">
+        <span className="text-sm font-medium text-muted-foreground hidden md:block">{format(new Date(), 'EEEE d MMMM', { locale: it })}</span>
+      </PageHeader>
 
       {/* KPI CARDS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-white border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-all">
-          <CardContent className="p-4 flex justify-between items-center">
-            <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Incassato (Mese)</p>
-                <h2 className="text-2xl font-bold text-green-600">€ {dashboardData.kpi.incassato.toLocaleString()}</h2>
-            </div>
-            <div className="h-10 w-10 bg-green-50 rounded-full flex items-center justify-center text-green-600">
-                <TrendingUp className="w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card className="bg-white border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-all">
-          <CardContent className="p-4 flex justify-between items-center">
-            <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Previsione</p>
-                <h2 className="text-2xl font-bold text-blue-600">€ {dashboardData.kpi.atteso.toLocaleString()}</h2>
-            </div>
-            <div className="h-10 w-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-600">
-                <Clock className="w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-white border-l-4 border-l-red-500 shadow-sm hover:shadow-md transition-all">
-          <CardContent className="p-4 flex justify-between items-center">
-            <div>
-                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Uscite (Mese)</p>
-                <h2 className="text-2xl font-bold text-red-600">€ {dashboardData.kpi.uscite.toLocaleString()}</h2>
-            </div>
-            <div className="h-10 w-10 bg-red-50 rounded-full flex items-center justify-center text-red-600">
-                <TrendingDown className="w-6 h-6" />
-            </div>
-          </CardContent>
-        </Card>
+        <KpiCard
+          title="Incassato (Mese)"
+          value={`${dashboardData.kpi.incassato.toLocaleString()} EUR`}
+          icon={<TrendingUp className="w-5 h-5" />}
+          iconColor="green"
+        />
+        <KpiCard
+          title="Previsione"
+          value={`${dashboardData.kpi.atteso.toLocaleString()} EUR`}
+          icon={<Clock className="w-5 h-5" />}
+          iconColor="blue"
+        />
+        <KpiCard
+          title="Uscite (Mese)"
+          value={`${dashboardData.kpi.uscite.toLocaleString()} EUR`}
+          icon={<TrendingDown className="w-5 h-5" />}
+          iconColor="red"
+        />
       </div>
 
       {/* GRIGLIA PRINCIPALE */}
@@ -322,7 +300,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         
         {/* COLONNA SX: CALENDARIO E EVENTI GIORNO */}
         <div className="lg:col-span-1 space-y-6">
-            <Card className="shadow-sm border-slate-200">
+            <Card className="shadow-sm border-border">
                 <div className="p-4 flex justify-center">
                     <Calendar
                         mode="single"
@@ -470,7 +448,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                                         <p className="text-sm font-semibold truncate">{e.title}</p>
                                         <p className="text-[10px] text-slate-500 truncate">{e.subtitle}</p>
                                     </div>
-                                    <Badge variant="secondary" className="text-[10px] bg-white border-slate-200 text-slate-600">{e.type}</Badge>
+                                    <Badge variant="secondary" className="text-[10px] bg-white border-border text-slate-600">{e.type}</Badge>
                                 </div>
                             ))
                         }
