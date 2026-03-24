@@ -260,7 +260,7 @@ export default function Tickets() {
           ? realProperties.find(p => p.id === newTicket.target_id)?.nome
           : mobileProperties?.find((p: any) => p.id === newTicket.target_id)?.veicolo;
 
-        supabase.functions.invoke('ai-triage-ticket', {
+        supabase.functions.invoke('analyze-ticket', {
           body: {
             ticket_id: inserted.id,
             titolo: newTicket.titolo,
@@ -317,7 +317,7 @@ export default function Tickets() {
     setTriagingTicketId(ticket.id);
     try {
       const propertyName = ticket.properties_real?.nome || ticket.bookings?.properties_real?.nome || '';
-      const { error } = await supabase.functions.invoke('ai-triage-ticket', {
+      const { error } = await supabase.functions.invoke('analyze-ticket', {
         body: {
           ticket_id: ticket.id,
           titolo: ticket.titolo,
