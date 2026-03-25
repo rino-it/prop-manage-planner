@@ -25,6 +25,16 @@ import Services from "./components/Services";
 import Activities from "./components/Activities";
 import Revenue from "./components/Revenue";
 import Bookings from "./components/Bookings";
+import Messages from "./components/Messages";
+import Communication from "./components/Communication";
+import CalendarView from "./components/CalendarView";
+import Statistics from "./pages/Statistics";
+import Accoglienza from "./pages/Accoglienza";
+import GuestGuide from "./components/GuestGuide";
+import DocumentApproval from "./components/DocumentApproval";
+import PortalConnections from "./components/PortalConnections";
+import Marketplace from "./components/Marketplace";
+import Pricing from "./pages/Pricing";
 
 const queryClient = new QueryClient();
 
@@ -56,6 +66,7 @@ const App = () => (
             >
               {/* 4. LE PAGINE VENGONO CARICATE DENTRO INDEX (OUTLET) */}
               <Route index element={<DashboardWrapper />} />
+              <Route path="calendario" element={<CalendarView />} />
               <Route path="properties" element={<Properties />} />
               <Route path="mobile-properties" element={<MobileProperties />} />
               <Route path="tickets" element={<Tickets />} />
@@ -66,6 +77,17 @@ const App = () => (
               <Route path="activities" element={<Activities />} />
               <Route path="team" element={<Team />} />
               <Route path="services" element={<Services />} />
+              <Route path="statistiche" element={<Statistics />} />
+              <Route path="messaggi" element={<Messages />} />
+              <Route path="comunicazione" element={<Communication />} />
+              <Route path="portali" element={<PortalConnections />} />
+              <Route path="marketplace" element={<Marketplace />} />
+              <Route path="prezzi" element={<Pricing />} />
+              <Route path="accoglienza" element={<Accoglienza />}>
+                <Route index element={<GuestGuide />} />
+                <Route path="documenti" element={<DocumentApproval />} />
+                <Route path="comunicazione" element={<Communication />} />
+              </Route>
             </Route>
 
             <Route path="*" element={<NotFound />} />

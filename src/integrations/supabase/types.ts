@@ -10,78 +10,73 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "13.0.4"
+    PostgrestVersion: "13.0.5"
   }
   public: {
     Tables: {
       activities: {
         Row: {
-          completata: boolean | null
-          costo: number | null
+          assigned_to: string[] | null
+          booking_id: string | null
           created_at: string
           descrizione: string | null
-          fornitore: string | null
-          giorno_specifico: number | null
           id: string
-          mese_specifico: number | null
           nome: string
-          note: string | null
           priorita: Database["public"]["Enums"]["priority_level"] | null
           property_mobile_id: string | null
           property_real_id: string | null
-          prossima_scadenza: string
-          ricorrenza_intervallo: number | null
-          ricorrenza_tipo: Database["public"]["Enums"]["recurrence_type"]
-          tipo: Database["public"]["Enums"]["activity_type"]
-          ultima_esecuzione: string | null
+          quote_amount: number | null
+          quote_status: string | null
+          quote_url: string | null
+          stato: string | null
+          tipo: Database["public"]["Enums"]["activity_type"] | null
           updated_at: string
           user_id: string
         }
         Insert: {
-          completata?: boolean | null
-          costo?: number | null
+          assigned_to?: string[] | null
+          booking_id?: string | null
           created_at?: string
           descrizione?: string | null
-          fornitore?: string | null
-          giorno_specifico?: number | null
           id?: string
-          mese_specifico?: number | null
           nome: string
-          note?: string | null
           priorita?: Database["public"]["Enums"]["priority_level"] | null
           property_mobile_id?: string | null
           property_real_id?: string | null
-          prossima_scadenza: string
-          ricorrenza_intervallo?: number | null
-          ricorrenza_tipo?: Database["public"]["Enums"]["recurrence_type"]
-          tipo?: Database["public"]["Enums"]["activity_type"]
-          ultima_esecuzione?: string | null
+          quote_amount?: number | null
+          quote_status?: string | null
+          quote_url?: string | null
+          stato?: string | null
+          tipo?: Database["public"]["Enums"]["activity_type"] | null
           updated_at?: string
           user_id: string
         }
         Update: {
-          completata?: boolean | null
-          costo?: number | null
+          assigned_to?: string[] | null
+          booking_id?: string | null
           created_at?: string
           descrizione?: string | null
-          fornitore?: string | null
-          giorno_specifico?: number | null
           id?: string
-          mese_specifico?: number | null
           nome?: string
-          note?: string | null
           priorita?: Database["public"]["Enums"]["priority_level"] | null
           property_mobile_id?: string | null
           property_real_id?: string | null
-          prossima_scadenza?: string
-          ricorrenza_intervallo?: number | null
-          ricorrenza_tipo?: Database["public"]["Enums"]["recurrence_type"]
-          tipo?: Database["public"]["Enums"]["activity_type"]
-          ultima_esecuzione?: string | null
+          quote_amount?: number | null
+          quote_status?: string | null
+          quote_url?: string | null
+          stato?: string | null
+          tipo?: Database["public"]["Enums"]["activity_type"] | null
           updated_at?: string
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "activities_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "activities_property_mobile_id_fkey"
             columns: ["property_mobile_id"]
@@ -96,74 +91,271 @@ export type Database = {
             referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      ai_digest_log: {
+        Row: {
+          bookings_count: number | null
+          created_at: string | null
+          digest_text: string
+          documents_count: number | null
+          id: string
+          payments_count: number | null
+          sent_email: boolean | null
+          sent_whatsapp: boolean | null
+          tickets_count: number | null
+        }
+        Insert: {
+          bookings_count?: number | null
+          created_at?: string | null
+          digest_text: string
+          documents_count?: number | null
+          id?: string
+          payments_count?: number | null
+          sent_email?: boolean | null
+          sent_whatsapp?: boolean | null
+          tickets_count?: number | null
+        }
+        Update: {
+          bookings_count?: number | null
+          created_at?: string | null
+          digest_text?: string
+          documents_count?: number | null
+          id?: string
+          payments_count?: number | null
+          sent_email?: boolean | null
+          sent_whatsapp?: boolean | null
+          tickets_count?: number | null
+        }
+        Relationships: []
+      }
+      booking_documents: {
+        Row: {
+          ai_analyzed_at: string | null
+          ai_doc_expiry: string | null
+          ai_doc_number: string | null
+          ai_doc_type: string | null
+          ai_extracted_cf: string | null
+          ai_extracted_name: string | null
+          booking_id: string | null
+          file_url: string
+          filename: string
+          id: string
+          status: string | null
+          uploaded_at: string | null
+        }
+        Insert: {
+          ai_analyzed_at?: string | null
+          ai_doc_expiry?: string | null
+          ai_doc_number?: string | null
+          ai_doc_type?: string | null
+          ai_extracted_cf?: string | null
+          ai_extracted_name?: string | null
+          booking_id?: string | null
+          file_url: string
+          filename: string
+          id?: string
+          status?: string | null
+          uploaded_at?: string | null
+        }
+        Update: {
+          ai_analyzed_at?: string | null
+          ai_doc_expiry?: string | null
+          ai_doc_number?: string | null
+          ai_doc_type?: string | null
+          ai_extracted_cf?: string | null
+          ai_extracted_name?: string | null
+          booking_id?: string | null
+          file_url?: string
+          filename?: string
+          id?: string
+          status?: string | null
+          uploaded_at?: string | null
+        }
+        Relationships: [
           {
-            foreignKeyName: "activities_property_real_id_fkey"
-            columns: ["property_real_id"]
+            foreignKeyName: "booking_documents_booking_id_fkey"
+            columns: ["booking_id"]
             isOneToOne: false
-            referencedRelation: "property_performance"
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bookings: {
+        Row: {
+          checkin_email_sent: boolean | null
+          checkin_status: string | null
+          codice_fiscale_ospite: string | null
+          created_at: string | null
+          data_fine: string
+          data_inizio: string
+          documenti_caricati: boolean | null
+          documenti_url: string | null
+          documents_approved: boolean | null
+          email_ospite: string | null
+          external_uid: string | null
+          guest_email: string | null
+          guest_phone: string | null
+          id: string
+          importo_totale: number | null
+          nome_ospite: string
+          numero_ospiti: number | null
+          online_checkin_completed: boolean | null
+          payment_schedule_generated: boolean | null
+          property_id: string | null
+          source: string | null
+          stato_documenti: string | null
+          telefono_ospite: string | null
+          tipo_affitto: string | null
+          total_amount: number | null
+          updated_at: string | null
+          user_id: string | null
+          welcome_email_sent: boolean | null
+          whatsapp_phone: string | null
+        }
+        Insert: {
+          checkin_email_sent?: boolean | null
+          checkin_status?: string | null
+          codice_fiscale_ospite?: string | null
+          created_at?: string | null
+          data_fine: string
+          data_inizio: string
+          documenti_caricati?: boolean | null
+          documenti_url?: string | null
+          documents_approved?: boolean | null
+          email_ospite?: string | null
+          external_uid?: string | null
+          guest_email?: string | null
+          guest_phone?: string | null
+          id?: string
+          importo_totale?: number | null
+          nome_ospite: string
+          numero_ospiti?: number | null
+          online_checkin_completed?: boolean | null
+          payment_schedule_generated?: boolean | null
+          property_id?: string | null
+          source?: string | null
+          stato_documenti?: string | null
+          telefono_ospite?: string | null
+          tipo_affitto?: string | null
+          total_amount?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          welcome_email_sent?: boolean | null
+          whatsapp_phone?: string | null
+        }
+        Update: {
+          checkin_email_sent?: boolean | null
+          checkin_status?: string | null
+          codice_fiscale_ospite?: string | null
+          created_at?: string | null
+          data_fine?: string
+          data_inizio?: string
+          documenti_caricati?: boolean | null
+          documenti_url?: string | null
+          documents_approved?: boolean | null
+          email_ospite?: string | null
+          external_uid?: string | null
+          guest_email?: string | null
+          guest_phone?: string | null
+          id?: string
+          importo_totale?: number | null
+          nome_ospite?: string
+          numero_ospiti?: number | null
+          online_checkin_completed?: boolean | null
+          payment_schedule_generated?: boolean | null
+          property_id?: string | null
+          source?: string | null
+          stato_documenti?: string | null
+          telefono_ospite?: string | null
+          tipo_affitto?: string | null
+          total_amount?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+          welcome_email_sent?: boolean | null
+          whatsapp_phone?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
         ]
       }
       documents: {
         Row: {
-          alert_giorni_prima: number | null
-          alert_scadenza_attivo: boolean | null
-          created_at: string
-          data_caricamento: string
-          data_scadenza: string | null
+          created_at: string | null
+          data_caricamento: string | null
+          data_riferimento: string | null
           dimensione: number | null
+          expense_id: string | null
           formato: string | null
           id: string
+          importo: number | null
           nome: string
+          payment_id: string | null
           property_mobile_id: string | null
           property_real_id: string | null
-          tags: string[] | null
-          tipo: Database["public"]["Enums"]["document_type"]
-          ultimo_alert: string | null
-          updated_at: string
-          url: string | null
-          user_id: string
+          tipo: string | null
+          updated_at: string | null
+          url: string
+          user_id: string | null
         }
         Insert: {
-          alert_giorni_prima?: number | null
-          alert_scadenza_attivo?: boolean | null
-          created_at?: string
-          data_caricamento?: string
-          data_scadenza?: string | null
+          created_at?: string | null
+          data_caricamento?: string | null
+          data_riferimento?: string | null
           dimensione?: number | null
+          expense_id?: string | null
           formato?: string | null
           id?: string
+          importo?: number | null
           nome: string
+          payment_id?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
-          tags?: string[] | null
-          tipo?: Database["public"]["Enums"]["document_type"]
-          ultimo_alert?: string | null
-          updated_at?: string
-          url?: string | null
-          user_id: string
+          tipo?: string | null
+          updated_at?: string | null
+          url: string
+          user_id?: string | null
         }
         Update: {
-          alert_giorni_prima?: number | null
-          alert_scadenza_attivo?: boolean | null
-          created_at?: string
-          data_caricamento?: string
-          data_scadenza?: string | null
+          created_at?: string | null
+          data_caricamento?: string | null
+          data_riferimento?: string | null
           dimensione?: number | null
+          expense_id?: string | null
           formato?: string | null
           id?: string
+          importo?: number | null
           nome?: string
+          payment_id?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
-          tags?: string[] | null
-          tipo?: Database["public"]["Enums"]["document_type"]
-          ultimo_alert?: string | null
-          updated_at?: string
-          url?: string | null
-          user_id?: string
+          tipo?: string | null
+          updated_at?: string | null
+          url?: string
+          user_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "documents_expense_id_fkey"
+            columns: ["expense_id"]
+            isOneToOne: false
+            referencedRelation: "property_expenses"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "documents_property_mobile_id_fkey"
             columns: ["property_mobile_id"]
@@ -178,84 +370,80 @@ export type Database = {
             referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
+        ]
+      }
+      email_log: {
+        Row: {
+          booking_id: string | null
+          error_message: string | null
+          id: string
+          recipient_email: string
+          sent_at: string | null
+          status: string | null
+          subject: string | null
+          template_type: string
+        }
+        Insert: {
+          booking_id?: string | null
+          error_message?: string | null
+          id?: string
+          recipient_email: string
+          sent_at?: string | null
+          status?: string | null
+          subject?: string | null
+          template_type: string
+        }
+        Update: {
+          booking_id?: string | null
+          error_message?: string | null
+          id?: string
+          recipient_email?: string
+          sent_at?: string | null
+          status?: string | null
+          subject?: string | null
+          template_type?: string
+        }
+        Relationships: [
           {
-            foreignKeyName: "documents_property_real_id_fkey"
-            columns: ["property_real_id"]
+            foreignKeyName: "email_log_booking_id_fkey"
+            columns: ["booking_id"]
             isOneToOne: false
-            referencedRelation: "property_performance"
+            referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
         ]
       }
-      income: {
+      ical_sync_log: {
         Row: {
-          created_at: string
-          data_incasso: string
-          descrizione: string
+          bookings_created: number | null
+          errors: string | null
+          events_found: number | null
           id: string
-          importo: number
-          inquilino: string | null
-          note: string | null
-          periodo_riferimento: string | null
-          property_mobile_id: string | null
-          property_real_id: string | null
-          stato: string | null
-          tipo_entrata: string
-          updated_at: string
-          user_id: string
+          property_id: string | null
+          synced_at: string | null
         }
         Insert: {
-          created_at?: string
-          data_incasso?: string
-          descrizione: string
+          bookings_created?: number | null
+          errors?: string | null
+          events_found?: number | null
           id?: string
-          importo: number
-          inquilino?: string | null
-          note?: string | null
-          periodo_riferimento?: string | null
-          property_mobile_id?: string | null
-          property_real_id?: string | null
-          stato?: string | null
-          tipo_entrata?: string
-          updated_at?: string
-          user_id: string
+          property_id?: string | null
+          synced_at?: string | null
         }
         Update: {
-          created_at?: string
-          data_incasso?: string
-          descrizione?: string
+          bookings_created?: number | null
+          errors?: string | null
+          events_found?: number | null
           id?: string
-          importo?: number
-          inquilino?: string | null
-          note?: string | null
-          periodo_riferimento?: string | null
-          property_mobile_id?: string | null
-          property_real_id?: string | null
-          stato?: string | null
-          tipo_entrata?: string
-          updated_at?: string
-          user_id?: string
+          property_id?: string | null
+          synced_at?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "income_property_mobile_id_fkey"
-            columns: ["property_mobile_id"]
-            isOneToOne: false
-            referencedRelation: "properties_mobile"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "income_property_real_id_fkey"
-            columns: ["property_real_id"]
+            foreignKeyName: "ical_sync_log_property_id_fkey"
+            columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties_real"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "income_property_real_id_fkey"
-            columns: ["property_real_id"]
-            isOneToOne: false
-            referencedRelation: "property_performance"
             referencedColumns: ["id"]
           },
         ]
@@ -271,7 +459,6 @@ export type Database = {
           note: string | null
           officina: string | null
           property_mobile_id: string
-          prossima_manutenzione: string | null
           tipo: Database["public"]["Enums"]["maintenance_type"]
         }
         Insert: {
@@ -284,7 +471,6 @@ export type Database = {
           note?: string | null
           officina?: string | null
           property_mobile_id: string
-          prossima_manutenzione?: string | null
           tipo: Database["public"]["Enums"]["maintenance_type"]
         }
         Update: {
@@ -297,7 +483,6 @@ export type Database = {
           note?: string | null
           officina?: string | null
           property_mobile_id?: string
-          prossima_manutenzione?: string | null
           tipo?: Database["public"]["Enums"]["maintenance_type"]
         }
         Relationships: [
@@ -310,150 +495,250 @@ export type Database = {
           },
         ]
       }
-      notifications: {
+      maintenance_expenses: {
         Row: {
-          activity_id: string | null
-          created_at: string
-          data_invio: string | null
-          data_scadenza: string
-          document_id: string | null
-          giorni_preavviso: number | null
+          amount: number
+          created_at: string | null
+          date: string | null
+          description: string | null
           id: string
-          inviata: boolean | null
-          messaggio: string
-          payment_id: string | null
-          priorita: string | null
-          property_mobile_id: string | null
-          property_real_id: string | null
-          tipo: string
-          titolo: string
-          updated_at: string
-          user_id: string
+          property_id: string | null
+          supplier: string | null
+          ticket_id: string | null
         }
         Insert: {
-          activity_id?: string | null
-          created_at?: string
-          data_invio?: string | null
-          data_scadenza: string
-          document_id?: string | null
-          giorni_preavviso?: number | null
+          amount: number
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
           id?: string
-          inviata?: boolean | null
-          messaggio: string
-          payment_id?: string | null
-          priorita?: string | null
-          property_mobile_id?: string | null
-          property_real_id?: string | null
-          tipo: string
-          titolo: string
-          updated_at?: string
-          user_id: string
+          property_id?: string | null
+          supplier?: string | null
+          ticket_id?: string | null
         }
         Update: {
-          activity_id?: string | null
-          created_at?: string
-          data_invio?: string | null
-          data_scadenza?: string
-          document_id?: string | null
-          giorni_preavviso?: number | null
+          amount?: number
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
           id?: string
-          inviata?: boolean | null
-          messaggio?: string
-          payment_id?: string | null
-          priorita?: string | null
-          property_mobile_id?: string | null
-          property_real_id?: string | null
-          tipo?: string
-          titolo?: string
-          updated_at?: string
-          user_id?: string
+          property_id?: string | null
+          supplier?: string | null
+          ticket_id?: string | null
         }
         Relationships: [
           {
-            foreignKeyName: "notifications_activity_id_fkey"
-            columns: ["activity_id"]
-            isOneToOne: false
-            referencedRelation: "activities"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "documents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_payment_id_fkey"
-            columns: ["payment_id"]
-            isOneToOne: false
-            referencedRelation: "payments"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_property_mobile_id_fkey"
-            columns: ["property_mobile_id"]
-            isOneToOne: false
-            referencedRelation: "properties_mobile"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "notifications_property_real_id_fkey"
-            columns: ["property_real_id"]
+            foreignKeyName: "maintenance_expenses_property_id_fkey"
+            columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "notifications_property_real_id_fkey"
-            columns: ["property_real_id"]
+            foreignKeyName: "maintenance_expenses_ticket_id_fkey"
+            columns: ["ticket_id"]
             isOneToOne: false
-            referencedRelation: "property_performance"
+            referencedRelation: "tickets"
             referencedColumns: ["id"]
           },
         ]
       }
-      payment_history: {
+      messages: {
         Row: {
+          booking_id: string | null
+          channel: Database["public"]["Enums"]["message_channel"]
+          content: string
           created_at: string
-          data_pagamento: string
           id: string
-          importo_pagato: number
-          metodo_pagamento: string | null
-          note: string | null
-          payment_id: string
+          metadata: Json | null
+          property_id: string | null
+          read: boolean
+          sender_type: Database["public"]["Enums"]["sender_type"]
+          template_key: string | null
+          user_id: string
         }
         Insert: {
+          booking_id?: string | null
+          channel?: Database["public"]["Enums"]["message_channel"]
+          content: string
           created_at?: string
-          data_pagamento?: string
           id?: string
-          importo_pagato: number
-          metodo_pagamento?: string | null
-          note?: string | null
-          payment_id: string
+          metadata?: Json | null
+          property_id?: string | null
+          read?: boolean
+          sender_type?: Database["public"]["Enums"]["sender_type"]
+          template_key?: string | null
+          user_id: string
         }
         Update: {
+          booking_id?: string | null
+          channel?: Database["public"]["Enums"]["message_channel"]
+          content?: string
           created_at?: string
-          data_pagamento?: string
           id?: string
-          importo_pagato?: number
-          metodo_pagamento?: string | null
-          note?: string | null
-          payment_id?: string
+          metadata?: Json | null
+          property_id?: string | null
+          read?: boolean
+          sender_type?: Database["public"]["Enums"]["sender_type"]
+          template_key?: string | null
+          user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "payment_history_payment_id_fkey"
-            columns: ["payment_id"]
+            foreignKeyName: "messages_booking_id_fkey"
+            columns: ["booking_id"]
             isOneToOne: false
-            referencedRelation: "payments"
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          booking_id: string | null
+          created_at: string
+          id: string
+          is_read: boolean | null
+          link: string | null
+          message: string | null
+          ticket_id: string | null
+          title: string
+          type: string | null
+          user_id: string | null
+        }
+        Insert: {
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          message?: string | null
+          ticket_id?: string | null
+          title: string
+          type?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          booking_id?: string | null
+          created_at?: string
+          id?: string
+          is_read?: boolean | null
+          link?: string | null
+          message?: string | null
+          ticket_id?: string | null
+          title?: string
+          type?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_settings: {
+        Row: {
+          brand_color: string | null
+          brand_logo_url: string | null
+          caparra_due_days: number | null
+          caparra_percentage: number | null
+          cauzione_amount: number | null
+          cauzione_preauth_days_before: number | null
+          cauzione_release_days_after: number | null
+          checkin_email_days_before: number | null
+          created_at: string | null
+          email_from_name: string | null
+          email_reply_to: string | null
+          id: string
+          property_id: string | null
+          reminder_days_before: number | null
+          saldo_due_days_before: number | null
+          stripe_account_id: string | null
+          stripe_configured: boolean | null
+          tassa_soggiorno_per_night: number | null
+          tassa_soggiorno_per_person: boolean | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          brand_color?: string | null
+          brand_logo_url?: string | null
+          caparra_due_days?: number | null
+          caparra_percentage?: number | null
+          cauzione_amount?: number | null
+          cauzione_preauth_days_before?: number | null
+          cauzione_release_days_after?: number | null
+          checkin_email_days_before?: number | null
+          created_at?: string | null
+          email_from_name?: string | null
+          email_reply_to?: string | null
+          id?: string
+          property_id?: string | null
+          reminder_days_before?: number | null
+          saldo_due_days_before?: number | null
+          stripe_account_id?: string | null
+          stripe_configured?: boolean | null
+          tassa_soggiorno_per_night?: number | null
+          tassa_soggiorno_per_person?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          brand_color?: string | null
+          brand_logo_url?: string | null
+          caparra_due_days?: number | null
+          caparra_percentage?: number | null
+          cauzione_amount?: number | null
+          cauzione_preauth_days_before?: number | null
+          cauzione_release_days_after?: number | null
+          checkin_email_days_before?: number | null
+          created_at?: string | null
+          email_from_name?: string | null
+          email_reply_to?: string | null
+          id?: string
+          property_id?: string | null
+          reminder_days_before?: number | null
+          saldo_due_days_before?: number | null
+          stripe_account_id?: string | null
+          stripe_configured?: boolean | null
+          tassa_soggiorno_per_night?: number | null
+          tassa_soggiorno_per_person?: boolean | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_settings_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: true
+            referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
         ]
       }
       payments: {
         Row: {
-          categoria: Database["public"]["Enums"]["payment_category"] | null
+          allegato_url: string | null
+          categoria: string | null
+          competence: string | null
           created_at: string
           data_pagamento: string | null
           descrizione: string
@@ -463,18 +748,24 @@ export type Database = {
           fornitore: string | null
           id: string
           importo: number
-          importo_originale: number
+          importo_originale: number | null
           metodo_pagamento: string | null
+          note: string | null
+          payment_method: string | null
+          payment_status: string | null
           property_mobile_id: string | null
           property_real_id: string | null
-          ricorrenza_tipo: Database["public"]["Enums"]["payment_recurrence"]
+          ricorrenza_tipo: string
           scadenza: string
-          stato: Database["public"]["Enums"]["payment_status"] | null
+          stato: string | null
+          ticket_id: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
-          categoria?: Database["public"]["Enums"]["payment_category"] | null
+          allegato_url?: string | null
+          categoria?: string | null
+          competence?: string | null
           created_at?: string
           data_pagamento?: string | null
           descrizione: string
@@ -484,18 +775,24 @@ export type Database = {
           fornitore?: string | null
           id?: string
           importo: number
-          importo_originale: number
+          importo_originale?: number | null
           metodo_pagamento?: string | null
+          note?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
-          ricorrenza_tipo?: Database["public"]["Enums"]["payment_recurrence"]
+          ricorrenza_tipo?: string
           scadenza: string
-          stato?: Database["public"]["Enums"]["payment_status"] | null
+          stato?: string | null
+          ticket_id?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
-          categoria?: Database["public"]["Enums"]["payment_category"] | null
+          allegato_url?: string | null
+          categoria?: string | null
+          competence?: string | null
           created_at?: string
           data_pagamento?: string | null
           descrizione?: string
@@ -505,13 +802,17 @@ export type Database = {
           fornitore?: string | null
           id?: string
           importo?: number
-          importo_originale?: number
+          importo_originale?: number | null
           metodo_pagamento?: string | null
+          note?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
-          ricorrenza_tipo?: Database["public"]["Enums"]["payment_recurrence"]
+          ricorrenza_tipo?: string
           scadenza?: string
-          stato?: Database["public"]["Enums"]["payment_status"] | null
+          stato?: string | null
+          ticket_id?: string | null
           updated_at?: string
           user_id?: string
         }
@@ -531,386 +832,413 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "payments_property_real_id_fkey"
-            columns: ["property_real_id"]
+            foreignKeyName: "payments_ticket_id_fkey"
+            columns: ["ticket_id"]
             isOneToOne: false
-            referencedRelation: "property_performance"
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      portal_connections: {
+        Row: {
+          api_credentials: Json | null
+          connection_type: string
+          created_at: string | null
+          ical_url: string | null
+          id: string
+          last_sync: string | null
+          last_sync_result: Json | null
+          portal_name: string
+          property_id: string | null
+          status: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          api_credentials?: Json | null
+          connection_type?: string
+          created_at?: string | null
+          ical_url?: string | null
+          id?: string
+          last_sync?: string | null
+          last_sync_result?: Json | null
+          portal_name: string
+          property_id?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          api_credentials?: Json | null
+          connection_type?: string
+          created_at?: string | null
+          ical_url?: string | null
+          id?: string
+          last_sync?: string | null
+          last_sync_result?: Json | null
+          portal_name?: string
+          property_id?: string | null
+          status?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "portal_connections_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pricing_rules: {
+        Row: {
+          base_price: number
+          created_at: string
+          id: string
+          max_price: number | null
+          min_price: number | null
+          notes: string | null
+          property_id: string
+          season_adjustments: Json | null
+          strategy: string
+          updated_at: string
+          user_id: string
+          weekend_adjustment: number | null
+        }
+        Insert: {
+          base_price?: number
+          created_at?: string
+          id?: string
+          max_price?: number | null
+          min_price?: number | null
+          notes?: string | null
+          property_id: string
+          season_adjustments?: Json | null
+          strategy?: string
+          updated_at?: string
+          user_id?: string
+          weekend_adjustment?: number | null
+        }
+        Update: {
+          base_price?: number
+          created_at?: string
+          id?: string
+          max_price?: number | null
+          min_price?: number | null
+          notes?: string | null
+          property_id?: string
+          season_adjustments?: Json | null
+          strategy?: string
+          updated_at?: string
+          user_id?: string
+          weekend_adjustment?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pricing_rules_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
         ]
       }
       profiles: {
         Row: {
-          avatar_url: string | null
-          created_at: string
+          approved: boolean | null
+          created_at: string | null
           email: string | null
           first_name: string | null
           id: string
           last_name: string | null
           phone: string | null
-          updated_at: string
-          user_id: string
+          role: string | null
+          status: string | null
         }
         Insert: {
-          avatar_url?: string | null
-          created_at?: string
+          approved?: boolean | null
+          created_at?: string | null
           email?: string | null
           first_name?: string | null
-          id?: string
+          id: string
           last_name?: string | null
           phone?: string | null
-          updated_at?: string
-          user_id: string
+          role?: string | null
+          status?: string | null
         }
         Update: {
-          avatar_url?: string | null
-          created_at?: string
+          approved?: boolean | null
+          created_at?: string | null
           email?: string | null
           first_name?: string | null
           id?: string
           last_name?: string | null
           phone?: string | null
-          updated_at?: string
-          user_id?: string
+          role?: string | null
+          status?: string | null
         }
         Relationships: []
       }
       properties_mobile: {
         Row: {
           anno: number | null
-          categoria: Database["public"]["Enums"]["mobile_category"]
-          chilometraggio: number | null
+          categoria: string | null
           codice_identificativo: string | null
-          consumo_medio: number | null
-          costi_manutenzione_annuali: number | null
           costo_per_km: number | null
-          created_at: string
+          created_at: string | null
+          data_revisione: string | null
+          description: string | null
           id: string
+          insurance_url: string | null
+          km: number | null
+          libretto_url: string | null
           marca: string | null
           modello: string | null
-          nome: string
-          numero_immatricolazione: string | null
-          numero_serie: string | null
-          numero_telaio: string | null
-          porto_stazionamento: string | null
-          proprietario_legale: string | null
-          quota_possesso: number | null
+          nome: string | null
+          note: string | null
+          proprietario: string | null
+          scadenza_assicurazione: string | null
+          scadenza_bollo: string | null
+          scadenza_revisione: string | null
           stato: string | null
+          status: string | null
           targa: string | null
-          updated_at: string
+          tipo_carburante: string | null
+          type: string | null
+          updated_at: string | null
           user_id: string
           valore_acquisto: number | null
           valore_attuale: number | null
+          veicolo: string | null
         }
         Insert: {
           anno?: number | null
-          categoria: Database["public"]["Enums"]["mobile_category"]
-          chilometraggio?: number | null
+          categoria?: string | null
           codice_identificativo?: string | null
-          consumo_medio?: number | null
-          costi_manutenzione_annuali?: number | null
           costo_per_km?: number | null
-          created_at?: string
+          created_at?: string | null
+          data_revisione?: string | null
+          description?: string | null
           id?: string
+          insurance_url?: string | null
+          km?: number | null
+          libretto_url?: string | null
           marca?: string | null
           modello?: string | null
-          nome: string
-          numero_immatricolazione?: string | null
-          numero_serie?: string | null
-          numero_telaio?: string | null
-          porto_stazionamento?: string | null
-          proprietario_legale?: string | null
-          quota_possesso?: number | null
+          nome?: string | null
+          note?: string | null
+          proprietario?: string | null
+          scadenza_assicurazione?: string | null
+          scadenza_bollo?: string | null
+          scadenza_revisione?: string | null
           stato?: string | null
+          status?: string | null
           targa?: string | null
-          updated_at?: string
+          tipo_carburante?: string | null
+          type?: string | null
+          updated_at?: string | null
           user_id: string
           valore_acquisto?: number | null
           valore_attuale?: number | null
+          veicolo?: string | null
         }
         Update: {
           anno?: number | null
-          categoria?: Database["public"]["Enums"]["mobile_category"]
-          chilometraggio?: number | null
+          categoria?: string | null
           codice_identificativo?: string | null
-          consumo_medio?: number | null
-          costi_manutenzione_annuali?: number | null
           costo_per_km?: number | null
-          created_at?: string
+          created_at?: string | null
+          data_revisione?: string | null
+          description?: string | null
           id?: string
+          insurance_url?: string | null
+          km?: number | null
+          libretto_url?: string | null
           marca?: string | null
           modello?: string | null
-          nome?: string
-          numero_immatricolazione?: string | null
-          numero_serie?: string | null
-          numero_telaio?: string | null
-          porto_stazionamento?: string | null
-          proprietario_legale?: string | null
-          quota_possesso?: number | null
+          nome?: string | null
+          note?: string | null
+          proprietario?: string | null
+          scadenza_assicurazione?: string | null
+          scadenza_bollo?: string | null
+          scadenza_revisione?: string | null
           stato?: string | null
+          status?: string | null
           targa?: string | null
-          updated_at?: string
+          tipo_carburante?: string | null
+          type?: string | null
+          updated_at?: string | null
           user_id?: string
           valore_acquisto?: number | null
           valore_attuale?: number | null
+          veicolo?: string | null
         }
         Relationships: []
       }
       properties_real: {
         Row: {
-          anno_costruzione: number | null
-          canone_mensile: number | null
-          cap: string
-          citta: string
-          codice_identificativo: string | null
-          contatto_inquilino: string | null
-          costi_gestione_annuali: number | null
-          created_at: string
-          data_fine_contratto: string | null
-          data_inizio_contratto: string | null
+          ascensore: boolean | null
+          cap: string | null
+          checkin_guide: string | null
+          checkin_video_url: string | null
+          citta: string | null
+          codice_keybox: string | null
+          created_at: string | null
+          ical_url: string | null
           id: string
-          inquilino: string | null
-          metri_quadrati: number | null
+          indirizzo: string | null
+          istruzioni_checkin: string | null
+          keybox_code: string | null
+          latitude: number | null
+          longitude: number | null
+          mq: number | null
           nome: string
-          numero_vani: number | null
-          proprietario_legale: string | null
-          provincia: string
-          quota_possesso: number | null
+          piano: string | null
+          provincia: string | null
           rendita: number | null
+          staff_token: string | null
           stato: string | null
-          stato_conservazione:
-            | Database["public"]["Enums"]["property_status"]
-            | null
-          tipo: Database["public"]["Enums"]["property_type"]
-          updated_at: string
-          user_id: string
+          stato_conservazione: string | null
+          tipo: string | null
+          tipo_affitto: string | null
+          user_id: string | null
           valore_acquisto: number | null
           valore_catastale: number | null
-          via: string
-          ical_url: string | null
+          vani: number | null
+          via: string | null
+          wifi_password: string | null
+          wifi_ssid: string | null
         }
         Insert: {
-          anno_costruzione?: number | null
-          canone_mensile?: number | null
-          cap: string
-          citta: string
-          codice_identificativo?: string | null
-          contatto_inquilino?: string | null
-          costi_gestione_annuali?: number | null
-          created_at?: string
-          data_fine_contratto?: string | null
-          data_inizio_contratto?: string | null
+          ascensore?: boolean | null
+          cap?: string | null
+          checkin_guide?: string | null
+          checkin_video_url?: string | null
+          citta?: string | null
+          codice_keybox?: string | null
+          created_at?: string | null
+          ical_url?: string | null
           id?: string
-          inquilino?: string | null
-          metri_quadrati?: number | null
+          indirizzo?: string | null
+          istruzioni_checkin?: string | null
+          keybox_code?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          mq?: number | null
           nome: string
-          numero_vani?: number | null
-          proprietario_legale?: string | null
-          provincia: string
-          quota_possesso?: number | null
+          piano?: string | null
+          provincia?: string | null
           rendita?: number | null
+          staff_token?: string | null
           stato?: string | null
-          stato_conservazione?:
-            | Database["public"]["Enums"]["property_status"]
-            | null
-          tipo: Database["public"]["Enums"]["property_type"]
-          updated_at?: string
-          user_id: string
+          stato_conservazione?: string | null
+          tipo?: string | null
+          tipo_affitto?: string | null
+          user_id?: string | null
           valore_acquisto?: number | null
           valore_catastale?: number | null
-          via: string
-          ical_url?: string | null
+          vani?: number | null
+          via?: string | null
+          wifi_password?: string | null
+          wifi_ssid?: string | null
         }
         Update: {
-          anno_costruzione?: number | null
-          canone_mensile?: number | null
-          cap?: string
-          citta?: string
-          codice_identificativo?: string | null
-          contatto_inquilino?: string | null
-          costi_gestione_annuali?: number | null
-          created_at?: string
-          data_fine_contratto?: string | null
-          data_inizio_contratto?: string | null
+          ascensore?: boolean | null
+          cap?: string | null
+          checkin_guide?: string | null
+          checkin_video_url?: string | null
+          citta?: string | null
+          codice_keybox?: string | null
+          created_at?: string | null
+          ical_url?: string | null
           id?: string
-          inquilino?: string | null
-          metri_quadrati?: number | null
+          indirizzo?: string | null
+          istruzioni_checkin?: string | null
+          keybox_code?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          mq?: number | null
           nome?: string
-          numero_vani?: number | null
-          proprietario_legale?: string | null
-          provincia?: string
-          quota_possesso?: number | null
+          piano?: string | null
+          provincia?: string | null
           rendita?: number | null
+          staff_token?: string | null
           stato?: string | null
-          stato_conservazione?:
-            | Database["public"]["Enums"]["property_status"]
-            | null
-          tipo?: Database["public"]["Enums"]["property_type"]
-          updated_at?: string
-          user_id?: string
+          stato_conservazione?: string | null
+          tipo?: string | null
+          tipo_affitto?: string | null
+          user_id?: string | null
           valore_acquisto?: number | null
           valore_catastale?: number | null
-          via?: string
-          ical_url?: string | null
+          vani?: number | null
+          via?: string | null
+          wifi_password?: string | null
+          wifi_ssid?: string | null
         }
         Relationships: []
       }
-      payment_settings: {
+      property_expenses: {
         Row: {
+          amount: number
+          assigned_to: string | null
+          attachment_url: string | null
+          category: string | null
+          charged_to_tenant: boolean | null
+          created_at: string | null
+          date: string
+          description: string | null
           id: string
-          property_id: string
+          property_id: string | null
+          status: string | null
+          supplier: string | null
+          supplier_contact: string | null
           user_id: string | null
-          stripe_account_id: string | null
-          stripe_configured: boolean
-          caparra_percentage: number
-          caparra_due_days: number
-          saldo_due_days_before: number
-          cauzione_amount: number
-          cauzione_preauth_days_before: number
-          cauzione_release_days_after: number
-          tassa_soggiorno_per_night: number
-          tassa_soggiorno_per_person: boolean
-          checkin_email_days_before: number
-          reminder_days_before: number
-          brand_logo_url: string | null
-          brand_color: string
-          email_from_name: string | null
-          email_reply_to: string | null
-          created_at: string
-          updated_at: string
         }
         Insert: {
+          amount: number
+          assigned_to?: string | null
+          attachment_url?: string | null
+          category?: string | null
+          charged_to_tenant?: boolean | null
+          created_at?: string | null
+          date: string
+          description?: string | null
           id?: string
-          property_id: string
+          property_id?: string | null
+          status?: string | null
+          supplier?: string | null
+          supplier_contact?: string | null
           user_id?: string | null
-          stripe_account_id?: string | null
-          stripe_configured?: boolean
-          caparra_percentage?: number
-          caparra_due_days?: number
-          saldo_due_days_before?: number
-          cauzione_amount?: number
-          cauzione_preauth_days_before?: number
-          cauzione_release_days_after?: number
-          tassa_soggiorno_per_night?: number
-          tassa_soggiorno_per_person?: boolean
-          checkin_email_days_before?: number
-          reminder_days_before?: number
-          brand_logo_url?: string | null
-          brand_color?: string
-          email_from_name?: string | null
-          email_reply_to?: string | null
-          created_at?: string
-          updated_at?: string
         }
         Update: {
+          amount?: number
+          assigned_to?: string | null
+          attachment_url?: string | null
+          category?: string | null
+          charged_to_tenant?: boolean | null
+          created_at?: string | null
+          date?: string
+          description?: string | null
           id?: string
-          property_id?: string
+          property_id?: string | null
+          status?: string | null
+          supplier?: string | null
+          supplier_contact?: string | null
           user_id?: string | null
-          stripe_account_id?: string | null
-          stripe_configured?: boolean
-          caparra_percentage?: number
-          caparra_due_days?: number
-          saldo_due_days_before?: number
-          cauzione_amount?: number
-          cauzione_preauth_days_before?: number
-          cauzione_release_days_after?: number
-          tassa_soggiorno_per_night?: number
-          tassa_soggiorno_per_person?: boolean
-          checkin_email_days_before?: number
-          reminder_days_before?: number
-          brand_logo_url?: string | null
-          brand_color?: string
-          email_from_name?: string | null
-          email_reply_to?: string | null
-          created_at?: string
-          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: "payment_settings_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: true
-            referencedRelation: "properties_real"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "payment_settings_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: "fk_expenses_profiles"
+            columns: ["assigned_to"]
             isOneToOne: false
-            referencedRelation: "users"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      email_log: {
-        Row: {
-          id: string
-          booking_id: string | null
-          recipient_email: string
-          template_type: string
-          subject: string | null
-          sent_at: string
-          status: string
-          error_message: string | null
-        }
-        Insert: {
-          id?: string
-          booking_id?: string | null
-          recipient_email: string
-          template_type: string
-          subject?: string | null
-          sent_at?: string
-          status?: string
-          error_message?: string | null
-        }
-        Update: {
-          id?: string
-          booking_id?: string | null
-          recipient_email?: string
-          template_type?: string
-          subject?: string | null
-          sent_at?: string
-          status?: string
-          error_message?: string | null
-        }
-        Relationships: [
           {
-            foreignKeyName: "email_log_booking_id_fkey"
-            columns: ["booking_id"]
-            isOneToOne: false
-            referencedRelation: "bookings"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      ical_sync_log: {
-        Row: {
-          id: string
-          property_id: string
-          synced_at: string
-          events_found: number
-          bookings_created: number
-          errors: string | null
-        }
-        Insert: {
-          id?: string
-          property_id: string
-          synced_at?: string
-          events_found?: number
-          bookings_created?: number
-          errors?: string | null
-        }
-        Update: {
-          id?: string
-          property_id?: string
-          synced_at?: string
-          events_found?: number
-          bookings_created?: number
-          errors?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "ical_sync_log_property_id_fkey"
+            foreignKeyName: "property_expenses_property_id_fkey"
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties_real"
@@ -920,42 +1248,33 @@ export type Database = {
       }
       refueling: {
         Row: {
-          chilometraggio: number | null
           costo_per_litro: number
           costo_totale: number
           created_at: string
           data_rifornimento: string
           id: string
           litri: number
-          note: string | null
           property_mobile_id: string
-          stazione_servizio: string | null
           tipo_carburante: Database["public"]["Enums"]["fuel_type"]
         }
         Insert: {
-          chilometraggio?: number | null
           costo_per_litro: number
           costo_totale: number
           created_at?: string
           data_rifornimento?: string
           id?: string
           litri: number
-          note?: string | null
           property_mobile_id: string
-          stazione_servizio?: string | null
           tipo_carburante?: Database["public"]["Enums"]["fuel_type"]
         }
         Update: {
-          chilometraggio?: number | null
           costo_per_litro?: number
           costo_totale?: number
           created_at?: string
           data_rifornimento?: string
           id?: string
           litri?: number
-          note?: string | null
           property_mobile_id?: string
-          stazione_servizio?: string | null
           tipo_carburante?: Database["public"]["Enums"]["fuel_type"]
         }
         Relationships: [
@@ -968,67 +1287,545 @@ export type Database = {
           },
         ]
       }
-    }
-    Views: {
-      property_performance: {
+      revenue_entries: {
         Row: {
-          canone_mensile: number | null
-          codice_identificativo: string | null
-          id: string | null
-          nome: string | null
-          reddito_annuale: number | null
-          reddito_netto_annuale: number | null
-          reddito_teorico_annuale: number | null
-          roi_percentuale: number | null
-          spese_annuali: number | null
-          stato: string | null
-          valore_acquisto: number | null
+          amount: number
+          category: string | null
+          created_at: string | null
+          date: string | null
+          description: string | null
+          id: string
+          property_id: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          id?: string
+          property_id?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string | null
+          date?: string | null
+          description?: string | null
+          id?: string
+          property_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revenue_entries_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      services: {
+        Row: {
+          active: boolean | null
+          attivo: boolean | null
+          created_at: string | null
+          description: string | null
+          descrizione: string | null
+          id: string
+          image_url: string | null
+          immagine_url: string | null
+          indirizzo: string | null
+          link_prenotazione: string | null
+          payment_link: string | null
+          prezzo: string | null
+          price: number | null
+          property_ids: string[] | null
+          titolo: string
+        }
+        Insert: {
+          active?: boolean | null
+          attivo?: boolean | null
+          created_at?: string | null
+          description?: string | null
+          descrizione?: string | null
+          id?: string
+          image_url?: string | null
+          immagine_url?: string | null
+          indirizzo?: string | null
+          link_prenotazione?: string | null
+          payment_link?: string | null
+          prezzo?: string | null
+          price?: number | null
+          property_ids?: string[] | null
+          titolo: string
+        }
+        Update: {
+          active?: boolean | null
+          attivo?: boolean | null
+          created_at?: string | null
+          description?: string | null
+          descrizione?: string | null
+          id?: string
+          image_url?: string | null
+          immagine_url?: string | null
+          indirizzo?: string | null
+          link_prenotazione?: string | null
+          payment_link?: string | null
+          prezzo?: string | null
+          price?: number | null
+          property_ids?: string[] | null
+          titolo?: string
         }
         Relationships: []
       }
+      tenant_payments: {
+        Row: {
+          booking_id: string | null
+          category: Database["public"]["Enums"]["payment_category"] | null
+          consumo_kw_mc: number | null
+          created_at: string | null
+          data_pagamento: string | null
+          data_scadenza: string
+          description: string | null
+          documento_url: string | null
+          email_sent: boolean | null
+          id: string
+          importo: number
+          is_preauth: boolean | null
+          is_recurring: boolean | null
+          notes: string | null
+          payment_date: string | null
+          payment_date_declared: string | null
+          payment_proof_url: string | null
+          payment_type: string | null
+          periodo_riferimento: string | null
+          preauth_captured_amount: number | null
+          preauth_reason: string | null
+          preauth_released: boolean | null
+          receipt_url: string | null
+          recurrence_group_id: string | null
+          stato: string | null
+          stripe_checkout_url: string | null
+          stripe_payment_intent_id: string | null
+          stripe_session_id: string | null
+          tipo: string | null
+          user_id: string | null
+        }
+        Insert: {
+          booking_id?: string | null
+          category?: Database["public"]["Enums"]["payment_category"] | null
+          consumo_kw_mc?: number | null
+          created_at?: string | null
+          data_pagamento?: string | null
+          data_scadenza: string
+          description?: string | null
+          documento_url?: string | null
+          email_sent?: boolean | null
+          id?: string
+          importo: number
+          is_preauth?: boolean | null
+          is_recurring?: boolean | null
+          notes?: string | null
+          payment_date?: string | null
+          payment_date_declared?: string | null
+          payment_proof_url?: string | null
+          payment_type?: string | null
+          periodo_riferimento?: string | null
+          preauth_captured_amount?: number | null
+          preauth_reason?: string | null
+          preauth_released?: boolean | null
+          receipt_url?: string | null
+          recurrence_group_id?: string | null
+          stato?: string | null
+          stripe_checkout_url?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          tipo?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          booking_id?: string | null
+          category?: Database["public"]["Enums"]["payment_category"] | null
+          consumo_kw_mc?: number | null
+          created_at?: string | null
+          data_pagamento?: string | null
+          data_scadenza?: string
+          description?: string | null
+          documento_url?: string | null
+          email_sent?: boolean | null
+          id?: string
+          importo?: number
+          is_preauth?: boolean | null
+          is_recurring?: boolean | null
+          notes?: string | null
+          payment_date?: string | null
+          payment_date_declared?: string | null
+          payment_proof_url?: string | null
+          payment_type?: string | null
+          periodo_riferimento?: string | null
+          preauth_captured_amount?: number | null
+          preauth_reason?: string | null
+          preauth_released?: boolean | null
+          receipt_url?: string | null
+          recurrence_group_id?: string | null
+          stato?: string | null
+          stripe_checkout_url?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_session_id?: string | null
+          tipo?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_payments_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tenant_profiles: {
+        Row: {
+          booking_id: string | null
+          compliance_score: number | null
+          created_at: string | null
+          id: string
+          owner_notes: string | null
+          payment_reliability: number | null
+          ticket_frequency: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          booking_id?: string | null
+          compliance_score?: number | null
+          created_at?: string | null
+          id?: string
+          owner_notes?: string | null
+          payment_reliability?: number | null
+          ticket_frequency?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          booking_id?: string | null
+          compliance_score?: number | null
+          created_at?: string | null
+          id?: string
+          owner_notes?: string | null
+          payment_reliability?: number | null
+          ticket_frequency?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tenant_profiles_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: true
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tickets: {
+        Row: {
+          admin_notes: string | null
+          ai_categoria: string | null
+          ai_confidence: number | null
+          ai_priorita: string | null
+          ai_suggerimento: string | null
+          assigned_partner_id: string | null
+          assigned_to: string[] | null
+          attachments: string[] | null
+          booking_id: string | null
+          cost: number | null
+          created_at: string | null
+          creato_da: string | null
+          data_scadenza: string | null
+          descrizione: string | null
+          foto_url: string | null
+          id: string
+          priorita: string | null
+          promised_payment_date: string | null
+          promised_payment_method: string | null
+          property_mobile_id: string | null
+          property_real_id: string | null
+          quote_amount: number | null
+          quote_status: string | null
+          quote_url: string | null
+          related_payment_id: string | null
+          resolution_photo_url: string | null
+          ricevuta_url: string | null
+          scadenza: string | null
+          share_notes: boolean | null
+          source: string | null
+          spesa_visibile_ospite: boolean | null
+          stato: string | null
+          supplier: string | null
+          supplier_contact: string | null
+          titolo: string
+          user_id: string | null
+          whatsapp_from: string | null
+          whatsapp_message_id: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          ai_categoria?: string | null
+          ai_confidence?: number | null
+          ai_priorita?: string | null
+          ai_suggerimento?: string | null
+          assigned_partner_id?: string | null
+          assigned_to?: string[] | null
+          attachments?: string[] | null
+          booking_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          creato_da?: string | null
+          data_scadenza?: string | null
+          descrizione?: string | null
+          foto_url?: string | null
+          id?: string
+          priorita?: string | null
+          promised_payment_date?: string | null
+          promised_payment_method?: string | null
+          property_mobile_id?: string | null
+          property_real_id?: string | null
+          quote_amount?: number | null
+          quote_status?: string | null
+          quote_url?: string | null
+          related_payment_id?: string | null
+          resolution_photo_url?: string | null
+          ricevuta_url?: string | null
+          scadenza?: string | null
+          share_notes?: boolean | null
+          source?: string | null
+          spesa_visibile_ospite?: boolean | null
+          stato?: string | null
+          supplier?: string | null
+          supplier_contact?: string | null
+          titolo: string
+          user_id?: string | null
+          whatsapp_from?: string | null
+          whatsapp_message_id?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          ai_categoria?: string | null
+          ai_confidence?: number | null
+          ai_priorita?: string | null
+          ai_suggerimento?: string | null
+          assigned_partner_id?: string | null
+          assigned_to?: string[] | null
+          attachments?: string[] | null
+          booking_id?: string | null
+          cost?: number | null
+          created_at?: string | null
+          creato_da?: string | null
+          data_scadenza?: string | null
+          descrizione?: string | null
+          foto_url?: string | null
+          id?: string
+          priorita?: string | null
+          promised_payment_date?: string | null
+          promised_payment_method?: string | null
+          property_mobile_id?: string | null
+          property_real_id?: string | null
+          quote_amount?: number | null
+          quote_status?: string | null
+          quote_url?: string | null
+          related_payment_id?: string | null
+          resolution_photo_url?: string | null
+          ricevuta_url?: string | null
+          scadenza?: string | null
+          share_notes?: boolean | null
+          source?: string | null
+          spesa_visibile_ospite?: boolean | null
+          stato?: string | null
+          supplier?: string | null
+          supplier_contact?: string | null
+          titolo?: string
+          user_id?: string | null
+          whatsapp_from?: string | null
+          whatsapp_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tickets_assigned_partner_id_fkey"
+            columns: ["assigned_partner_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_property_mobile_id_fkey"
+            columns: ["property_mobile_id"]
+            isOneToOne: false
+            referencedRelation: "properties_mobile"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_property_real_id_fkey"
+            columns: ["property_real_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tickets_related_payment_id_fkey"
+            columns: ["related_payment_id"]
+            isOneToOne: false
+            referencedRelation: "tenant_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      whatsapp_config: {
+        Row: {
+          access_token: string
+          created_at: string | null
+          enabled: boolean | null
+          id: string
+          owner_whatsapp: string
+          phone_number_id: string
+          updated_at: string | null
+          user_id: string | null
+          verify_token: string
+          waba_id: string
+          webhook_secret: string | null
+        }
+        Insert: {
+          access_token: string
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          owner_whatsapp: string
+          phone_number_id: string
+          updated_at?: string | null
+          user_id?: string | null
+          verify_token: string
+          waba_id: string
+          webhook_secret?: string | null
+        }
+        Update: {
+          access_token?: string
+          created_at?: string | null
+          enabled?: boolean | null
+          id?: string
+          owner_whatsapp?: string
+          phone_number_id?: string
+          updated_at?: string | null
+          user_id?: string | null
+          verify_token?: string
+          waba_id?: string
+          webhook_secret?: string | null
+        }
+        Relationships: []
+      }
+      whatsapp_messages: {
+        Row: {
+          body: string | null
+          booking_id: string | null
+          created_at: string | null
+          direction: string
+          error_message: string | null
+          from_number: string
+          id: string
+          media_url: string | null
+          processed: boolean | null
+          ticket_id: string | null
+          to_number: string | null
+          wa_message_id: string | null
+        }
+        Insert: {
+          body?: string | null
+          booking_id?: string | null
+          created_at?: string | null
+          direction: string
+          error_message?: string | null
+          from_number: string
+          id?: string
+          media_url?: string | null
+          processed?: boolean | null
+          ticket_id?: string | null
+          to_number?: string | null
+          wa_message_id?: string | null
+        }
+        Update: {
+          body?: string | null
+          booking_id?: string | null
+          created_at?: string | null
+          direction?: string
+          error_message?: string | null
+          from_number?: string
+          id?: string
+          media_url?: string | null
+          processed?: boolean | null
+          ticket_id?: string | null
+          to_number?: string | null
+          wa_message_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_messages_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "whatsapp_messages_ticket_id_fkey"
+            columns: ["ticket_id"]
+            isOneToOne: false
+            referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+    }
+    Views: {
+      [_ in never]: never
     }
     Functions: {
-      generate_property_code: {
-        Args: { property_type: string; user_id: string }
-        Returns: string
-      }
+      check_deadlines: { Args: never; Returns: undefined }
+      get_secret: { Args: { secret_name: string }; Returns: string }
+      hello_world: { Args: never; Returns: string }
     }
     Enums: {
       activity_type: "manutenzione" | "pulizia" | "ispezione" | "generale"
-      document_type:
-        | "contratto"
-        | "assicurazione"
-        | "certificato"
-        | "fattura"
-        | "libretto"
-        | "altro"
       fuel_type: "benzina" | "diesel" | "gpl" | "metano" | "elettrico"
       maintenance_type:
         | "tagliando"
         | "revisione"
         | "riparazione"
         | "sostituzione_parti"
+      message_channel: "whatsapp" | "email" | "internal"
       mobile_category: "veicolo" | "imbarcazione" | "attrezzatura"
       payment_category:
-        | "condominio"
-        | "tasse"
-        | "assicurazione"
-        | "bollo"
-        | "manutenzione"
+        | "canone_locazione"
+        | "rimborso_utenze"
+        | "deposito_cauzionale"
+        | "extra"
         | "altro"
-      payment_recurrence: "mensile" | "trimestrale" | "semestrale" | "annuale"
-      payment_status: "in_attesa" | "pagato" | "scaduto" | "parzialmente_pagato"
-      priority_level: "alta" | "media" | "bassa"
-      property_status: "ottimo" | "buono" | "discreto" | "da_ristrutturare"
-      property_type: "appartamento" | "casa" | "ufficio" | "magazzino"
-      recurrence_type:
-        | "giornaliera"
-        | "settimanale"
+        | "manutenzione"
+      payment_recurrence:
         | "mensile"
         | "trimestrale"
         | "semestrale"
         | "annuale"
-        | "personalizzata"
+        | "una_tantum"
+      payment_status: "in_attesa" | "pagato" | "scaduto" | "parzialmente_pagato"
+      priority_level: "alta" | "media" | "bassa"
+      sender_type: "host" | "guest" | "system"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1157,14 +1954,6 @@ export const Constants = {
   public: {
     Enums: {
       activity_type: ["manutenzione", "pulizia", "ispezione", "generale"],
-      document_type: [
-        "contratto",
-        "assicurazione",
-        "certificato",
-        "fattura",
-        "libretto",
-        "altro",
-      ],
       fuel_type: ["benzina", "diesel", "gpl", "metano", "elettrico"],
       maintenance_type: [
         "tagliando",
@@ -1172,29 +1961,26 @@ export const Constants = {
         "riparazione",
         "sostituzione_parti",
       ],
+      message_channel: ["whatsapp", "email", "internal"],
       mobile_category: ["veicolo", "imbarcazione", "attrezzatura"],
       payment_category: [
-        "condominio",
-        "tasse",
-        "assicurazione",
-        "bollo",
-        "manutenzione",
+        "canone_locazione",
+        "rimborso_utenze",
+        "deposito_cauzionale",
+        "extra",
         "altro",
+        "manutenzione",
       ],
-      payment_recurrence: ["mensile", "trimestrale", "semestrale", "annuale"],
-      payment_status: ["in_attesa", "pagato", "scaduto", "parzialmente_pagato"],
-      priority_level: ["alta", "media", "bassa"],
-      property_status: ["ottimo", "buono", "discreto", "da_ristrutturare"],
-      property_type: ["appartamento", "casa", "ufficio", "magazzino"],
-      recurrence_type: [
-        "giornaliera",
-        "settimanale",
+      payment_recurrence: [
         "mensile",
         "trimestrale",
         "semestrale",
         "annuale",
-        "personalizzata",
+        "una_tantum",
       ],
+      payment_status: ["in_attesa", "pagato", "scaduto", "parzialmente_pagato"],
+      priority_level: ["alta", "media", "bassa"],
+      sender_type: ["host", "guest", "system"],
     },
   },
 } as const

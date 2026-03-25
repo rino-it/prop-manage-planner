@@ -20,6 +20,7 @@ const Index = () => {
   useEffect(() => {
     const path = location.pathname;
     if (path === "/") setActiveTab("dashboard");
+    else if (path.includes("calendario")) setActiveTab("calendario");
     else if (path.includes("properties") && !path.includes("mobile")) setActiveTab("properties");
     else if (path.includes("mobile-properties")) setActiveTab("mobile-properties");
     else if (path.includes("tickets")) setActiveTab("tickets");
@@ -30,6 +31,13 @@ const Index = () => {
     else if (path.includes("activities")) setActiveTab("activities");
     else if (path.includes("team")) setActiveTab("team");
     else if (path.includes("services")) setActiveTab("services");
+    else if (path.includes("accoglienza")) setActiveTab("accoglienza");
+    else if (path.includes("comunicazione")) setActiveTab("comunicazione");
+    else if (path.includes("messaggi")) setActiveTab("messaggi");
+    else if (path.includes("portali")) setActiveTab("portali");
+    else if (path.includes("marketplace")) setActiveTab("marketplace");
+    else if (path.includes("prezzi")) setActiveTab("prezzi");
+    else if (path.includes("statistiche")) setActiveTab("statistiche");
   }, [location.pathname]);
 
   useEffect(() => {

@@ -2,35 +2,24 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Calendar } from '@/components/ui/calendar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { 
-  TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock, 
-  Calendar as CalendarIcon, ArrowRight, MapPin, User, Wrench, 
-  Wallet, LogOut, Bell, Truck, Circle, Filter, LayoutGrid, List, 
-  ExternalLink, ClipboardList 
+import {
+  TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Clock,
+  ArrowRight, User, Wrench, Wallet, LogOut, Bell, Truck,
+  ClipboardList, Globe, ShoppingBag, ListChecks, MapPin,
+  Home, ExternalLink, CalendarDays, ChevronRight, Ticket, Store,
+  MessageCircle, Tag
 } from 'lucide-react';
-import { format, isSameDay, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isBefore, subMonths, addMonths, isSameMonth, parseISO } from 'date-fns';
 import { it } from 'date-fns/locale';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { WeatherWidget } from '@/components/WeatherWidget';
-import { geocodeAddress } from '@/utils/geocoding';
 import { KpiCard } from '@/components/ui/kpi-card';
 import { PageHeader } from '@/components/ui/page-header';
 
 interface DashboardProps {
   onNavigate: (tab: string) => void;
-}
-
-interface WeatherProperty {
-  id: string;
-  nome: string;
-  address: string;
 }
 
 type EventType = 'checkin' | 'checkout' | 'payment' | 'expense' | 'maintenance' | 'deadline' | 'activity';
@@ -48,53 +37,46 @@ interface DashboardEvent {
   isCompleted: boolean;
 }
 
+interface SetupItem {
+  id: string;
+  label: string;
+  description: string;
+  targetTab: string;
+  completed: boolean;
+}
+
+const PORTAL_LABELS: Record<string, string> = {
+  airbnb: 'Airbnb',
+  booking: 'Booking.com',
+  vrbo: 'VRBO',
+  other: 'Altro',
+};
+
+const MARKETPLACE_SERVICES = [
+  { id: 'cleaning', name: 'Pulizie Professionali', description: 'Gestione automatica turni pulizia', icon: <Wrench className="w-5 h-5" /> },
+  { id: 'keybox', name: 'Self Check-in', description: 'Serrature smart e codici accesso', icon: <Home className="w-5 h-5" /> },
+  { id: 'insurance', name: 'Assicurazione Ospiti', description: 'Copertura danni e responsabilita civile', icon: <ShoppingBag className="w-5 h-5" /> },
+];
+
 export default function Dashboard({ onNavigate }: DashboardProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false); 
-  const [isAgendaOpen, setIsAgendaOpen] = useState(false); 
-  const [agendaFilter, setAgendaFilter] = useState('all'); 
-  
+  const [isUrgencyOpen, setIsUrgencyOpen] = useState(false);
+
+  const { data: portalConnections } = useQuery({
+    queryKey: ['dashboard-portal-connections'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('portal_connections')
+        .select('id, portal_name, status, last_sync, last_sync_result, properties_real(nome)')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+    staleTime: 5 * 60_000,
+  });
+
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString();
   const rangeEnd = addMonths(endOfMonth(new Date()), 2).toISOString();
 
-  const [selectedWeatherProperty, setSelectedWeatherProperty] = useState<string>('');
-
-  const { data: weatherProperties = [] } = useQuery({
-    queryKey: ['dashboard-weather-properties'],
-    queryFn: async () => {
-      const { data } = await supabase
-        .from('properties_real')
-        .select('id, nome, via, citta, provincia, indirizzo')
-        .order('nome');
-      if (!data) return [];
-      return data
-        .filter((p) => p.via || p.indirizzo || p.citta)
-        .map((p): WeatherProperty => ({
-          id: p.id,
-          nome: p.nome || 'Senza nome',
-          address: p.via
-            ? `${p.via}, ${p.citta || ''} ${p.provincia || ''}`.trim()
-            : p.indirizzo || p.citta || '',
-        }));
-    },
-    staleTime: 24 * 60 * 60 * 1000,
-  });
-
-  const activeWeatherProp = weatherProperties.find((p) => p.id === selectedWeatherProperty) || weatherProperties[0];
-
-  const { data: weatherCoords } = useQuery({
-    queryKey: ['dashboard-weather-coords', activeWeatherProp?.id],
-    queryFn: async () => {
-      if (!activeWeatherProp) return null;
-      const geo = await geocodeAddress(activeWeatherProp.address);
-      if (!geo) return null;
-      return { lat: geo.lat, lon: geo.lon, name: activeWeatherProp.nome };
-    },
-    staleTime: 24 * 60 * 60 * 1000,
-    enabled: !!activeWeatherProp,
-  });
-
-  // --- FETCH DATI ---
   const { data: rawData } = useQuery({
     queryKey: ['dashboard-full-data'],
     queryFn: async () => {
@@ -123,70 +105,69 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     }
   });
 
-  // --- MOTORE EVENTI ---
+  const { data: properties = [] } = useQuery({
+    queryKey: ['dashboard-properties-setup'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('properties_real')
+        .select('id, nome, via, citta, indirizzo, telefono, email_contatto, tipo_proprieta');
+      return data || [];
+    }
+  });
+
   const dashboardData = useMemo(() => {
     if (!rawData) return { events: [], kpi: { incassato: 0, atteso: 0, uscite: 0 }, urgencies: [] };
 
     const events: DashboardEvent[] = [];
     const isPast = (date: Date) => isBefore(date, new Date());
 
-    // A. Booking
     rawData.bookings.forEach(b => {
-      // FIX: parseISO
       const inDate = parseISO(b.data_inizio);
       const outDate = parseISO(b.data_fine);
       events.push({
         id: `in-${b.id}`, date: inDate, type: 'checkin',
-        title: `Check-in: ${b.nome_ospite}`, subtitle: b.properties_real?.nome || 'Proprietà',
+        title: `Check-in: ${b.nome_ospite}`, subtitle: b.properties_real?.nome || 'Proprieta',
         priority: 'alta', status: 'pending', targetTab: 'bookings',
         isCompleted: isPast(inDate)
       });
       events.push({
         id: `out-${b.id}`, date: outDate, type: 'checkout',
-        title: `Check-out: ${b.nome_ospite}`, subtitle: b.properties_real?.nome || 'Proprietà',
+        title: `Check-out: ${b.nome_ospite}`, subtitle: b.properties_real?.nome || 'Proprieta',
         priority: 'alta', status: 'pending', targetTab: 'bookings',
         isCompleted: isPast(outDate)
       });
     });
 
-    // B. Spese
     rawData.expenses.forEach(exp => {
-      const target = exp.properties_mobile ? `🚛 ${exp.properties_mobile.veicolo}` : `🏠 ${exp.properties_real?.nome || 'Generale'}`;
+      const target = exp.properties_mobile ? exp.properties_mobile.veicolo : (exp.properties_real?.nome || 'Generale');
       events.push({
-        // FIX: parseISO
         id: `exp-${exp.id}`, date: parseISO(exp.scadenza), type: 'expense',
-        title: `Uscita: €${exp.importo}`, subtitle: `${target} - ${exp.categoria}`,
+        title: `Uscita: EUR ${exp.importo}`, subtitle: `${target} - ${exp.categoria}`,
         amount: Number(exp.importo), priority: 'media', status: exp.stato, targetTab: 'expenses',
         isCompleted: exp.stato === 'pagato'
       });
     });
 
-    // C. Incassi
     rawData.income.forEach(inc => {
       events.push({
-        // FIX: parseISO
         id: `inc-${inc.id}`, date: parseISO(inc.data_scadenza), type: 'payment',
-        title: `Incasso: €${inc.importo}`, subtitle: inc.description || 'Affitto',
+        title: `Incasso: EUR ${inc.importo}`, subtitle: inc.description || 'Affitto',
         amount: Number(inc.importo), priority: 'media', status: inc.stato, targetTab: 'revenue',
         isCompleted: inc.stato === 'pagato'
       });
     });
 
-    // D. Ticket
     rawData.tickets.forEach(t => {
-      // FIX: parseISO
       const ticketDate = t.scadenza ? parseISO(t.scadenza) : parseISO(t.created_at);
       events.push({
         id: `tick-${t.id}`, date: ticketDate, type: 'maintenance',
         title: `Ticket: ${t.titolo}`, subtitle: t.properties_real?.nome || 'Generale',
-        priority: t.priorita === 'alta' ? 'alta' : 'media', status: t.stato, targetTab: 'tickets', 
+        priority: t.priorita === 'alta' ? 'alta' : 'media', status: t.stato, targetTab: 'tickets',
         isCompleted: t.stato === 'risolto'
       });
     });
 
-    // E. Veicoli
     rawData.vehicles.forEach(v => {
-      // FIX: parseISO
       if (v.data_revisione) events.push({
         id: `rev-${v.id}`, date: parseISO(v.data_revisione), type: 'deadline',
         title: 'Scadenza Revisione', subtitle: `${v.veicolo} (${v.targa})`,
@@ -201,20 +182,17 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       });
     });
 
-    // F. Attività
     rawData.activities.forEach(a => {
-        const target = a.properties_mobile ? `🚛 ${a.properties_mobile.veicolo}` : (a.properties_real?.nome ? `🏠 ${a.properties_real.nome}` : 'Generale');
-        // FIX: parseISO
-        const actDate = parseISO(a.data || a.created_at);
-        events.push({
-            id: `act-${a.id}`, date: actDate, type: 'activity',
-            title: a.titolo || 'Attività', subtitle: `${target} - ${a.descrizione || ''}`,
-            priority: 'media', status: a.stato, targetTab: 'activities',
-            isCompleted: a.stato === 'completato' || a.stato === 'svolto'
-        });
+      const target = a.properties_mobile ? a.properties_mobile.veicolo : (a.properties_real?.nome || 'Generale');
+      const actDate = parseISO(a.data || a.created_at);
+      events.push({
+        id: `act-${a.id}`, date: actDate, type: 'activity',
+        title: a.titolo || 'Attivita', subtitle: `${target} - ${a.descrizione || ''}`,
+        priority: 'media', status: a.stato, targetTab: 'activities',
+        isCompleted: a.stato === 'completato' || a.stato === 'svolto'
+      });
     });
 
-    // --- FIX KPI (Calcolo preciso per il mese corrente con parseISO) ---
     const now = new Date();
     const currentMonthIncome = rawData.income.filter(i => isSameMonth(parseISO(i.data_scadenza), now));
     const currentMonthExpenses = rawData.expenses.filter(e => isSameMonth(parseISO(e.scadenza), now));
@@ -225,8 +203,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
       uscite: currentMonthExpenses.reduce((acc, c) => acc + Number(c.importo), 0)
     };
 
-    // Urgenze
-    const urgencies = events.filter(e => 
+    const urgencies = events.filter(e =>
       (e.priority === 'alta' && isBefore(e.date, new Date()) && !e.isCompleted) ||
       (e.type === 'maintenance' && !e.isCompleted) ||
       (e.type === 'payment' && !e.isCompleted && isBefore(e.date, new Date())) ||
@@ -236,40 +213,63 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
     return { events, kpi, urgencies };
   }, [rawData]);
 
-  const dailyEvents = dashboardData.events
-    .filter(e => selectedDate && isSameDay(e.date, selectedDate))
-    .sort((a, b) => (a.priority === 'alta' ? -1 : 1));
+  const setupItems = useMemo((): SetupItem[] => {
+    const items: SetupItem[] = [];
 
-  // --- FILTRO AGENDA COMPLETA ---
-  const filteredAgendaEvents = useMemo(() => {
-      const monthEvents = dashboardData.events.filter(e => selectedDate && isSameMonth(e.date, selectedDate));
-      
-      if (agendaFilter === 'all') return monthEvents;
-      if (agendaFilter === 'hospitality') return monthEvents.filter(e => e.type === 'checkin' || e.type === 'checkout');
-      if (agendaFilter === 'finance') return monthEvents.filter(e => e.type === 'payment' || e.type === 'expense');
-      if (agendaFilter === 'maintenance') return monthEvents.filter(e => e.type === 'maintenance' || e.type === 'deadline');
-      if (agendaFilter === 'activity') return monthEvents.filter(e => e.type === 'activity');
-      
-      return monthEvents;
-  }, [dashboardData.events, selectedDate, agendaFilter]);
+    const hasProperties = properties.length > 0;
+    items.push({
+      id: 'add-property',
+      label: 'Aggiungi la tua prima proprieta',
+      description: 'Inserisci almeno una proprieta per iniziare a gestire prenotazioni e inquilini.',
+      targetTab: 'properties',
+      completed: hasProperties,
+    });
 
-  const modifiers = {
-    hasCheckin: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'checkin' || e.type === 'payment')),
-    hasExpense: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'expense' || e.type === 'checkout')),
-    hasActivity: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && e.type === 'activity'),
-    hasWarning: (date: Date) => dashboardData.events.some(e => isSameDay(e.date, date) && (e.type === 'deadline' || e.type === 'maintenance')),
-  };
-  const modifiersStyles = {
-    hasCheckin: { color: '#16a34a', fontWeight: 'bold' },
-    hasExpense: { color: '#dc2626', fontWeight: 'bold' },
-    hasActivity: { color: '#6366f1', fontWeight: 'bold' },
-    hasWarning: { textDecoration: 'underline', textDecorationColor: '#f59e0b' }
-  };
+    const propertiesWithAddress = properties.filter(p => p.via || p.indirizzo || p.citta);
+    items.push({
+      id: 'property-address',
+      label: 'Completa gli indirizzi delle proprieta',
+      description: `${propertiesWithAddress.length}/${properties.length} proprieta hanno un indirizzo completo.`,
+      targetTab: 'properties',
+      completed: hasProperties && propertiesWithAddress.length === properties.length,
+    });
+
+    const propertiesWithContact = properties.filter(p => p.telefono || p.email_contatto);
+    items.push({
+      id: 'property-contact',
+      label: 'Aggiungi informazioni di contatto',
+      description: 'Telefono o email per le proprieta, utili per comunicazioni agli ospiti.',
+      targetTab: 'properties',
+      completed: hasProperties && propertiesWithContact.length === properties.length,
+    });
+
+    const hasBookings = (rawData?.bookings.length || 0) > 0;
+    items.push({
+      id: 'first-booking',
+      label: 'Crea la prima prenotazione',
+      description: 'Registra una prenotazione per tenere traccia di check-in, check-out e incassi.',
+      targetTab: 'bookings',
+      completed: hasBookings,
+    });
+
+    items.push({
+      id: 'connect-portal',
+      label: 'Connetti un portale di prenotazione',
+      description: 'Collega Airbnb, Booking.com o altri per sincronizzare automaticamente.',
+      targetTab: 'portali',
+      completed: (portalConnections || []).length > 0,
+    });
+
+    return items;
+  }, [properties, rawData, portalConnections]);
+
+  const pendingSetupItems = setupItems.filter(i => !i.completed);
+  const completedSetupCount = setupItems.filter(i => i.completed).length;
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-      
-      <PageHeader title="Dashboard">
+
+      <PageHeader title="Homepage">
         <span className="text-sm font-medium text-muted-foreground hidden md:block">{format(new Date(), 'EEEE d MMMM', { locale: it })}</span>
       </PageHeader>
 
@@ -295,273 +295,321 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         />
       </div>
 
-      {/* GRIGLIA PRINCIPALE */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        {/* COLONNA SX: CALENDARIO E EVENTI GIORNO */}
-        <div className="lg:col-span-1 space-y-6">
-            <Card className="shadow-sm border-border">
-                <div className="p-4 flex justify-center">
-                    <Calendar
-                        mode="single"
-                        selected={selectedDate}
-                        onSelect={setSelectedDate}
-                        locale={it}
-                        modifiers={modifiers}
-                        modifiersStyles={modifiersStyles}
-                        className="rounded-md border shadow-sm w-full max-w-[320px]" 
-                    />
-                </div>
-            </Card>
+      {/* QUICK STATS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Card className="shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => onNavigate('properties')}>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Home className="w-4 h-4" /></div>
+            <div>
+              <p className="text-lg font-bold text-foreground">{properties.length}</p>
+              <p className="text-[11px] text-muted-foreground">Proprieta</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => onNavigate('bookings')}>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="bg-green-100 p-2 rounded-lg text-green-600"><CalendarDays className="w-4 h-4" /></div>
+            <div>
+              <p className="text-lg font-bold text-foreground">{rawData?.bookings.length || 0}</p>
+              <p className="text-[11px] text-muted-foreground">Prenotazioni</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => onNavigate('tickets')}>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="bg-orange-100 p-2 rounded-lg text-orange-600"><Ticket className="w-4 h-4" /></div>
+            <div>
+              <p className="text-lg font-bold text-foreground">{rawData?.tickets.length || 0}</p>
+              <p className="text-[11px] text-muted-foreground">Ticket aperti</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={() => onNavigate('activities')}>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="bg-violet-100 p-2 rounded-lg text-violet-600"><ClipboardList className="w-4 h-4" /></div>
+            <div>
+              <p className="text-lg font-bold text-foreground">{rawData?.activities.filter(a => a.stato !== 'completato' && a.stato !== 'svolto').length || 0}</p>
+              <p className="text-[11px] text-muted-foreground">Attivita attive</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-            {weatherProperties.length > 0 && (
-              <div className="space-y-2">
-                {weatherProperties.length > 1 && (
-                  <Select
-                    value={activeWeatherProp?.id || ''}
-                    onValueChange={setSelectedWeatherProperty}
-                  >
-                    <SelectTrigger className="h-8 text-xs">
-                      <SelectValue placeholder="Seleziona proprietà" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {weatherProperties.map((p) => (
-                        <SelectItem key={p.id} value={p.id} className="text-xs">
-                          {p.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                {weatherCoords && (
-                  <WeatherWidget
-                    latitude={weatherCoords.lat}
-                    longitude={weatherCoords.lon}
-                    propertyName={weatherCoords.name}
-                    days={5}
-                  />
-                )}
+      {/* GRIGLIA PRINCIPALE: 3 COLONNE */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+        {/* COLONNA 1: STATO PORTALI */}
+        <Card className="shadow-md border-t-4 border-t-blue-500 bg-white">
+          <CardHeader className="py-4 border-b">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-blue-100 p-2 rounded-full text-blue-600"><Globe className="w-5 h-5" /></div>
+                <div>
+                  <CardTitle className="text-base">Stato Portali</CardTitle>
+                  <CardDescription className="text-xs">
+                    {(portalConnections || []).length > 0
+                      ? `${(portalConnections || []).filter((c: { status: string }) => c.status === 'active').length} attivi su ${(portalConnections || []).length}`
+                      : 'Nessun portale connesso'}
+                  </CardDescription>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs text-blue-600" onClick={() => onNavigate('portali')}>
+                Gestisci <ChevronRight className="w-3 h-3 ml-0.5" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {(portalConnections || []).length === 0 ? (
+              <div className="p-6 text-center">
+                <Globe className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm text-slate-500 mb-3">Connetti i tuoi portali per importare prenotazioni</p>
+                <Button variant="outline" size="sm" onClick={() => onNavigate('portali')}>
+                  Connetti portale
+                </Button>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100">
+                {(portalConnections || []).map((conn: { id: string; portal_name: string; status: string; last_sync: string | null; properties_real: { nome: string } | null }) => (
+                  <div key={conn.id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className={`p-1.5 rounded-full ${conn.status === 'active' ? 'bg-green-100 text-green-600' : conn.status === 'error' ? 'bg-red-100 text-red-500' : 'bg-slate-100 text-slate-400'}`}>
+                        <Globe className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-700">
+                          {PORTAL_LABELS[conn.portal_name] || conn.portal_name}
+                        </p>
+                        <p className="text-[10px] text-slate-500">
+                          {conn.properties_real?.nome || ''}{conn.last_sync ? ` - Sync: ${format(new Date(conn.last_sync), 'dd/MM HH:mm')}` : ''}
+                        </p>
+                      </div>
+                    </div>
+                    <Badge
+                      variant={conn.status === 'active' ? 'default' : 'secondary'}
+                      className={`text-[10px] ${
+                        conn.status === 'active' ? 'bg-green-100 text-green-700 border-green-200'
+                        : conn.status === 'error' ? 'bg-red-100 text-red-700 border-red-200'
+                        : 'bg-slate-100 text-slate-500'
+                      }`}
+                    >
+                      {conn.status === 'active' ? 'Attivo' : conn.status === 'error' ? 'Errore' : 'Inattivo'}
+                    </Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* COLONNA 2: PRIME COSE DA FARE */}
+        <Card className="shadow-md border-t-4 border-t-amber-500 bg-white">
+          <CardHeader className="py-4 border-b">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-amber-100 p-2 rounded-full text-amber-600"><ListChecks className="w-5 h-5" /></div>
+                <div>
+                  <CardTitle className="text-base">Prime Cose da Fare</CardTitle>
+                  <CardDescription className="text-xs">{completedSetupCount}/{setupItems.length} completate</CardDescription>
+                </div>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            {pendingSetupItems.length > 0 ? (
+              <div className="divide-y divide-slate-100">
+                {pendingSetupItems.map((item) => (
+                  <div key={item.id} className="p-4 flex items-center justify-between hover:bg-amber-50/30 transition-colors cursor-pointer" onClick={() => onNavigate(item.targetTab)}>
+                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                      <div className="mt-0.5 p-1 rounded-full bg-amber-50 text-amber-500">
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-semibold text-sm text-slate-800">{item.label}</h4>
+                        <p className="text-xs text-slate-500 mt-0.5">{item.description}</p>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-slate-300 flex-shrink-0 ml-2" />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="p-8 text-center">
+                <CheckCircle className="w-10 h-10 mx-auto mb-2 text-green-400" />
+                <p className="text-sm font-medium text-slate-700">Configurazione completata</p>
+                <p className="text-xs text-slate-400 mt-1">Tutte le operazioni iniziali sono state eseguite.</p>
               </div>
             )}
 
-            <Card className="shadow-sm border-l-4 border-l-blue-600 h-[300px] flex flex-col">
-                <CardHeader className="py-3 border-b bg-slate-50/50">
-                    <CardTitle className="text-base flex items-center gap-2">
-                        <CalendarIcon className="w-4 h-4 text-blue-600"/> {selectedDate ? format(selectedDate, 'd MMMM', { locale: it }) : 'Oggi'}
-                    </CardTitle>
-                </CardHeader>
-                <ScrollArea className="flex-1">
-                    {dailyEvents.length > 0 ? (
-                        <div className="divide-y divide-slate-100">
-                            {dailyEvents.map((evt) => (
-                                <div key={evt.id} className="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer" onClick={() => onNavigate(evt.targetTab)}>
-                                    <div className="flex items-center gap-3">
-                                        <div className={`p-1.5 rounded-full ${evt.isCompleted ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600'}`}>
-                                            {getIcon(evt.type)}
-                                        </div>
-                                        <div>
-                                            <p className={`text-sm font-semibold ${evt.isCompleted ? 'line-through text-slate-400' : 'text-slate-700'}`}>{evt.title}</p>
-                                            <p className="text-[10px] text-slate-500">{evt.subtitle}</p>
-                                        </div>
-                                    </div>
-                                    {evt.amount && <span className={`text-xs font-bold ${evt.type === 'expense' ? 'text-red-500' : 'text-green-500'}`}>€{evt.amount}</span>}
-                                </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center h-full text-slate-300">
-                            <CheckCircle className="w-8 h-8 mb-2 opacity-20"/>
-                            <p className="text-xs">Nessun evento oggi.</p>
-                        </div>
-                    )}
-                </ScrollArea>
-            </Card>
-        </div>
+            {setupItems.filter(i => i.completed).length > 0 && pendingSetupItems.length > 0 && (
+              <div className="p-3 border-t bg-green-50/50">
+                <div className="flex items-center gap-2">
+                  <CheckCircle className="w-3.5 h-3.5 text-green-500" />
+                  <span className="text-xs text-green-700">{completedSetupCount} operazioni gia completate</span>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
-        {/* COLONNA DX: CENTRO NOTIFICHE E AGENDA COMPLETA */}
-        <div className="lg:col-span-2 space-y-6">
-            
-            {/* CARD 1: URGENZE (CENTRO NOTIFICHE) */}
-            <Card className="shadow-md border-t-4 border-t-red-500 bg-white">
-                <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-red-100 p-2 rounded-full text-red-600"><AlertTriangle className="w-5 h-5"/></div>
-                        <div>
-                            <CardTitle className="text-lg">Centro Notifiche</CardTitle>
-                            <CardDescription className="text-xs">{dashboardData.urgencies.length} attività richiedono attenzione</CardDescription>
-                        </div>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => setIsUrgencyOpen(true)} className="text-xs">
-                        Vedi Tutte ({dashboardData.urgencies.length})
-                    </Button>
-                </CardHeader>
-                <CardContent className="p-0">
-                    <div className="divide-y divide-slate-100">
-                        {dashboardData.urgencies.slice(0, 3).map((u) => (
-                            <div key={u.id} className="p-4 flex items-center justify-between hover:bg-red-50/30 transition-colors cursor-pointer" onClick={() => onNavigate(u.targetTab)}>
-                                <div className="flex items-start gap-3">
-                                    <div className="mt-0.5 text-red-500">{getIcon(u.type)}</div>
-                                    <div>
-                                        <h4 className="font-bold text-sm text-slate-800">{u.title}</h4>
-                                        <p className="text-xs text-slate-500 flex items-center gap-1">
-                                            <Clock className="w-3 h-3"/> Scadenza: {format(u.date, 'dd MMM yyyy')}
-                                        </p>
-                                    </div>
-                                </div>
-                                <ArrowRight className="w-4 h-4 text-slate-300"/>
-                            </div>
-                        ))}
-                        {dashboardData.urgencies.length === 0 && (
-                            <div className="p-6 text-center text-slate-400 text-sm">Nessuna urgenza attiva. Ottimo lavoro! 🚀</div>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-
-            {/* CARD 2: AGENDA MENSILE (SECONDO LIVELLO) */}
-            <Card className="shadow-md border-t-4 border-t-indigo-500 bg-white">
-                <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div className="bg-indigo-100 p-2 rounded-full text-indigo-600"><LayoutGrid className="w-5 h-5"/></div>
-                        <div>
-                            <CardTitle className="text-lg">Panoramica {selectedDate ? format(selectedDate, 'MMMM') : 'Mese'}</CardTitle>
-                            <CardDescription className="text-xs">Prossimi eventi in programma</CardDescription>
-                        </div>
-                    </div>
-                    <Button className="bg-indigo-600 hover:bg-indigo-700 text-xs" size="sm" onClick={() => setIsAgendaOpen(true)}>
-                        <List className="w-3 h-3 mr-2"/> Apri Agenda Completa
-                    </Button>
-                </CardHeader>
-                <CardContent className="p-4">
-                    {/* Anteprima Prossimi 3 Eventi */}
-                    <div className="space-y-2">
-                        {dashboardData.events
-                            .filter(e => isBefore(new Date(), e.date) && !e.isCompleted) // Solo futuri
-                            .slice(0, 3)
-                            .map((e) => (
-                                <div key={e.id} className="flex items-center gap-3 p-2 bg-slate-50 rounded border border-slate-100">
-                                    <div className="bg-white p-1 rounded text-slate-500 shadow-sm text-xs font-bold w-10 text-center">
-                                        {format(e.date, 'dd')}
-                                        <span className="block text-[8px] uppercase">{format(e.date, 'MMM')}</span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold truncate">{e.title}</p>
-                                        <p className="text-[10px] text-slate-500 truncate">{e.subtitle}</p>
-                                    </div>
-                                    <Badge variant="secondary" className="text-[10px] bg-white border-border text-slate-600">{e.type}</Badge>
-                                </div>
-                            ))
-                        }
-                        {dashboardData.events.filter(e => isBefore(new Date(), e.date) && !e.isCompleted).length === 0 && (
-                            <p className="text-center text-xs text-slate-400">Nessun evento futuro imminente.</p>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
-
-        </div>
+        {/* COLONNA 3: MARKETPLACE */}
+        <Card className="shadow-md border-t-4 border-t-purple-500 bg-white">
+          <CardHeader className="py-4 border-b">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="bg-purple-100 p-2 rounded-full text-purple-600"><Store className="w-5 h-5" /></div>
+                <div>
+                  <CardTitle className="text-base">Marketplace</CardTitle>
+                  <CardDescription className="text-xs">Servizi integrabili per le tue proprieta</CardDescription>
+                </div>
+              </div>
+              <Button variant="ghost" size="sm" className="text-xs text-purple-600" onClick={() => onNavigate('marketplace')}>
+                Catalogo <ChevronRight className="w-3 h-3 ml-0.5" />
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="divide-y divide-slate-100">
+              {MARKETPLACE_SERVICES.map((service) => (
+                <div key={service.id} className="p-4 flex items-center gap-3 cursor-pointer hover:bg-purple-50/30 transition-colors" onClick={() => onNavigate('marketplace')}>
+                  <div className="p-1.5 rounded-full bg-purple-50 text-purple-500">
+                    {service.icon}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-700">{service.name}</p>
+                    <p className="text-[10px] text-slate-500">{service.description}</p>
+                  </div>
+                  <Badge variant="secondary" className="text-[10px] bg-purple-50 text-purple-600 border-purple-100">
+                    8 servizi
+                  </Badge>
+                </div>
+              ))}
+            </div>
+            <div className="p-3 border-t bg-purple-50/30 text-center cursor-pointer hover:bg-purple-50/50 transition-colors" onClick={() => onNavigate('marketplace')}>
+              <p className="text-xs text-purple-600 font-medium">Esplora il catalogo completo</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* --- SHEET 1: CENTRO NOTIFICHE (SIDEBAR DESTRA) --- */}
+      {/* CENTRO NOTIFICHE */}
+      <Card className="shadow-md border-t-4 border-t-red-500 bg-white">
+        <CardHeader className="py-4 border-b flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="bg-red-100 p-2 rounded-full text-red-600"><AlertTriangle className="w-5 h-5" /></div>
+            <div>
+              <CardTitle className="text-lg">Centro Notifiche</CardTitle>
+              <CardDescription className="text-xs">{dashboardData.urgencies.length} attivita richiedono attenzione</CardDescription>
+            </div>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => setIsUrgencyOpen(true)} className="text-xs">
+            Vedi Tutte ({dashboardData.urgencies.length})
+          </Button>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="divide-y divide-slate-100">
+            {dashboardData.urgencies.slice(0, 5).map((u) => (
+              <div key={u.id} className="p-4 flex items-center justify-between hover:bg-red-50/30 transition-colors cursor-pointer" onClick={() => onNavigate(u.targetTab)}>
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 text-red-500">{getIcon(u.type)}</div>
+                  <div>
+                    <h4 className="font-bold text-sm text-slate-800">{u.title}</h4>
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <Clock className="w-3 h-3" /> Scadenza: {format(u.date, 'dd MMM yyyy')}
+                    </p>
+                  </div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-slate-300" />
+              </div>
+            ))}
+            {dashboardData.urgencies.length === 0 && (
+              <div className="p-6 text-center text-slate-400 text-sm">Nessuna urgenza attiva.</div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ACCESSO RAPIDO */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card className="shadow-sm border-border bg-slate-50/50 cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => onNavigate('calendario')}>
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-indigo-100 p-2 rounded-full text-indigo-600"><CalendarDays className="w-5 h-5" /></div>
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Calendario</p>
+                <p className="text-xs text-slate-500">Agenda e scadenze</p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-400" />
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-border bg-slate-50/50 cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => onNavigate('statistiche')}>
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-emerald-100 p-2 rounded-full text-emerald-600"><TrendingUp className="w-5 h-5" /></div>
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Statistiche</p>
+                <p className="text-xs text-slate-500">Occupancy, ADR, RevPAR</p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-400" />
+          </CardContent>
+        </Card>
+        <Card className="shadow-sm border-border bg-slate-50/50 cursor-pointer hover:bg-slate-100/50 transition-colors" onClick={() => onNavigate('prezzi')}>
+          <CardContent className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-amber-100 p-2 rounded-full text-amber-600"><Tag className="w-5 h-5" /></div>
+              <div>
+                <p className="text-sm font-semibold text-slate-700">Prezzi</p>
+                <p className="text-xs text-slate-500">Tariffe proprieta</p>
+              </div>
+            </div>
+            <ArrowRight className="w-4 h-4 text-slate-400" />
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* SHEET: CENTRO NOTIFICHE COMPLETO */}
       <Sheet open={isUrgencyOpen} onOpenChange={setIsUrgencyOpen}>
         <SheetContent className="w-full sm:max-w-md overflow-y-auto">
-            <SheetHeader className="mb-4">
-                <SheetTitle className="flex items-center gap-2 text-red-600">
-                    <AlertTriangle className="w-5 h-5"/> Centro Notifiche
-                </SheetTitle>
-                <SheetDescription>Tutte le attività scadute o con priorità alta.</SheetDescription>
-            </SheetHeader>
-            <div className="space-y-3">
-                {dashboardData.urgencies.map((u) => (
-                    <div key={u.id} className="p-3 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate(u.targetTab)}>
-                        <div className="flex justify-between items-start mb-1">
-                            <h4 className="font-bold text-sm text-red-900">{u.title}</h4>
-                            <Badge variant="destructive" className="text-[10px]">URGENTE</Badge>
-                        </div>
-                        <p className="text-xs text-red-700 mb-2">{u.subtitle}</p>
-                        <div className="flex items-center gap-2 text-xs text-red-500 font-medium">
-                            <Clock className="w-3 h-3"/> Scadenza: {format(u.date, 'dd MMMM yyyy')}
-                        </div>
-                    </div>
-                ))}
-            </div>
+          <SheetHeader className="mb-4">
+            <SheetTitle className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="w-5 h-5" /> Centro Notifiche
+            </SheetTitle>
+            <SheetDescription>Tutte le attivita scadute o con priorita alta.</SheetDescription>
+          </SheetHeader>
+          <div className="space-y-3">
+            {dashboardData.urgencies.map((u) => (
+              <div key={u.id} className="p-3 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate(u.targetTab)}>
+                <div className="flex justify-between items-start mb-1">
+                  <h4 className="font-bold text-sm text-red-900">{u.title}</h4>
+                  <Badge variant="destructive" className="text-[10px]">URGENTE</Badge>
+                </div>
+                <p className="text-xs text-red-700 mb-2">{u.subtitle}</p>
+                <div className="flex items-center gap-2 text-xs text-red-500 font-medium">
+                  <Clock className="w-3 h-3" /> Scadenza: {format(u.date, 'dd MMMM yyyy')}
+                </div>
+              </div>
+            ))}
+            {dashboardData.urgencies.length === 0 && (
+              <div className="p-6 text-center text-slate-400 text-sm">Nessuna urgenza attiva.</div>
+            )}
+          </div>
         </SheetContent>
       </Sheet>
-
-      {/* --- DIALOG 2: AGENDA COMPLETA (SECONDO LIVELLO) --- */}
-      <Dialog open={isAgendaOpen} onOpenChange={setIsAgendaOpen}>
-        <DialogContent className="sm:max-w-4xl w-[95vw] h-[85vh] max-h-[85vh] !overflow-hidden">
-          <div className="flex flex-col h-full min-h-0">
-            <DialogHeader className="shrink-0">
-                <DialogTitle className="flex items-center gap-2">
-                    <CalendarIcon className="w-5 h-5 text-indigo-600"/> Agenda Mensile: {selectedDate ? format(selectedDate, 'MMMM yyyy') : ''}
-                </DialogTitle>
-                <DialogDescription>Gestione completa degli eventi del mese.</DialogDescription>
-            </DialogHeader>
-
-            <Tabs defaultValue="all" className="flex-1 min-h-0 flex flex-col overflow-hidden" onValueChange={setAgendaFilter}>
-                <TabsList className="w-full justify-start overflow-x-auto flex-nowrap bg-slate-100 p-1">
-                    <TabsTrigger value="all" className="text-xs">Tutti</TabsTrigger>
-                    <TabsTrigger value="hospitality" className="text-xs">🏠 Ospitalità</TabsTrigger>
-                    <TabsTrigger value="finance" className="text-xs">💶 Finanze</TabsTrigger>
-                    <TabsTrigger value="maintenance" className="text-xs">🔧 Manutenzione</TabsTrigger>
-                    <TabsTrigger value="activity" className="text-xs">📝 Attività</TabsTrigger>
-                </TabsList>
-                
-                <ScrollArea className="flex-1 mt-2 pr-2 border rounded-md bg-slate-50/30 p-2">
-                    <div className="space-y-1">
-                        {filteredAgendaEvents.length === 0 ? (
-                            <div className="text-center py-20 text-slate-400">
-                                <Filter className="w-12 h-12 mx-auto mb-2 opacity-20"/>
-                                <p>Nessun evento trovato per questo filtro.</p>
-                            </div>
-                        ) : (
-                            filteredAgendaEvents.map((evt) => (
-                                <div key={evt.id} className="flex items-center gap-4 p-3 bg-white border border-slate-100 rounded-lg hover:shadow-sm transition-all cursor-pointer group" onClick={() => onNavigate(evt.targetTab)}>
-                                    <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg font-bold ${evt.isCompleted ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600'}`}>
-                                        <span className="text-lg leading-none">{format(evt.date, 'dd')}</span>
-                                        <span className="text-[9px] uppercase leading-none">{format(evt.date, 'MMM')}</span>
-                                    </div>
-                                    
-                                    <div className={`flex-1 ${evt.isCompleted ? 'opacity-50' : ''}`}>
-                                        <div className="flex justify-between">
-                                            <h4 className="font-semibold text-sm text-slate-800">{evt.title}</h4>
-                                            {evt.amount && <span className={`text-xs font-mono font-bold ${evt.type === 'expense' ? 'text-red-600' : 'text-green-600'}`}>€{evt.amount}</span>}
-                                        </div>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <Badge variant="outline" className="text-[9px] bg-slate-50">{evt.type}</Badge>
-                                            <span className="text-xs text-slate-500 truncate flex items-center gap-1">
-                                                <MapPin className="w-3 h-3"/> {evt.subtitle}
-                                            </span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="text-slate-300 group-hover:text-blue-500">
-                                        <ExternalLink className="w-4 h-4"/>
-                                    </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-                </ScrollArea>
-            </Tabs>
-          </div>
-        </DialogContent>
-      </Dialog>
 
     </div>
   );
 }
 
 function getIcon(type: EventType) {
-    switch (type) {
-        case 'checkin': return <User className="w-5 h-5" />;
-        case 'checkout': return <LogOut className="w-5 h-5" />;
-        case 'payment': return <Wallet className="w-5 h-5" />;
-        case 'expense': return <TrendingDown className="w-5 h-5" />;
-        case 'maintenance': return <Wrench className="w-5 h-5" />;
-        case 'deadline': return <Truck className="w-5 h-5" />;
-        case 'activity': return <ClipboardList className="w-5 h-5" />;
-        default: return <Bell className="w-5 h-5" />;
-    }
+  switch (type) {
+    case 'checkin': return <User className="w-5 h-5" />;
+    case 'checkout': return <LogOut className="w-5 h-5" />;
+    case 'payment': return <Wallet className="w-5 h-5" />;
+    case 'expense': return <TrendingDown className="w-5 h-5" />;
+    case 'maintenance': return <Wrench className="w-5 h-5" />;
+    case 'deadline': return <Truck className="w-5 h-5" />;
+    case 'activity': return <ClipboardList className="w-5 h-5" />;
+    default: return <Bell className="w-5 h-5" />;
+  }
 }

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard, CalendarDays, Wallet, Banknote, Wrench,
   LogOut, FileText, UserPlus, Home, Users, Truck, Ticket,
-  Search, ChevronRight
+  Search, ChevronRight, MessageCircle, DoorOpen, BarChart3, Globe, Store, Tag
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -31,27 +31,22 @@ interface MenuSection {
 
 const menuSections: MenuSection[] = [
   {
-    label: 'Panoramica',
+    label: 'Operativo',
     items: [
-      { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/' },
+      { id: 'dashboard', label: 'Homepage', icon: LayoutDashboard, path: '/' },
+      { id: 'calendario', label: 'Calendario', icon: CalendarDays, path: '/calendario' },
+      { id: 'bookings', label: 'Prenotazioni', icon: CalendarDays, path: '/bookings' },
+      { id: 'messaggi', label: 'Messaggi', icon: MessageCircle, path: '/messaggi' },
     ],
   },
   {
     label: 'Gestione',
     items: [
       { id: 'properties', label: 'Proprieta', icon: Home, path: '/properties' },
-      { id: 'bookings', label: 'Prenotazioni', icon: CalendarDays, path: '/bookings' },
       { id: 'tenants', label: 'Inquilini', icon: UserPlus, path: '/tenants' },
+      { id: 'accoglienza', label: 'Accoglienza', icon: DoorOpen, path: '/accoglienza' },
+      { id: 'prezzi', label: 'Prezzi', icon: Tag, path: '/prezzi' },
       { id: 'mobile-properties', label: 'Parco Mezzi', icon: Truck, path: '/mobile-properties' },
-    ],
-  },
-  {
-    label: 'Operativo',
-    items: [
-      { id: 'tickets', label: 'Ticket & Guasti', icon: Ticket, path: '/tickets' },
-      { id: 'activities', label: 'Attivita', icon: FileText, path: '/activities' },
-      { id: 'services', label: 'Servizi', icon: Wrench, path: '/services' },
-      { id: 'team', label: 'Team', icon: Users, path: '/team' },
     ],
   },
   {
@@ -59,6 +54,23 @@ const menuSections: MenuSection[] = [
     items: [
       { id: 'revenue', label: 'Incassi', icon: Wallet, path: '/revenue' },
       { id: 'expenses', label: 'Spese', icon: Banknote, path: '/expenses' },
+      { id: 'statistiche', label: 'Statistiche', icon: BarChart3, path: '/statistiche' },
+    ],
+  },
+  {
+    label: 'Integrazioni',
+    items: [
+      { id: 'portali', label: 'Portali', icon: Globe, path: '/portali' },
+      { id: 'marketplace', label: 'Marketplace', icon: Store, path: '/marketplace' },
+    ],
+  },
+  {
+    label: 'Admin',
+    items: [
+      { id: 'team', label: 'Team', icon: Users, path: '/team' },
+      { id: 'services', label: 'Servizi', icon: Wrench, path: '/services' },
+      { id: 'tickets', label: 'Ticket & Guasti', icon: Ticket, path: '/tickets' },
+      { id: 'activities', label: 'Attivita', icon: FileText, path: '/activities' },
     ],
   },
 ];
