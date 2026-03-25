@@ -11,6 +11,7 @@ interface ICalEvent {
   start: string;
   end: string;
   summary: string;
+  isBlocked: boolean;
 }
 
 interface PortalConnection {
@@ -22,6 +23,20 @@ interface PortalConnection {
   ical_url: string | null;
   status: string;
   properties_real: { id: string; nome: string } | null;
+}
+
+const BLOCKED_PATTERNS = [
+  /not available/i,
+  /non disponibile/i,
+  /closed/i,
+  /blocked/i,
+  /airbnb \(not available\)/i,
+  /^reserved$/i,
+  /bloccato/i,
+];
+
+function isBlockedEvent(summary: string): boolean {
+  return BLOCKED_PATTERNS.some((p) => p.test(summary));
 }
 
 function parseIcalDate(raw: string | null): string | null {
@@ -46,13 +61,19 @@ function parseIcal(text: string): ICalEvent[] {
     const uid = getField("UID");
     const dtstart = getField("DTSTART");
     const dtend = getField("DTEND");
-    const summary = getField("SUMMARY");
+    const summary = getField("SUMMARY") || "";
 
     const start = parseIcalDate(dtstart);
     const end = parseIcalDate(dtend);
 
     if (uid && start && end) {
-      events.push({ uid, start, end, summary: summary || "Prenotazione esterna" });
+      events.push({
+        uid,
+        start,
+        end,
+        summary: summary || "Prenotazione esterna",
+        isBlocked: isBlockedEvent(summary),
+      });
     }
   }
   return events;
@@ -65,22 +86,29 @@ async function syncConnection(
   connection_id: string;
   portal_name: string;
   property_name: string;
-  events_imported: number;
-  events_skipped: number;
+  bookings_imported: number;
+  bookings_skipped: number;
+  blocks_imported: number;
+  blocks_removed: number;
   errors: string[];
 }> {
   const errors: string[] = [];
-  let eventsImported = 0;
-  let eventsSkipped = 0;
+  let bookingsImported = 0;
+  let bookingsSkipped = 0;
+  let blocksImported = 0;
+  let blocksRemoved = 0;
   const propertyName = conn.properties_real?.nome || conn.property_id;
+  const source = `${conn.portal_name}_ical`;
 
   if (conn.connection_type !== "ical" || !conn.ical_url) {
     return {
       connection_id: conn.id,
       portal_name: conn.portal_name,
       property_name: String(propertyName),
-      events_imported: 0,
-      events_skipped: 0,
+      bookings_imported: 0,
+      bookings_skipped: 0,
+      blocks_imported: 0,
+      blocks_removed: 0,
       errors: ["No iCal URL configured"],
     };
   }
@@ -89,63 +117,163 @@ async function syncConnection(
     const resp = await fetch(conn.ical_url, {
       headers: {
         "User-Agent": "PropManage/1.0 iCal-Sync",
-        "Accept": "text/calendar, text/plain, */*",
+        Accept: "text/calendar, text/plain, */*",
       },
     });
     if (!resp.ok) {
       const body = await resp.text().catch(() => "");
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText} - ${body.substring(0, 200)}`);
+      throw new Error(
+        `HTTP ${resp.status}: ${resp.statusText} - ${body.substring(0, 200)}`
+      );
     }
 
     const icalText = await resp.text();
-    const events = parseIcal(icalText);
 
+    if (!icalText.includes("BEGIN:VCALENDAR")) {
+      throw new Error(
+        `Response is not valid iCal (${icalText.length} bytes, starts with: ${icalText.substring(0, 80)})`
+      );
+    }
+
+    const events = parseIcal(icalText);
+    const bookingEvents = events.filter((e) => !e.isBlocked);
+    const blockedEvents = events.filter((e) => e.isBlocked);
+
+    // --- BOOKINGS: upsert by external_uid ---
     const { data: existingBookings, error: bErr } = await supabase
       .from("bookings")
       .select("id, data_inizio, data_fine, external_uid")
-      .eq("property_id", conn.property_id);
+      .eq("property_id", conn.property_id)
+      .eq("source", source);
 
     if (bErr) throw new Error(`Fetch bookings failed: ${bErr.message}`);
 
-    const externalUids = new Set(
+    const existingByUid = new Map(
       (existingBookings || [])
         .filter((b: { external_uid: string | null }) => b.external_uid)
-        .map((b: { external_uid: string }) => b.external_uid)
+        .map((b: { id: string; external_uid: string; data_inizio: string; data_fine: string }) => [
+          b.external_uid,
+          b,
+        ])
     );
 
-    for (const event of events) {
-      if (externalUids.has(event.uid)) {
-        eventsSkipped++;
-        continue;
-      }
+    const feedBookingUids = new Set<string>();
 
-      const hasOverlap = (existingBookings || []).some(
-        (b: { data_inizio: string; data_fine: string }) =>
-          event.start < b.data_fine && event.end > b.data_inizio
+    for (const event of bookingEvents) {
+      feedBookingUids.add(event.uid);
+      const existing = existingByUid.get(event.uid) as
+        | { id: string; data_inizio: string; data_fine: string }
+        | undefined;
+
+      if (existing) {
+        if (
+          existing.data_inizio !== event.start ||
+          existing.data_fine !== event.end
+        ) {
+          const { error: updateErr } = await supabase
+            .from("bookings")
+            .update({
+              data_inizio: event.start,
+              data_fine: event.end,
+              nome_ospite: event.summary,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("id", existing.id);
+
+          if (updateErr) {
+            errors.push(`Update booking ${event.uid}: ${updateErr.message}`);
+          } else {
+            bookingsImported++;
+          }
+        } else {
+          bookingsSkipped++;
+        }
+      } else {
+        const { error: insertErr } = await supabase.from("bookings").insert({
+          property_id: conn.property_id,
+          user_id: conn.user_id,
+          nome_ospite: event.summary,
+          data_inizio: event.start,
+          data_fine: event.end,
+          external_uid: event.uid,
+          source,
+          tipo_affitto: "breve",
+          checkin_status: "pending",
+        });
+
+        if (insertErr) {
+          errors.push(`Import booking ${event.uid}: ${insertErr.message}`);
+          bookingsSkipped++;
+        } else {
+          bookingsImported++;
+        }
+      }
+    }
+
+    // Remove bookings no longer in the feed (cancelled on portal)
+    for (const [uid, booking] of existingByUid) {
+      if (!feedBookingUids.has(uid as string)) {
+        const b = booking as { id: string };
+        await supabase.from("bookings").delete().eq("id", b.id);
+      }
+    }
+
+    // --- BLOCKED DATES: full replace for this source ---
+    const { data: existingBlocks, error: blErr } = await supabase
+      .from("property_blocked_dates")
+      .select("id, date_start, date_end, external_uid")
+      .eq("property_id", conn.property_id)
+      .eq("source", source);
+
+    if (blErr) {
+      errors.push(`Fetch blocked dates failed: ${blErr.message}`);
+    } else {
+      const existingBlocksByUid = new Map(
+        (existingBlocks || [])
+          .filter((b: { external_uid: string | null }) => b.external_uid)
+          .map((b: { id: string; external_uid: string }) => [
+            b.external_uid,
+            b,
+          ])
       );
 
-      if (hasOverlap) {
-        eventsSkipped++;
-        continue;
+      const feedBlockUids = new Set<string>();
+
+      for (const event of blockedEvents) {
+        feedBlockUids.add(event.uid);
+        const existing = existingBlocksByUid.get(event.uid);
+
+        if (!existing) {
+          const { error: insertErr } = await supabase
+            .from("property_blocked_dates")
+            .insert({
+              property_id: conn.property_id,
+              user_id: conn.user_id,
+              date_start: event.start,
+              date_end: event.end,
+              reason: event.summary,
+              source,
+              external_uid: event.uid,
+            });
+
+          if (insertErr) {
+            errors.push(`Import block ${event.uid}: ${insertErr.message}`);
+          } else {
+            blocksImported++;
+          }
+        }
       }
 
-      const { error: insertErr } = await supabase.from("bookings").insert({
-        property_id: conn.property_id,
-        user_id: conn.user_id,
-        nome_ospite: event.summary,
-        data_inizio: event.start,
-        data_fine: event.end,
-        external_uid: event.uid,
-        source: `${conn.portal_name}_ical`,
-        tipo_affitto: "breve",
-        checkin_status: "pending",
-      });
-
-      if (insertErr) {
-        errors.push(`Import ${event.uid}: ${insertErr.message}`);
-        eventsSkipped++;
-      } else {
-        eventsImported++;
+      // Remove blocks no longer in the feed
+      for (const [uid, block] of existingBlocksByUid) {
+        if (!feedBlockUids.has(uid as string)) {
+          const b = block as { id: string };
+          await supabase
+            .from("property_blocked_dates")
+            .delete()
+            .eq("id", b.id);
+          blocksRemoved++;
+        }
       }
     }
   } catch (error) {
@@ -153,8 +281,12 @@ async function syncConnection(
   }
 
   const syncResult = {
-    events_imported: eventsImported,
-    events_skipped: eventsSkipped,
+    bookings_imported: bookingsImported,
+    bookings_skipped: bookingsSkipped,
+    blocks_imported: blocksImported,
+    blocks_removed: blocksRemoved,
+    events_imported: bookingsImported + blocksImported,
+    events_skipped: bookingsSkipped,
     errors: errors.length > 0 ? errors : null,
     synced_at: new Date().toISOString(),
   };
@@ -164,7 +296,10 @@ async function syncConnection(
     .update({
       last_sync: new Date().toISOString(),
       last_sync_result: syncResult,
-      status: errors.length > 0 && eventsImported === 0 ? "error" : "active",
+      status:
+        errors.length > 0 && bookingsImported === 0 && blocksImported === 0
+          ? "error"
+          : "active",
       updated_at: new Date().toISOString(),
     })
     .eq("id", conn.id);
@@ -173,8 +308,10 @@ async function syncConnection(
     connection_id: conn.id,
     portal_name: conn.portal_name,
     property_name: String(propertyName),
-    events_imported: eventsImported,
-    events_skipped: eventsSkipped,
+    bookings_imported: bookingsImported,
+    bookings_skipped: bookingsSkipped,
+    blocks_imported: blocksImported,
+    blocks_removed: blocksRemoved,
     errors,
   };
 }
@@ -187,7 +324,8 @@ Deno.serve(async (req: Request) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    if (!supabaseUrl || !supabaseKey) throw new Error("Missing Supabase config");
+    if (!supabaseUrl || !supabaseKey)
+      throw new Error("Missing Supabase config");
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
@@ -219,23 +357,37 @@ Deno.serve(async (req: Request) => {
 
     const results = [];
     for (const conn of connections || []) {
-      const result = await syncConnection(supabase, conn as PortalConnection);
+      const result = await syncConnection(
+        supabase,
+        conn as PortalConnection
+      );
       results.push(result);
     }
 
-    const totalImported = results.reduce((s, r) => s + r.events_imported, 0);
-    const totalSkipped = results.reduce((s, r) => s + r.events_skipped, 0);
+    const totalBookingsImported = results.reduce(
+      (s, r) => s + r.bookings_imported,
+      0
+    );
+    const totalBlocksImported = results.reduce(
+      (s, r) => s + r.blocks_imported,
+      0
+    );
 
     return new Response(
       JSON.stringify({
         success: true,
         connections_synced: results.length,
-        total_events_imported: totalImported,
-        total_events_skipped: totalSkipped,
+        total_events_imported:
+          totalBookingsImported + totalBlocksImported,
+        total_bookings_imported: totalBookingsImported,
+        total_blocks_imported: totalBlocksImported,
         results,
         timestamp: new Date().toISOString(),
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      {
+        status: 200,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
     );
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

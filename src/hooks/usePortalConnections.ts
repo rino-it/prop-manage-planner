@@ -110,6 +110,8 @@ export function usePortalConnections() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['portal-connections'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-calendar-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-calendar-blocked'] });
     },
   });
 
@@ -124,6 +126,8 @@ export function usePortalConnections() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['portal-connections'] });
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-calendar-bookings'] });
+      queryClient.invalidateQueries({ queryKey: ['portal-calendar-blocked'] });
     },
   });
 

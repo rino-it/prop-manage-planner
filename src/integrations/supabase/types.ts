@@ -840,6 +840,50 @@ export type Database = {
           },
         ]
       }
+      property_blocked_dates: {
+        Row: {
+          id: string
+          property_id: string
+          user_id: string
+          date_start: string
+          date_end: string
+          reason: string | null
+          source: string | null
+          external_uid: string | null
+          created_at: string | null
+        }
+        Insert: {
+          id?: string
+          property_id: string
+          user_id: string
+          date_start: string
+          date_end: string
+          reason?: string | null
+          source?: string | null
+          external_uid?: string | null
+          created_at?: string | null
+        }
+        Update: {
+          id?: string
+          property_id?: string
+          user_id?: string
+          date_start?: string
+          date_end?: string
+          reason?: string | null
+          source?: string | null
+          external_uid?: string | null
+          created_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_blocked_dates_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       portal_connections: {
         Row: {
           api_credentials: Json | null

@@ -1,14 +1,13 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { useToast } from '@/hooks/use-toast';
 import {
   ChevronLeft, ChevronRight, User, Calendar as CalendarIcon,
-  Ban, Lock, Unlock, X
+  Ban, ExternalLink
 } from 'lucide-react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -78,15 +77,18 @@ function portalLabel(name: string): string {
   return labels[name] || name;
 }
 
+const PORTAL_URLS: Record<string, string> = {
+  airbnb: 'https://www.airbnb.it/hosting/calendar',
+  booking: 'https://admin.booking.com/hotel/hoteladmin/extranet_ng/manage/availability.html',
+  vrbo: 'https://www.vrbo.com/host/properties',
+};
+
 export default function PortalCalendarDialog({
   open, onOpenChange, propertyId, propertyName, portalName, portalSource
 }: PortalCalendarDialogProps) {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [selectedItem, setSelectedItem] = useState<PortalBooking | BlockedDate | null>(null);
   const [selectedItemType, setSelectedItemType] = useState<'booking' | 'blocked'>('booking');
-  const [blockStart, setBlockStart] = useState<Date | null>(null);
 
   const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString().split('T')[0];
   const rangeEnd = addMonths(endOfMonth(new Date()), 3).toISOString().split('T')[0];
@@ -125,42 +127,6 @@ export default function PortalCalendarDialog({
     staleTime: 30_000,
   });
 
-  const addBlock = useMutation({
-    mutationFn: async ({ start, end }: { start: string; end: string }) => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Non autenticato');
-      const { error } = await supabase.from('property_blocked_dates').insert({
-        property_id: propertyId,
-        user_id: user.id,
-        date_start: start,
-        date_end: end,
-        reason: 'Bloccato manualmente',
-        source: 'manual',
-      });
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['portal-calendar-blocked', propertyId] });
-      toast({ title: 'Date bloccate' });
-      setBlockStart(null);
-    },
-    onError: (err: Error) => {
-      toast({ title: 'Errore', description: err.message, variant: 'destructive' });
-    },
-  });
-
-  const removeBlock = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from('property_blocked_dates').delete().eq('id', id);
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['portal-calendar-blocked', propertyId] });
-      setSelectedItem(null);
-      toast({ title: 'Blocco rimosso' });
-    },
-  });
-
   const calendarDays = useMemo(() => {
     const monthStart = startOfMonth(currentMonth);
     const monthEnd = endOfMonth(currentMonth);
@@ -196,7 +162,7 @@ export default function PortalCalendarDialog({
     for (const bl of blockedDates) {
       const start = parseISO(bl.date_start);
       const end = parseISO(bl.date_end);
-      if (isWithinInterval(date, { start, end })) {
+      if (isWithinInterval(date, { start, end: addDays(end, -1) })) {
         dayBlocks.push(bl);
       }
     }
@@ -237,21 +203,12 @@ export default function PortalCalendarDialog({
       setSelectedItemType('blocked');
       return;
     }
-
-    if (!blockStart) {
-      setBlockStart(day);
-    } else {
-      const start = isBefore(day, blockStart) ? day : blockStart;
-      const end = isBefore(day, blockStart) ? blockStart : day;
-      addBlock.mutate({
-        start: format(start, 'yyyy-MM-dd'),
-        end: format(end, 'yyyy-MM-dd'),
-      });
-    }
   }
 
+  const portalUrl = PORTAL_URLS[portalName] || null;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setBlockStart(null); } onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl w-[95vw]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -259,7 +216,7 @@ export default function PortalCalendarDialog({
             Disponibilita: {propertyName}
           </DialogTitle>
           <DialogDescription>
-            Connesso a {portalLabel(portalName)} - mostra tutte le prenotazioni e date bloccate
+            Connesso a {portalLabel(portalName)} — calendario in sola lettura
           </DialogDescription>
         </DialogHeader>
 
@@ -299,18 +256,6 @@ export default function PortalCalendarDialog({
             </div>
           </div>
 
-          {blockStart && (
-            <div className="flex items-center gap-2 p-2 rounded-lg bg-amber-50 border border-amber-200 text-sm">
-              <Lock className="w-4 h-4 text-amber-600" />
-              <span className="text-amber-800">
-                Inizio blocco: <strong>{format(blockStart, 'dd MMM', { locale: it })}</strong> — clicca la data di fine per confermare
-              </span>
-              <Button variant="ghost" size="sm" className="ml-auto h-6 w-6 p-0" onClick={() => setBlockStart(null)}>
-                <X className="w-3 h-3" />
-              </Button>
-            </div>
-          )}
-
           <div className="border rounded-lg overflow-hidden">
             <div className="grid grid-cols-7 bg-slate-50 border-b">
               {WEEKDAYS.map(d => (
@@ -327,7 +272,6 @@ export default function PortalCalendarDialog({
                 const info = getDayInfo(day);
                 const hasBooking = info.bookings.length > 0;
                 const hasBlock = info.blocks.length > 0;
-                const isBlockStartDay = blockStart && isSameDay(day, blockStart);
 
                 let cellBg = 'bg-white';
                 let cellBorder = '';
@@ -348,17 +292,13 @@ export default function PortalCalendarDialog({
                   labelColor = BLOCKED_COLORS.text;
                 }
 
-                if (isBlockStartDay) {
-                  cellBg = 'bg-amber-100';
-                  cellBorder = 'border-l-2 border-amber-400';
-                }
-
                 return (
                   <div
                     key={idx}
                     className={`
-                      relative min-h-[52px] border-b border-r p-1 transition-colors cursor-pointer
-                      ${inMonth ? 'hover:brightness-95' : 'opacity-30'}
+                      relative min-h-[52px] border-b border-r p-1 transition-colors
+                      ${hasBooking || hasBlock ? 'cursor-pointer hover:brightness-95' : ''}
+                      ${inMonth ? '' : 'opacity-30'}
                       ${cellBg} ${cellBorder}
                     `}
                     onClick={() => inMonth && handleDayClick(day, info)}
@@ -386,9 +326,21 @@ export default function PortalCalendarDialog({
             </div>
           </div>
 
-          <div className="text-[11px] text-muted-foreground">
-            Clicca su un giorno libero per bloccare date. Clicca su una prenotazione o blocco per i dettagli.
-          </div>
+          {portalUrl && (
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border">
+              <span className="text-sm text-muted-foreground">
+                Per bloccare o sbloccare date, gestisci direttamente su {portalLabel(portalName)}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open(portalUrl, '_blank', 'noopener')}
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
+                Apri {portalLabel(portalName)}
+              </Button>
+            </div>
+          )}
 
           {(allMonthBookings.length > 0 || monthBlocked.length > 0) && (
             <ScrollArea className="max-h-[200px]">
@@ -407,7 +359,7 @@ export default function PortalCalendarDialog({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{b.nome_ospite}</p>
                         <p className="text-[11px] text-muted-foreground">
-                          {format(start, 'dd MMM', { locale: it })} → {format(end, 'dd MMM', { locale: it })} ({nights} {nights === 1 ? 'notte' : 'notti'})
+                          {format(start, 'dd MMM', { locale: it })} - {format(end, 'dd MMM', { locale: it })} ({nights} {nights === 1 ? 'notte' : 'notti'})
                         </p>
                       </div>
                       <Badge variant="outline" className={`text-[9px] ${sc.text} ${sc.border}`}>
@@ -426,17 +378,12 @@ export default function PortalCalendarDialog({
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{bl.reason || 'Bloccato'}</p>
                       <p className="text-[11px] text-muted-foreground">
-                        {format(parseISO(bl.date_start), 'dd MMM', { locale: it })} → {format(parseISO(bl.date_end), 'dd MMM', { locale: it })}
+                        {format(parseISO(bl.date_start), 'dd MMM', { locale: it })} - {format(parseISO(bl.date_end), 'dd MMM', { locale: it })}
                       </p>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs text-amber-700 hover:text-red-600"
-                      onClick={() => removeBlock.mutate(bl.id)}
-                    >
-                      <Unlock className="w-3 h-3 mr-1" /> Sblocca
-                    </Button>
+                    <Badge variant="outline" className={`text-[9px] ${BLOCKED_COLORS.text} ${BLOCKED_COLORS.border}`}>
+                      {sourceLabel(bl.source)}
+                    </Badge>
                   </div>
                 ))}
               </div>
@@ -445,7 +392,7 @@ export default function PortalCalendarDialog({
 
           {allMonthBookings.length === 0 && monthBlocked.length === 0 && (
             <div className="text-center py-4 text-muted-foreground text-sm">
-              Nessuna prenotazione o blocco in questo mese. Tutto disponibile.
+              Nessuna prenotazione o blocco in questo mese.
             </div>
           )}
         </div>
@@ -459,7 +406,7 @@ export default function PortalCalendarDialog({
               <DialogDescription>
                 {selectedItemType === 'booking' && selectedItem
                   ? `Fonte: ${sourceLabel((selectedItem as PortalBooking).source)}`
-                  : 'Blocco manuale'}
+                  : selectedItem ? `Fonte: ${sourceLabel((selectedItem as BlockedDate).source)}` : ''}
               </DialogDescription>
             </DialogHeader>
             {selectedItem && selectedItemType === 'booking' && (
@@ -499,6 +446,9 @@ export default function PortalCalendarDialog({
                   </div>
                   <div>
                     <p className="font-semibold">{(selectedItem as BlockedDate).reason || 'Bloccato'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {sourceLabel((selectedItem as BlockedDate).source)}
+                    </p>
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-3 text-sm">
@@ -511,14 +461,6 @@ export default function PortalCalendarDialog({
                     <p className="font-medium">{format(parseISO((selectedItem as BlockedDate).date_end), 'dd MMM yyyy', { locale: it })}</p>
                   </div>
                 </div>
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => removeBlock.mutate((selectedItem as BlockedDate).id)}
-                >
-                  <Unlock className="w-4 h-4 mr-2" /> Rimuovi blocco
-                </Button>
               </div>
             )}
           </DialogContent>
