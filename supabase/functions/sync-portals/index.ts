@@ -86,9 +86,15 @@ async function syncConnection(
   }
 
   try {
-    const resp = await fetch(conn.ical_url);
+    const resp = await fetch(conn.ical_url, {
+      headers: {
+        "User-Agent": "PropManage/1.0 iCal-Sync",
+        "Accept": "text/calendar, text/plain, */*",
+      },
+    });
     if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}: ${resp.statusText}`);
+      const body = await resp.text().catch(() => "");
+      throw new Error(`HTTP ${resp.status}: ${resp.statusText} - ${body.substring(0, 200)}`);
     }
 
     const icalText = await resp.text();

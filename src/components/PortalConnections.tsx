@@ -2,8 +2,9 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Globe, Plus, RefreshCw, Trash2, ExternalLink, AlertCircle,
-  CheckCircle2, XCircle, Clock, Loader2
+  CheckCircle2, XCircle, Clock, Loader2, Calendar as CalendarIcon
 } from 'lucide-react';
+import PortalCalendarDialog from '@/components/PortalCalendarDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -55,6 +56,13 @@ export default function PortalConnections() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
+
+  const [calendarTarget, setCalendarTarget] = useState<{
+    propertyId: string;
+    propertyName: string;
+    portalName: string;
+    portalSource: string;
+  } | null>(null);
 
   const [formPropertyId, setFormPropertyId] = useState('');
   const [formPortalName, setFormPortalName] = useState('');
@@ -280,6 +288,19 @@ export default function PortalConnections() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => setCalendarTarget({
+                        propertyId: conn.property_id,
+                        propertyName: conn.properties_real?.nome || 'Proprieta',
+                        portalName: conn.portal_name,
+                        portalSource: `${conn.portal_name}_ical`,
+                      })}
+                      title="Calendario prenotazioni"
+                    >
+                      <CalendarIcon className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleSync(conn.id)}
                       disabled={syncConnection.isPending}
                       title="Sincronizza"
@@ -393,6 +414,17 @@ export default function PortalConnections() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {calendarTarget && (
+        <PortalCalendarDialog
+          open={!!calendarTarget}
+          onOpenChange={(open) => !open && setCalendarTarget(null)}
+          propertyId={calendarTarget.propertyId}
+          propertyName={calendarTarget.propertyName}
+          portalName={calendarTarget.portalName}
+          portalSource={calendarTarget.portalSource}
+        />
+      )}
     </div>
   );
 }
