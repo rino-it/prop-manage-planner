@@ -105,8 +105,8 @@ export default function CalendarView() {
   const { data: rawData } = useQuery({
     queryKey: ['calendar-full-data'],
     queryFn: async () => {
-      const [bookings, expenses, income, tickets, vehicles, activities] = await Promise.all([
-        supabase.from('bookings').select('id, data_inizio, data_fine, nome_ospite, properties_real(nome)')
+      const [bookings, expenses, income, tickets, vehicles, activities, blockedDates] = await Promise.all([
+        supabase.from('bookings').select('id, data_inizio, data_fine, nome_ospite, source, properties_real(nome)')
           .or(`data_inizio.gte.${rangeStart},data_fine.lte.${rangeEnd}`),
         supabase.from('payments').select('*, properties_real(nome), properties_mobile(veicolo, targa)')
           .gte('scadenza', rangeStart).lte('scadenza', rangeEnd),
@@ -116,7 +116,9 @@ export default function CalendarView() {
           .neq('stato', 'risolto'),
         supabase.from('properties_mobile').select('*').eq('status', 'active'),
         supabase.from('activities').select('*, properties_real(nome), properties_mobile(veicolo, targa)')
-          .gte('data', rangeStart).lte('data', rangeEnd)
+          .gte('data', rangeStart).lte('data', rangeEnd),
+        supabase.from('property_blocked_dates').select('id, date_start, date_end, reason, source, properties_real(nome)')
+          .or(`date_start.gte.${rangeStart},date_end.lte.${rangeEnd}`)
       ]);
 
       return {
@@ -125,7 +127,8 @@ export default function CalendarView() {
         income: income.data || [],
         tickets: tickets.data || [],
         vehicles: vehicles.data || [],
-        activities: activities.data || []
+        activities: activities.data || [],
+        blockedDates: blockedDates.data || []
       };
     }
   });
@@ -205,6 +208,24 @@ export default function CalendarView() {
         title: a.titolo || 'Attivita', subtitle: `${target} - ${a.descrizione || ''}`,
         priority: 'media', status: a.stato, targetTab: 'activities',
         isCompleted: a.stato === 'completato' || a.stato === 'svolto'
+      });
+    });
+
+    (rawData.blockedDates || []).forEach(bd => {
+      const startDate = parseISO(bd.date_start);
+      const endDate = parseISO(bd.date_end);
+      const sourceLabel = bd.source?.replace('_ical', '').replace(/^\w/, (c: string) => c.toUpperCase()) || 'Portale';
+      events.push({
+        id: `block-start-${bd.id}`, date: startDate, type: 'checkin',
+        title: `Blocco ${sourceLabel}`, subtitle: bd.properties_real?.nome || 'Proprieta',
+        priority: 'bassa', status: 'blocked', targetTab: 'portals',
+        isCompleted: isPast(endDate)
+      });
+      events.push({
+        id: `block-end-${bd.id}`, date: endDate, type: 'checkout',
+        title: `Fine blocco ${sourceLabel}`, subtitle: bd.properties_real?.nome || 'Proprieta',
+        priority: 'bassa', status: 'blocked', targetTab: 'portals',
+        isCompleted: isPast(endDate)
       });
     });
 

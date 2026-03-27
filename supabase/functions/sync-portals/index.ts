@@ -30,12 +30,20 @@ const BLOCKED_PATTERNS = [
   /non disponibile/i,
   /closed/i,
   /blocked/i,
-  /airbnb \(not available\)/i,
-  /^reserved$/i,
   /bloccato/i,
 ];
 
+const BOOKING_PATTERNS = [
+  /^reserved$/i,
+  /^reservation$/i,
+  /^prenotazione$/i,
+  /^booked$/i,
+  /HMAK\w/i,
+];
+
 function isBlockedEvent(summary: string): boolean {
+  if (!summary || summary.trim().length === 0) return false;
+  if (BOOKING_PATTERNS.some((p) => p.test(summary))) return false;
   return BLOCKED_PATTERNS.some((p) => p.test(summary));
 }
 
@@ -52,10 +60,17 @@ function parseIcal(text: string): ICalEvent[] {
 
   for (let i = 1; i < blocks.length; i++) {
     const block = blocks[i];
+    const lines = block.split(/\r?\n/);
     const getField = (name: string): string | null => {
-      const regex = new RegExp(`${name}[^:\\n]*:(.+?)(?:\\r?\\n|$)`, "i");
-      const match = block.match(regex);
-      return match?.[1]?.trim() || null;
+      const prefix = name.toUpperCase();
+      for (const line of lines) {
+        const upper = line.toUpperCase();
+        if (upper.startsWith(prefix + ":") || upper.startsWith(prefix + ";")) {
+          const colonIdx = line.indexOf(":");
+          if (colonIdx >= 0) return line.substring(colonIdx + 1).trim();
+        }
+      }
+      return null;
     };
 
     const uid = getField("UID");
@@ -129,6 +144,9 @@ async function syncConnection(
 
     const icalText = await resp.text();
 
+    console.log(`[sync-portals] ${conn.portal_name} | ${propertyName} | fetch OK | ${icalText.length} bytes`);
+    console.log(`[sync-portals] first 300 chars: ${icalText.substring(0, 300)}`);
+
     if (!icalText.includes("BEGIN:VCALENDAR")) {
       throw new Error(
         `Response is not valid iCal (${icalText.length} bytes, starts with: ${icalText.substring(0, 80)})`
@@ -138,6 +156,9 @@ async function syncConnection(
     const events = parseIcal(icalText);
     const bookingEvents = events.filter((e) => !e.isBlocked);
     const blockedEvents = events.filter((e) => e.isBlocked);
+
+    console.log(`[sync-portals] ${conn.portal_name} | ${propertyName} | events parsed: ${events.length} (bookings: ${bookingEvents.length}, blocked: ${blockedEvents.length})`);
+    events.forEach((e) => console.log(`[sync-portals]   event: uid=${e.uid.substring(0,30)}... summary="${e.summary}" start=${e.start} end=${e.end} isBlocked=${e.isBlocked}`));
 
     // --- BOOKINGS: upsert by external_uid ---
     const { data: existingBookings, error: bErr } = await supabase
