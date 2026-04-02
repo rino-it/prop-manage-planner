@@ -96,20 +96,25 @@ function parseIcal(text: string): ICalEvent[] {
 
 async function syncConnection(
   supabase: ReturnType<typeof createClient>,
-  conn: PortalConnection
+  conn: PortalConnection,
+  batchId: string
 ): Promise<{
   connection_id: string;
   portal_name: string;
   property_name: string;
-  bookings_imported: number;
-  bookings_skipped: number;
+  staging_new: number;
+  staging_updated: number;
+  staging_cancelled: number;
+  staging_skipped: number;
   blocks_imported: number;
   blocks_removed: number;
   errors: string[];
 }> {
   const errors: string[] = [];
-  let bookingsImported = 0;
-  let bookingsSkipped = 0;
+  let stagingNew = 0;
+  let stagingUpdated = 0;
+  let stagingCancelled = 0;
+  let stagingSkipped = 0;
   let blocksImported = 0;
   let blocksRemoved = 0;
   const propertyName = conn.properties_real?.nome || conn.property_id;
@@ -120,8 +125,10 @@ async function syncConnection(
       connection_id: conn.id,
       portal_name: conn.portal_name,
       property_name: String(propertyName),
-      bookings_imported: 0,
-      bookings_skipped: 0,
+      staging_new: 0,
+      staging_updated: 0,
+      staging_cancelled: 0,
+      staging_skipped: 0,
       blocks_imported: 0,
       blocks_removed: 0,
       errors: ["No iCal URL configured"],
@@ -145,7 +152,6 @@ async function syncConnection(
     const icalText = await resp.text();
 
     console.log(`[sync-portals] ${conn.portal_name} | ${propertyName} | fetch OK | ${icalText.length} bytes`);
-    console.log(`[sync-portals] first 300 chars: ${icalText.substring(0, 300)}`);
 
     if (!icalText.includes("BEGIN:VCALENDAR")) {
       throw new Error(
@@ -158,12 +164,11 @@ async function syncConnection(
     const blockedEvents = events.filter((e) => e.isBlocked);
 
     console.log(`[sync-portals] ${conn.portal_name} | ${propertyName} | events parsed: ${events.length} (bookings: ${bookingEvents.length}, blocked: ${blockedEvents.length})`);
-    events.forEach((e) => console.log(`[sync-portals]   event: uid=${e.uid.substring(0,30)}... summary="${e.summary}" start=${e.start} end=${e.end} isBlocked=${e.isBlocked}`));
 
-    // --- BOOKINGS: upsert by external_uid ---
+    // --- BOOKINGS: scrivi su sync_staging invece di bookings ---
     const { data: existingBookings, error: bErr } = await supabase
       .from("bookings")
-      .select("id, data_inizio, data_fine, external_uid")
+      .select("id, data_inizio, data_fine, external_uid, nome_ospite, email_ospite, telefono_ospite, tipo_affitto, numero_ospiti")
       .eq("property_id", conn.property_id)
       .eq("source", source);
 
@@ -172,74 +177,168 @@ async function syncConnection(
     const existingByUid = new Map(
       (existingBookings || [])
         .filter((b: { external_uid: string | null }) => b.external_uid)
-        .map((b: { id: string; external_uid: string; data_inizio: string; data_fine: string }) => [
-          b.external_uid,
-          b,
-        ])
+        .map((b: {
+          id: string;
+          external_uid: string;
+          data_inizio: string;
+          data_fine: string;
+          nome_ospite: string;
+          email_ospite: string | null;
+          telefono_ospite: string | null;
+          tipo_affitto: string | null;
+          numero_ospiti: number | null;
+        }) => [b.external_uid, b])
+    );
+
+    // Controlla anche staging pending per evitare duplicati
+    const { data: pendingStaging } = await supabase
+      .from("sync_staging")
+      .select("external_uid")
+      .eq("connection_id", conn.id)
+      .eq("status", "pending");
+
+    const pendingUids = new Set(
+      (pendingStaging || []).map((s: { external_uid: string }) => s.external_uid)
     );
 
     const feedBookingUids = new Set<string>();
 
     for (const event of bookingEvents) {
       feedBookingUids.add(event.uid);
+
+      // Se gia in staging pending, skip
+      if (pendingUids.has(event.uid)) {
+        stagingSkipped++;
+        continue;
+      }
+
       const existing = existingByUid.get(event.uid) as
-        | { id: string; data_inizio: string; data_fine: string }
+        | {
+            id: string;
+            data_inizio: string;
+            data_fine: string;
+            nome_ospite: string;
+            email_ospite: string | null;
+            telefono_ospite: string | null;
+            tipo_affitto: string | null;
+            numero_ospiti: number | null;
+          }
         | undefined;
 
       if (existing) {
-        if (
+        const datesChanged =
           existing.data_inizio !== event.start ||
-          existing.data_fine !== event.end
-        ) {
-          const { error: updateErr } = await supabase
-            .from("bookings")
-            .update({
+          existing.data_fine !== event.end;
+        const nameChanged = existing.nome_ospite !== event.summary;
+
+        if (datesChanged || nameChanged) {
+          const { error: insertErr } = await supabase
+            .from("sync_staging")
+            .insert({
+              sync_batch_id: batchId,
+              connection_id: conn.id,
+              property_id: conn.property_id,
+              user_id: conn.user_id,
+              external_uid: event.uid,
+              portal_name: conn.portal_name,
+              source,
+              event_type: "booking",
+              change_type: "updated",
+              nome_ospite: event.summary,
+              email_ospite: existing.email_ospite,
+              telefono_ospite: existing.telefono_ospite,
               data_inizio: event.start,
               data_fine: event.end,
-              nome_ospite: event.summary,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", existing.id);
+              raw_summary: event.summary,
+              numero_ospiti: existing.numero_ospiti || 1,
+              tipo_affitto: existing.tipo_affitto || "breve",
+              existing_booking_id: existing.id,
+              previous_data: {
+                nome_ospite: existing.nome_ospite,
+                data_inizio: existing.data_inizio,
+                data_fine: existing.data_fine,
+              },
+            });
 
-          if (updateErr) {
-            errors.push(`Update booking ${event.uid}: ${updateErr.message}`);
+          if (insertErr) {
+            errors.push(`Stage update ${event.uid}: ${insertErr.message}`);
           } else {
-            bookingsImported++;
+            stagingUpdated++;
           }
         } else {
-          bookingsSkipped++;
+          stagingSkipped++;
         }
       } else {
-        const { error: insertErr } = await supabase.from("bookings").insert({
-          property_id: conn.property_id,
-          user_id: conn.user_id,
-          nome_ospite: event.summary,
-          data_inizio: event.start,
-          data_fine: event.end,
-          external_uid: event.uid,
-          source,
-          tipo_affitto: "breve",
-          checkin_status: "pending",
-        });
+        const { error: insertErr } = await supabase
+          .from("sync_staging")
+          .insert({
+            sync_batch_id: batchId,
+            connection_id: conn.id,
+            property_id: conn.property_id,
+            user_id: conn.user_id,
+            external_uid: event.uid,
+            portal_name: conn.portal_name,
+            source,
+            event_type: "booking",
+            change_type: "new",
+            nome_ospite: event.summary,
+            data_inizio: event.start,
+            data_fine: event.end,
+            raw_summary: event.summary,
+            tipo_affitto: "breve",
+          });
 
         if (insertErr) {
-          errors.push(`Import booking ${event.uid}: ${insertErr.message}`);
-          bookingsSkipped++;
+          errors.push(`Stage new ${event.uid}: ${insertErr.message}`);
+          stagingSkipped++;
         } else {
-          bookingsImported++;
+          stagingNew++;
         }
       }
     }
 
-    // Remove bookings no longer in the feed (cancelled on portal)
+    // Cancellazioni: booking esistente non piu nel feed
     for (const [uid, booking] of existingByUid) {
-      if (!feedBookingUids.has(uid as string)) {
-        const b = booking as { id: string };
-        await supabase.from("bookings").delete().eq("id", b.id);
+      if (!feedBookingUids.has(uid as string) && !pendingUids.has(uid as string)) {
+        const b = booking as {
+          id: string;
+          data_inizio: string;
+          data_fine: string;
+          nome_ospite: string;
+        };
+        const { error: insertErr } = await supabase
+          .from("sync_staging")
+          .insert({
+            sync_batch_id: batchId,
+            connection_id: conn.id,
+            property_id: conn.property_id,
+            user_id: conn.user_id,
+            external_uid: uid as string,
+            portal_name: conn.portal_name,
+            source,
+            event_type: "booking",
+            change_type: "cancelled",
+            nome_ospite: b.nome_ospite,
+            data_inizio: b.data_inizio,
+            data_fine: b.data_fine,
+            raw_summary: b.nome_ospite,
+            existing_booking_id: b.id,
+            previous_data: {
+              nome_ospite: b.nome_ospite,
+              data_inizio: b.data_inizio,
+              data_fine: b.data_fine,
+            },
+          });
+
+        if (insertErr) {
+          errors.push(`Stage cancel ${uid}: ${insertErr.message}`);
+        } else {
+          stagingCancelled++;
+        }
       }
     }
 
-    // --- BLOCKED DATES: full replace for this source ---
+    // --- BLOCKED DATES: gestione diretta (no review necessario) ---
     const { data: existingBlocks, error: blErr } = await supabase
       .from("property_blocked_dates")
       .select("id, date_start, date_end, external_uid")
@@ -285,7 +384,6 @@ async function syncConnection(
         }
       }
 
-      // Remove blocks no longer in the feed
       for (const [uid, block] of existingBlocksByUid) {
         if (!feedBlockUids.has(uid as string)) {
           const b = block as { id: string };
@@ -301,13 +399,17 @@ async function syncConnection(
     errors.push(error instanceof Error ? error.message : "Unknown error");
   }
 
+  const totalStaged = stagingNew + stagingUpdated + stagingCancelled;
+
   const syncResult = {
-    bookings_imported: bookingsImported,
-    bookings_skipped: bookingsSkipped,
+    staging_new: stagingNew,
+    staging_updated: stagingUpdated,
+    staging_cancelled: stagingCancelled,
+    staging_skipped: stagingSkipped,
     blocks_imported: blocksImported,
     blocks_removed: blocksRemoved,
-    events_imported: bookingsImported + blocksImported,
-    events_skipped: bookingsSkipped,
+    events_imported: totalStaged + blocksImported,
+    events_skipped: stagingSkipped,
     errors: errors.length > 0 ? errors : null,
     synced_at: new Date().toISOString(),
   };
@@ -318,7 +420,7 @@ async function syncConnection(
       last_sync: new Date().toISOString(),
       last_sync_result: syncResult,
       status:
-        errors.length > 0 && bookingsImported === 0 && blocksImported === 0
+        errors.length > 0 && totalStaged === 0 && blocksImported === 0
           ? "error"
           : "active",
       updated_at: new Date().toISOString(),
@@ -329,8 +431,10 @@ async function syncConnection(
     connection_id: conn.id,
     portal_name: conn.portal_name,
     property_name: String(propertyName),
-    bookings_imported: bookingsImported,
-    bookings_skipped: bookingsSkipped,
+    staging_new: stagingNew,
+    staging_updated: stagingUpdated,
+    staging_cancelled: stagingCancelled,
+    staging_skipped: stagingSkipped,
     blocks_imported: blocksImported,
     blocks_removed: blocksRemoved,
     errors,
@@ -353,6 +457,9 @@ Deno.serve(async (req: Request) => {
     const body = await req.json().catch(() => ({}));
     const connectionId = body.connection_id;
     const propertyId = body.property_id;
+
+    // Un batch ID unico per questo sync
+    const batchId = crypto.randomUUID();
 
     let query = supabase
       .from("portal_connections")
@@ -380,13 +487,14 @@ Deno.serve(async (req: Request) => {
     for (const conn of connections || []) {
       const result = await syncConnection(
         supabase,
-        conn as PortalConnection
+        conn as PortalConnection,
+        batchId
       );
       results.push(result);
     }
 
-    const totalBookingsImported = results.reduce(
-      (s, r) => s + r.bookings_imported,
+    const totalStaged = results.reduce(
+      (s, r) => s + r.staging_new + r.staging_updated + r.staging_cancelled,
       0
     );
     const totalBlocksImported = results.reduce(
@@ -397,10 +505,9 @@ Deno.serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
+        sync_batch_id: batchId,
         connections_synced: results.length,
-        total_events_imported:
-          totalBookingsImported + totalBlocksImported,
-        total_bookings_imported: totalBookingsImported,
+        total_staged: totalStaged,
         total_blocks_imported: totalBlocksImported,
         results,
         timestamp: new Date().toISOString(),

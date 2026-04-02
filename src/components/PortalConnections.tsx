@@ -2,9 +2,11 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   Globe, Plus, RefreshCw, Trash2, ExternalLink, AlertCircle,
-  CheckCircle2, XCircle, Clock, Loader2, Calendar as CalendarIcon
+  CheckCircle2, XCircle, Clock, Loader2, Calendar as CalendarIcon, ClipboardCheck
 } from 'lucide-react';
 import PortalCalendarDialog from '@/components/PortalCalendarDialog';
+import SyncReviewDialog from '@/components/SyncReviewDialog';
+import { useSyncReview } from '@/hooks/useSyncReview';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -56,6 +58,9 @@ export default function PortalConnections() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<string | null>(null);
+
+  const { pendingCount } = useSyncReview();
+  const [isReviewOpen, setIsReviewOpen] = useState(false);
 
   const [calendarTarget, setCalendarTarget] = useState<{
     propertyId: string;
@@ -144,11 +149,12 @@ export default function PortalConnections() {
   const handleSync = (connectionId: string) => {
     syncConnection.mutate(connectionId, {
       onSuccess: (data) => {
-        const r = data?.results?.[0];
-        if (r) {
-          toast({ title: `Sync completata: ${r.events_imported} importate, ${r.events_skipped} saltate` });
+        const totalStaged = data?.total_staged || 0;
+        if (totalStaged > 0) {
+          toast({ title: `Sync completata: ${totalStaged} da revisionare` });
+          setIsReviewOpen(true);
         } else {
-          toast({ title: 'Sync completata' });
+          toast({ title: 'Sync completata: nessuna novita' });
         }
       },
       onError: (err) => toast({ title: 'Sync fallita', description: err instanceof Error ? err.message : 'Errore', variant: 'destructive' }),
@@ -158,7 +164,13 @@ export default function PortalConnections() {
   const handleSyncAll = () => {
     syncAll.mutate(undefined, {
       onSuccess: (data) => {
-        toast({ title: `Sync globale: ${data?.total_events_imported || 0} prenotazioni importate` });
+        const totalStaged = data?.total_staged || 0;
+        if (totalStaged > 0) {
+          toast({ title: `Sync globale: ${totalStaged} da revisionare` });
+          setIsReviewOpen(true);
+        } else {
+          toast({ title: 'Sync globale completata: nessuna novita' });
+        }
       },
       onError: (err) => toast({ title: 'Sync fallita', description: err instanceof Error ? err.message : 'Errore', variant: 'destructive' }),
     });
@@ -191,6 +203,20 @@ export default function PortalConnections() {
           </p>
         </div>
         <div className="flex gap-2">
+          {pendingCount > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsReviewOpen(true)}
+              className="relative"
+            >
+              <ClipboardCheck className="w-4 h-4 mr-1.5" />
+              Revisione
+              <Badge variant="destructive" className="ml-1.5 px-1.5 py-0 text-[10px] min-w-[18px] h-[18px]">
+                {pendingCount}
+              </Badge>
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -425,6 +451,11 @@ export default function PortalConnections() {
           portalSource={calendarTarget.portalSource}
         />
       )}
+
+      <SyncReviewDialog
+        open={isReviewOpen}
+        onOpenChange={setIsReviewOpen}
+      />
     </div>
   );
 }

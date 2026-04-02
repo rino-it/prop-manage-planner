@@ -840,50 +840,6 @@ export type Database = {
           },
         ]
       }
-      property_blocked_dates: {
-        Row: {
-          id: string
-          property_id: string
-          user_id: string
-          date_start: string
-          date_end: string
-          reason: string | null
-          source: string | null
-          external_uid: string | null
-          created_at: string | null
-        }
-        Insert: {
-          id?: string
-          property_id: string
-          user_id: string
-          date_start: string
-          date_end: string
-          reason?: string | null
-          source?: string | null
-          external_uid?: string | null
-          created_at?: string | null
-        }
-        Update: {
-          id?: string
-          property_id?: string
-          user_id?: string
-          date_start?: string
-          date_end?: string
-          reason?: string | null
-          source?: string | null
-          external_uid?: string | null
-          created_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "property_blocked_dates_property_id_fkey"
-            columns: ["property_id"]
-            isOneToOne: false
-            referencedRelation: "properties_real"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       portal_connections: {
         Row: {
           api_credentials: Json | null
@@ -1224,6 +1180,50 @@ export type Database = {
         }
         Relationships: []
       }
+      property_blocked_dates: {
+        Row: {
+          created_at: string | null
+          date_end: string
+          date_start: string
+          external_uid: string | null
+          id: string
+          property_id: string
+          reason: string | null
+          source: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          date_end: string
+          date_start: string
+          external_uid?: string | null
+          id?: string
+          property_id: string
+          reason?: string | null
+          source?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          date_end?: string
+          date_start?: string
+          external_uid?: string | null
+          id?: string
+          property_id?: string
+          reason?: string | null
+          source?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "property_blocked_dates_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       property_expenses: {
         Row: {
           amount: number
@@ -1425,6 +1425,102 @@ export type Database = {
           titolo?: string
         }
         Relationships: []
+      }
+      sync_staging: {
+        Row: {
+          change_type: string
+          connection_id: string
+          created_at: string
+          data_fine: string
+          data_inizio: string
+          email_ospite: string | null
+          event_type: string
+          existing_booking_id: string | null
+          external_uid: string
+          id: string
+          nome_ospite: string | null
+          numero_ospiti: number | null
+          portal_name: string
+          previous_data: Json | null
+          property_id: string
+          raw_summary: string | null
+          reviewed_at: string | null
+          source: string
+          status: string
+          sync_batch_id: string
+          synced_at: string
+          telefono_ospite: string | null
+          tipo_affitto: string | null
+          user_id: string
+        }
+        Insert: {
+          change_type: string
+          connection_id: string
+          created_at?: string
+          data_fine: string
+          data_inizio: string
+          email_ospite?: string | null
+          event_type: string
+          existing_booking_id?: string | null
+          external_uid: string
+          id?: string
+          nome_ospite?: string | null
+          numero_ospiti?: number | null
+          portal_name: string
+          previous_data?: Json | null
+          property_id: string
+          raw_summary?: string | null
+          reviewed_at?: string | null
+          source: string
+          status?: string
+          sync_batch_id: string
+          synced_at?: string
+          telefono_ospite?: string | null
+          tipo_affitto?: string | null
+          user_id: string
+        }
+        Update: {
+          change_type?: string
+          connection_id?: string
+          created_at?: string
+          data_fine?: string
+          data_inizio?: string
+          email_ospite?: string | null
+          event_type?: string
+          existing_booking_id?: string | null
+          external_uid?: string
+          id?: string
+          nome_ospite?: string | null
+          numero_ospiti?: number | null
+          portal_name?: string
+          previous_data?: Json | null
+          property_id?: string
+          raw_summary?: string | null
+          reviewed_at?: string | null
+          source?: string
+          status?: string
+          sync_batch_id?: string
+          synced_at?: string
+          telefono_ospite?: string | null
+          tipo_affitto?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sync_staging_connection_id_fkey"
+            columns: ["connection_id"]
+            isOneToOne: false
+            referencedRelation: "portal_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "sync_staging_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tenant_payments: {
         Row: {
