@@ -90,11 +90,17 @@ export default function PortalCalendarDialog({
   const [selectedItem, setSelectedItem] = useState<PortalBooking | BlockedDate | null>(null);
   const [selectedItemType, setSelectedItemType] = useState<'booking' | 'blocked'>('booking');
 
-  const rangeStart = subMonths(startOfMonth(new Date()), 1).toISOString().split('T')[0];
-  const rangeEnd = addMonths(endOfMonth(new Date()), 3).toISOString().split('T')[0];
+  const rangeStart = useMemo(
+    () => subMonths(startOfMonth(currentMonth), 1).toISOString().split('T')[0],
+    [currentMonth]
+  );
+  const rangeEnd = useMemo(
+    () => addMonths(endOfMonth(currentMonth), 1).toISOString().split('T')[0],
+    [currentMonth]
+  );
 
   const { data: bookings = [] } = useQuery({
-    queryKey: ['portal-calendar-bookings', propertyId],
+    queryKey: ['portal-calendar-bookings', propertyId, rangeStart, rangeEnd],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('bookings')
@@ -111,7 +117,7 @@ export default function PortalCalendarDialog({
   });
 
   const { data: blockedDates = [] } = useQuery({
-    queryKey: ['portal-calendar-blocked', propertyId],
+    queryKey: ['portal-calendar-blocked', propertyId, rangeStart, rangeEnd],
     queryFn: async () => {
       const { data, error } = await supabase
         .from('property_blocked_dates')
