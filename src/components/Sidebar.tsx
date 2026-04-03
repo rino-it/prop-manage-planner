@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  LayoutDashboard, CalendarDays, Wallet, Banknote, Wrench,
+  LayoutDashboard, CalendarDays, CalendarRange, Wallet, Banknote, Wrench,
   LogOut, FileText, UserPlus, Home, Users, Truck, Ticket,
   Search, ChevronRight, MessageCircle, DoorOpen, BarChart3, Globe, Store, Tag
 } from 'lucide-react';
@@ -35,6 +35,7 @@ const menuSections: MenuSection[] = [
     items: [
       { id: 'dashboard', label: 'Homepage', icon: LayoutDashboard, path: '/' },
       { id: 'calendario', label: 'Calendario', icon: CalendarDays, path: '/calendario' },
+      { id: 'calendario-unificato', label: 'Calendario Portali', icon: CalendarRange, path: '/calendario-unificato' },
       { id: 'bookings', label: 'Prenotazioni', icon: CalendarDays, path: '/bookings' },
       { id: 'messaggi', label: 'Messaggi', icon: MessageCircle, path: '/messaggi' },
     ],

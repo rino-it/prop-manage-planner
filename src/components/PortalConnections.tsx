@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import PortalCalendarDialog from '@/components/PortalCalendarDialog';
 import SyncReviewDialog from '@/components/SyncReviewDialog';
+import UnifiedCalendar from '@/components/UnifiedCalendar';
 import { useSyncReview } from '@/hooks/useSyncReview';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -268,6 +269,8 @@ export default function PortalConnections() {
           </CardContent>
         </Card>
       </div>
+
+      <UnifiedCalendar embedded />
 
       {connections.length === 0 ? (
         <Card className="border-dashed">

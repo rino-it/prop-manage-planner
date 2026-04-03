@@ -28,6 +28,7 @@ import Bookings from "./components/Bookings";
 import Messages from "./components/Messages";
 import Communication from "./components/Communication";
 import CalendarView from "./components/CalendarView";
+import UnifiedCalendar from "./components/UnifiedCalendar";
 import Statistics from "./pages/Statistics";
 import Accoglienza from "./pages/Accoglienza";
 import GuestGuide from "./components/GuestGuide";
@@ -67,6 +68,7 @@ const App = () => (
               {/* 4. LE PAGINE VENGONO CARICATE DENTRO INDEX (OUTLET) */}
               <Route index element={<DashboardWrapper />} />
               <Route path="calendario" element={<CalendarView />} />
+              <Route path="calendario-unificato" element={<UnifiedCalendar />} />
               <Route path="properties" element={<Properties />} />
               <Route path="mobile-properties" element={<MobileProperties />} />
               <Route path="tickets" element={<Tickets />} />
