@@ -401,7 +401,13 @@ function GuestPortalInner() {
   if (isLoading || !booking) return <div className="flex justify-center p-10"><Loader2 className="animate-spin text-slate-400"/></div>;
 
   const mapsUrl = prop?.maps_url || `https://maps.google.com/?q=${encodeURIComponent((prop?.indirizzo || '') + ' ' + (prop?.citta || ''))}`;
-  const hostPhone = prop?.telefono_host || prop?.telefono_proprietario || null;
+  const checkinInstructions = prop?.checkin_instructions || prop?.istruzioni_checkin || null;
+
+  // Contatti host configurati
+  const hostContacts = [
+    { name: 'Kristian Rinaldi', phone: '+393917924372', display: '391 792 4372' },
+    { name: 'Ilaria Ghilardini', phone: '+393488018359', display: '348 801 8359' },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans pb-20">
@@ -623,13 +629,13 @@ function GuestPortalInner() {
                     )}
 
                     {/* Check-in instructions */}
-                    {(prop?.istruzioni_checkin || prop?.checkin_instructions) && (
+                    {checkinInstructions && (
                       <Card className="border shadow-sm">
                         <CardHeader className="pb-2 pt-3 px-4">
                           <CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-slate-500"/> {t('info.checkinInstructions')}</CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-3">
-                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{prop?.checkin_instructions || prop?.istruzioni_checkin}</p>
+                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{checkinInstructions}</p>
                         </CardContent>
                       </Card>
                     )}
@@ -646,21 +652,21 @@ function GuestPortalInner() {
                       </Card>
                     )}
 
-                    {/* Emergency contacts */}
+                    {/* Emergency & host contacts */}
                     <Card className="border shadow-sm">
                       <CardHeader className="pb-2 pt-3 px-4">
-                        <CardTitle className="text-sm flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-orange-500"/> {t('info.emergency')}</CardTitle>
+                        <CardTitle className="text-sm flex items-center gap-2"><Phone className="w-4 h-4 text-green-500"/> {t('info.emergency')}</CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-3 space-y-2">
-                        {hostPhone && (
-                          <a href={`tel:${hostPhone}`} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                        {hostContacts.map((contact) => (
+                          <a key={contact.phone} href={`tel:${contact.phone}`} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                             <Phone className="w-4 h-4 text-green-600" />
-                            <div>
-                              <p className="text-xs font-semibold text-slate-800">{t('info.callHost')}</p>
-                              <p className="text-[10px] text-slate-500">{hostPhone}</p>
+                            <div className="min-w-0">
+                              <p className="text-xs font-semibold text-slate-800">{contact.name}</p>
+                              <p className="text-[10px] text-slate-500">{contact.display}</p>
                             </div>
                           </a>
-                        )}
+                        ))}
                         <a href="tel:112" className="flex items-center gap-3 p-2.5 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
                           <AlertTriangle className="w-4 h-4 text-red-600" />
                           <p className="text-xs font-semibold text-red-800">{t('info.emergencyNumber')}</p>
@@ -889,23 +895,21 @@ function GuestPortalInner() {
 
                 {/* ─── TAB HELP (P1: FAQ + WhatsApp + numeri utili) ─── */}
                 <TabsContent value="support" className="space-y-4 mt-3">
-                    {/* WhatsApp quick action */}
-                    {hostPhone && (
-                      <a
-                        href={`https://wa.me/${hostPhone.replace(/[^0-9+]/g, '').replace('+', '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-3 p-3.5 bg-green-50 border border-green-200 rounded-xl hover:bg-green-100 transition-colors"
-                      >
-                        <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center shrink-0">
-                          <MessageCircle className="w-5 h-5 text-white" />
-                        </div>
-                        <div>
-                          <p className="font-bold text-sm text-green-900">{t('faq.whatsappHost')}</p>
-                          <p className="text-[10px] text-green-700">{t('faq.host')}: {hostPhone}</p>
-                        </div>
-                      </a>
-                    )}
+                    {/* WhatsApp quick action — Kristian */}
+                    <a
+                      href="https://wa.me/393917924372"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-3.5 bg-green-50 border border-green-200 rounded-xl hover:bg-green-100 transition-colors"
+                    >
+                      <div className="w-10 h-10 rounded-full bg-green-500 flex items-center justify-center shrink-0">
+                        <MessageCircle className="w-5 h-5 text-white" />
+                      </div>
+                      <div>
+                        <p className="font-bold text-sm text-green-900">{t('faq.whatsappHost')}</p>
+                        <p className="text-[10px] text-green-700">Kristian Rinaldi — 391 792 4372</p>
+                      </div>
+                    </a>
 
                     {/* FAQ Accordion */}
                     <Card className="border shadow-sm">
@@ -925,15 +929,15 @@ function GuestPortalInner() {
                         <CardTitle className="text-sm">{t('faq.usefulNumbers')}</CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-3 space-y-1.5">
-                        {hostPhone && (
-                          <a href={`tel:${hostPhone}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
+                        {hostContacts.map((contact) => (
+                          <a key={contact.phone} href={`tel:${contact.phone}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
                             <div className="flex items-center gap-2">
                               <Phone className="w-3.5 h-3.5 text-green-600" />
-                              <span className="text-xs font-medium">{t('faq.host')}</span>
+                              <span className="text-xs font-medium">{contact.name}</span>
                             </div>
-                            <span className="text-xs text-slate-500">{hostPhone}</span>
+                            <span className="text-xs text-slate-500">{contact.display}</span>
                           </a>
-                        )}
+                        ))}
                         <a href="tel:112" className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
                           <div className="flex items-center gap-2">
                             <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
