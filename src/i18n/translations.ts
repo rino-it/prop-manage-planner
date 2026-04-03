@@ -217,6 +217,55 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.caparraPercentage': 'Caparra (%)',
     'settings.cauzioneAmount': 'Cauzione (EUR)',
     'settings.save': 'Salva Configurazione',
+
+    // Welcome Banner
+    'welcome.title': 'Benvenuto a',
+    'welcome.guest': 'Ciao',
+    'welcome.dates': 'Soggiorno',
+    'welcome.to': 'al',
+
+    // Info Casa tab
+    'tab.infoHouse': 'Info Casa',
+    'tab.payments': 'Pagamenti',
+    'info.howToArrive': 'Come arrivare',
+    'info.keyboxCode': 'Codice Keybox',
+    'info.wifi': 'WiFi',
+    'info.wifiNetwork': 'Rete',
+    'info.wifiPassword': 'Password',
+    'info.houseRules': 'Regole della casa',
+    'info.checkinInstructions': 'Istruzioni Check-in',
+    'info.checkinVideo': 'Video Check-in',
+    'info.watchVideo': 'Guarda il video',
+    'info.emergency': 'Contatti Emergenza',
+    'info.callHost': 'Chiama l\'host',
+    'info.emergencyNumber': '112 - Emergenze',
+
+    // FAQ
+    'faq.title': 'Domande Frequenti',
+    'faq.checkinTime': 'A che ora posso fare il check-in?',
+    'faq.checkinTimeAnswer': 'Il check-in e disponibile dalle 15:00. Il check-out entro le 10:00.',
+    'faq.parking': 'C\'e il parcheggio?',
+    'faq.parkingAnswer': 'Consulta le istruzioni di check-in per informazioni sul parcheggio nella zona.',
+    'faq.emergencyQuestion': 'Chi contatto in caso di emergenza?',
+    'faq.emergencyAnswer': 'Per emergenze mediche chiama il 112. Per problemi con l\'alloggio, contatta l\'host tramite la sezione Help.',
+    'faq.whatsappHost': 'Scrivi su WhatsApp',
+    'faq.usefulNumbers': 'Numeri Utili',
+    'faq.emergencies': 'Emergenze',
+    'faq.host': 'Host',
+    'faq.writeTicket': 'Oppure apri un ticket',
+
+    // Payments improved
+    'payments.title': 'Pagamenti',
+    'payments.desc': 'Riepilogo pagamenti e spese del soggiorno.',
+    'payments.securityDeposit': 'Cauzione',
+    'payments.touristTax': 'Tassa di Soggiorno',
+    'payments.other': 'Altro',
+    'payments.depositExplain': 'Importo a garanzia, rimborsato se non ci sono danni.',
+    'payments.taxExplain': 'Tassa obbligatoria richiesta dal Comune.',
+
+    // Experiences
+    'experiences.free': 'GRATIS',
+    'experiences.allCategories': 'Tutto',
   },
 
   en: {
@@ -405,6 +454,55 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.caparraPercentage': 'Deposit (%)',
     'settings.cauzioneAmount': 'Security Deposit (EUR)',
     'settings.save': 'Save Configuration',
+
+    // Welcome Banner
+    'welcome.title': 'Welcome to',
+    'welcome.guest': 'Hello',
+    'welcome.dates': 'Stay',
+    'welcome.to': 'at',
+
+    // Info Casa tab
+    'tab.infoHouse': 'House Info',
+    'tab.payments': 'Payments',
+    'info.howToArrive': 'How to get there',
+    'info.keyboxCode': 'Keybox Code',
+    'info.wifi': 'WiFi',
+    'info.wifiNetwork': 'Network',
+    'info.wifiPassword': 'Password',
+    'info.houseRules': 'House Rules',
+    'info.checkinInstructions': 'Check-in Instructions',
+    'info.checkinVideo': 'Check-in Video',
+    'info.watchVideo': 'Watch video',
+    'info.emergency': 'Emergency Contacts',
+    'info.callHost': 'Call host',
+    'info.emergencyNumber': '112 - Emergency',
+
+    // FAQ
+    'faq.title': 'Frequently Asked Questions',
+    'faq.checkinTime': 'What time can I check in?',
+    'faq.checkinTimeAnswer': 'Check-in is available from 3:00 PM. Check-out by 10:00 AM.',
+    'faq.parking': 'Is there parking?',
+    'faq.parkingAnswer': 'Check the check-in instructions for parking information in the area.',
+    'faq.emergencyQuestion': 'Who do I contact in an emergency?',
+    'faq.emergencyAnswer': 'For medical emergencies call 112. For property issues, contact the host via the Help section.',
+    'faq.whatsappHost': 'Message on WhatsApp',
+    'faq.usefulNumbers': 'Useful Numbers',
+    'faq.emergencies': 'Emergencies',
+    'faq.host': 'Host',
+    'faq.writeTicket': 'Or open a ticket',
+
+    // Payments improved
+    'payments.title': 'Payments',
+    'payments.desc': 'Payment summary and stay expenses.',
+    'payments.securityDeposit': 'Security Deposit',
+    'payments.touristTax': 'Tourist Tax',
+    'payments.other': 'Other',
+    'payments.depositExplain': 'Guarantee amount, refunded if no damages.',
+    'payments.taxExplain': 'Mandatory tax required by the municipality.',
+
+    // Experiences
+    'experiences.free': 'FREE',
+    'experiences.allCategories': 'All',
   },
 
   de: {
@@ -593,6 +691,55 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.caparraPercentage': 'Anzahlung (%)',
     'settings.cauzioneAmount': 'Kaution (EUR)',
     'settings.save': 'Konfiguration speichern',
+
+    // Welcome Banner
+    'welcome.title': 'Willkommen in',
+    'welcome.guest': 'Hallo',
+    'welcome.dates': 'Aufenthalt',
+    'welcome.to': 'bei',
+
+    // Info Casa tab
+    'tab.infoHouse': 'Hausinfo',
+    'tab.payments': 'Zahlungen',
+    'info.howToArrive': 'Anfahrt',
+    'info.keyboxCode': 'Keybox-Code',
+    'info.wifi': 'WLAN',
+    'info.wifiNetwork': 'Netzwerk',
+    'info.wifiPassword': 'Passwort',
+    'info.houseRules': 'Hausordnung',
+    'info.checkinInstructions': 'Check-in Anweisungen',
+    'info.checkinVideo': 'Check-in Video',
+    'info.watchVideo': 'Video ansehen',
+    'info.emergency': 'Notfallkontakte',
+    'info.callHost': 'Gastgeber anrufen',
+    'info.emergencyNumber': '112 - Notruf',
+
+    // FAQ
+    'faq.title': 'Haufig gestellte Fragen',
+    'faq.checkinTime': 'Wann kann ich einchecken?',
+    'faq.checkinTimeAnswer': 'Check-in ist ab 15:00 Uhr moglich. Check-out bis 10:00 Uhr.',
+    'faq.parking': 'Gibt es Parkplatze?',
+    'faq.parkingAnswer': 'Informationen zum Parken finden Sie in den Check-in Anweisungen.',
+    'faq.emergencyQuestion': 'Wen kontaktiere ich im Notfall?',
+    'faq.emergencyAnswer': 'Bei medizinischen Notfallen rufen Sie 112 an. Bei Problemen mit der Unterkunft kontaktieren Sie den Gastgeber uber den Hilfe-Bereich.',
+    'faq.whatsappHost': 'WhatsApp Nachricht',
+    'faq.usefulNumbers': 'Nutzliche Nummern',
+    'faq.emergencies': 'Notfalle',
+    'faq.host': 'Gastgeber',
+    'faq.writeTicket': 'Oder Ticket erstellen',
+
+    // Payments improved
+    'payments.title': 'Zahlungen',
+    'payments.desc': 'Zahlungsubersicht und Aufenthaltskosten.',
+    'payments.securityDeposit': 'Kaution',
+    'payments.touristTax': 'Kurtaxe',
+    'payments.other': 'Sonstiges',
+    'payments.depositExplain': 'Garantiebetrag, wird bei keinen Schaden erstattet.',
+    'payments.taxExplain': 'Pflichtabgabe der Gemeinde.',
+
+    // Experiences
+    'experiences.free': 'GRATIS',
+    'experiences.allCategories': 'Alle',
   },
 
   fr: {
@@ -781,5 +928,54 @@ export const translations: Record<Language, Record<string, string>> = {
     'settings.caparraPercentage': 'Acompte (%)',
     'settings.cauzioneAmount': 'Caution (EUR)',
     'settings.save': 'Enregistrer la configuration',
+
+    // Welcome Banner
+    'welcome.title': 'Bienvenue a',
+    'welcome.guest': 'Bonjour',
+    'welcome.dates': 'Sejour',
+    'welcome.to': 'a',
+
+    // Info Casa tab
+    'tab.infoHouse': 'Info Maison',
+    'tab.payments': 'Paiements',
+    'info.howToArrive': 'Comment y arriver',
+    'info.keyboxCode': 'Code Keybox',
+    'info.wifi': 'WiFi',
+    'info.wifiNetwork': 'Reseau',
+    'info.wifiPassword': 'Mot de passe',
+    'info.houseRules': 'Reglement interieur',
+    'info.checkinInstructions': 'Instructions de check-in',
+    'info.checkinVideo': 'Video de check-in',
+    'info.watchVideo': 'Voir la video',
+    'info.emergency': 'Contacts d\'urgence',
+    'info.callHost': 'Appeler l\'hote',
+    'info.emergencyNumber': '112 - Urgences',
+
+    // FAQ
+    'faq.title': 'Questions frequentes',
+    'faq.checkinTime': 'A quelle heure puis-je faire le check-in ?',
+    'faq.checkinTimeAnswer': 'Le check-in est disponible a partir de 15h00. Le check-out avant 10h00.',
+    'faq.parking': 'Y a-t-il un parking ?',
+    'faq.parkingAnswer': 'Consultez les instructions de check-in pour les informations de stationnement.',
+    'faq.emergencyQuestion': 'Qui contacter en cas d\'urgence ?',
+    'faq.emergencyAnswer': 'Pour les urgences medicales appelez le 112. Pour les problemes avec le logement, contactez l\'hote via la section Aide.',
+    'faq.whatsappHost': 'Ecrire sur WhatsApp',
+    'faq.usefulNumbers': 'Numeros utiles',
+    'faq.emergencies': 'Urgences',
+    'faq.host': 'Hote',
+    'faq.writeTicket': 'Ou ouvrir un ticket',
+
+    // Payments improved
+    'payments.title': 'Paiements',
+    'payments.desc': 'Resume des paiements et depenses du sejour.',
+    'payments.securityDeposit': 'Caution',
+    'payments.touristTax': 'Taxe de sejour',
+    'payments.other': 'Autre',
+    'payments.depositExplain': 'Montant de garantie, rembourse en l\'absence de degats.',
+    'payments.taxExplain': 'Taxe obligatoire exigee par la municipalite.',
+
+    // Experiences
+    'experiences.free': 'GRATUIT',
+    'experiences.allCategories': 'Tout',
   },
 };
