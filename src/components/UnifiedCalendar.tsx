@@ -29,7 +29,8 @@ import {
 } from 'date-fns';
 import { it } from 'date-fns/locale';
 
-const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+const WEEKDAYS = ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
+const WEEKDAYS_FULL = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
 
 type SelectedItem =
   | { type: 'booking'; data: CalendarBooking }
@@ -166,106 +167,108 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
   }, [filteredBookings, currentMonth]);
 
   return (
-    <div className={embedded ? '' : 'space-y-6'}>
+    <div className={embedded ? '' : 'space-y-4 sm:space-y-6'}>
       {!embedded && (
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight">Calendario Unificato</h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Tutte le prenotazioni da tutti i portali in un unico posto
-            </p>
-          </div>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight">Calendario Unificato</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            Tutte le prenotazioni in un unico posto
+          </p>
         </div>
       )}
 
-      <div className="bg-white rounded-xl border shadow-sm">
-        {/* Header con navigazione mese e filtri */}
-        <div className="p-4 border-b space-y-3">
+      <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+        {/* Header: navigazione mese */}
+        <div className="p-3 sm:p-4 border-b space-y-2.5 sm:space-y-3">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentMonth(m => subMonths(m, 1))}>
-                <ChevronLeft className="w-4 h-4" />
-              </Button>
-              <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date())} className="text-xs">
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => setCurrentMonth(m => subMonths(m, 1))}>
+              <ChevronLeft className="w-4 h-4" />
+            </Button>
+
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-sm sm:text-lg font-semibold capitalize">
+                {format(currentMonth, 'MMMM yyyy', { locale: it })}
+              </h2>
+              <Button variant="ghost" size="sm" onClick={() => setCurrentMonth(new Date())} className="text-[10px] sm:text-xs h-6 px-2">
                 Oggi
               </Button>
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCurrentMonth(m => addMonths(m, 1))}>
-                <ChevronRight className="w-4 h-4" />
-              </Button>
             </div>
 
-            <h2 className="text-lg font-semibold capitalize">
-              {format(currentMonth, 'MMMM yyyy', { locale: it })}
-            </h2>
-
-            <div className="flex items-center gap-2">
-              <Select value={selectedProperty} onValueChange={setSelectedProperty}>
-                <SelectTrigger className="h-8 w-[160px] text-xs">
-                  <SelectValue placeholder="Proprieta" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutte le proprieta</SelectItem>
-                  {(properties || []).map((p: any) => (
-                    <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select value={selectedSource} onValueChange={setSelectedSource}>
-                <SelectTrigger className="h-8 w-[140px] text-xs">
-                  <SelectValue placeholder="Portale" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tutti i portali</SelectItem>
-                  {activeSources.map(s => (
-                    <SelectItem key={s} value={s}>{sourceLabel(s)}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => setCurrentMonth(m => addMonths(m, 1))}>
+              <ChevronRight className="w-4 h-4" />
+            </Button>
           </div>
 
-          {/* Legenda */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-rose-500" />
+          {/* Filtri: stack verticale su mobile */}
+          <div className="grid grid-cols-2 gap-2">
+            <Select value={selectedProperty} onValueChange={setSelectedProperty}>
+              <SelectTrigger className="h-8 text-xs w-full">
+                <SelectValue placeholder="Proprieta" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutte le proprieta</SelectItem>
+                {(properties || []).map((p: any) => (
+                  <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={selectedSource} onValueChange={setSelectedSource}>
+              <SelectTrigger className="h-8 text-xs w-full">
+                <SelectValue placeholder="Portale" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Tutti i portali</SelectItem>
+                {activeSources.map(s => (
+                  <SelectItem key={s} value={s}>{sourceLabel(s)}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Legenda compatta */}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] sm:text-xs text-muted-foreground">
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-rose-500" />
               <span>Airbnb</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-              <span>Booking.com</span>
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-blue-500" />
+              <span>Booking</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-indigo-500" />
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-indigo-500" />
               <span>VRBO</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-emerald-500" />
               <span>Manuale</span>
             </div>
-            <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-amber-500" />
+            <div className="flex items-center gap-1">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
               <span>Bloccato</span>
             </div>
-            <div className="ml-auto text-xs font-medium">
-              {monthSummary.length} prenotazion{monthSummary.length === 1 ? 'e' : 'i'} questo mese
-            </div>
+            <span className="ml-auto text-[10px] sm:text-xs font-medium">
+              {monthSummary.length} prenotazion{monthSummary.length === 1 ? 'e' : 'i'}
+            </span>
           </div>
         </div>
 
         {/* Griglia calendario */}
         <div className="overflow-hidden">
+          {/* Header giorni: lettere singole su mobile, abbreviazioni su desktop */}
           <div className="grid grid-cols-7 bg-slate-50 border-b">
-            {WEEKDAYS.map(d => (
-              <div key={d} className="text-center text-[11px] font-semibold text-muted-foreground py-2.5 uppercase tracking-wider">
-                {d}
+            {WEEKDAYS.map((d, i) => (
+              <div key={i} className="text-center text-[10px] sm:text-[11px] font-semibold text-muted-foreground py-1.5 sm:py-2.5 uppercase tracking-wider">
+                <span className="sm:hidden">{d}</span>
+                <span className="hidden sm:inline">{WEEKDAYS_FULL[i]}</span>
               </div>
             ))}
           </div>
 
           {isLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+            <div className="flex items-center justify-center py-16 sm:py-20">
+              <Loader2 className="w-5 h-5 sm:w-6 sm:h-6 animate-spin text-muted-foreground" />
             </div>
           ) : (
             <div className="grid grid-cols-7">
@@ -293,8 +296,8 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
                   <div
                     key={idx}
                     className={`
-                      relative min-h-[80px] border-b border-r p-1.5 transition-all
-                      ${isClickable ? 'cursor-pointer hover:brightness-[0.97]' : ''}
+                      relative min-h-[48px] sm:min-h-[80px] border-b border-r p-0.5 sm:p-1.5 transition-all overflow-hidden
+                      ${isClickable ? 'cursor-pointer active:brightness-[0.93] sm:hover:brightness-[0.97]' : ''}
                       ${inMonth ? '' : 'opacity-30'}
                       ${cellBg}
                       ${cellAccent ? `border-l-[3px] ${cellAccent}` : ''}
@@ -303,15 +306,27 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
                     onClick={() => inMonth && handleDayClick(day)}
                   >
                     <span className={`
-                      text-xs font-medium block text-right
+                      text-[10px] sm:text-xs font-medium block text-right
                       ${isToday
-                        ? 'bg-primary text-primary-foreground rounded-full w-6 h-6 flex items-center justify-center ml-auto text-[11px]'
+                        ? 'bg-primary text-primary-foreground rounded-full w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center ml-auto text-[9px] sm:text-[11px]'
                         : inMonth ? 'text-foreground' : 'text-muted-foreground'}
                     `}>
                       {format(day, 'd')}
                     </span>
 
-                    <div className="mt-1 space-y-0.5">
+                    {/* Mobile: solo dot colorato */}
+                    <div className="sm:hidden mt-0.5 flex flex-wrap gap-0.5 justify-center">
+                      {info.bookings.slice(0, 3).map(b => {
+                        const sc = getSourceColors(b.source);
+                        return <div key={b.id} className={`w-1.5 h-1.5 rounded-full ${sc.dot}`} />;
+                      })}
+                      {info.blocks.length > 0 && !hasBooking && (
+                        <div className={`w-1.5 h-1.5 rounded-full ${BLOCKED_COLORS.dot}`} />
+                      )}
+                    </div>
+
+                    {/* Desktop: nome ospite */}
+                    <div className="hidden sm:block mt-1 space-y-0.5">
                       {info.bookings.slice(0, 2).map(b => {
                         const sc = getSourceColors(b.source);
                         return (
@@ -343,13 +358,13 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
           )}
         </div>
 
-        {/* Lista prenotazioni del mese sotto il calendario */}
+        {/* Lista prenotazioni del mese */}
         {monthSummary.length > 0 && (
-          <div className="p-4 border-t">
-            <h3 className="text-sm font-semibold mb-3">
+          <div className="p-3 sm:p-4 border-t">
+            <h3 className="text-xs sm:text-sm font-semibold mb-2 sm:mb-3">
               Prenotazioni di {format(currentMonth, 'MMMM', { locale: it })}
             </h3>
-            <ScrollArea className="max-h-[240px]">
+            <ScrollArea className="max-h-[200px] sm:max-h-[240px]">
               <div className="space-y-1.5">
                 {monthSummary.map(b => {
                   const sc = getSourceColors(b.source);
@@ -357,25 +372,23 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
                   return (
                     <div
                       key={b.id}
-                      className={`flex items-center gap-3 p-2.5 rounded-lg border ${sc.border} ${sc.bg} cursor-pointer hover:brightness-[0.97] transition-all`}
+                      className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg border ${sc.border} ${sc.bg} cursor-pointer active:brightness-[0.93] sm:hover:brightness-[0.97] transition-all`}
                       onClick={() => setSelectedItem({ type: 'booking', data: b })}
                     >
-                      <div className={`w-1 h-8 rounded-full ${sc.dot} shrink-0`} />
-                      <User className={`w-4 h-4 ${sc.text} shrink-0`} />
+                      <div className={`w-1 h-6 sm:h-8 rounded-full ${sc.dot} shrink-0`} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{b.nome_ospite}</p>
-                        <p className="text-[11px] text-muted-foreground">
-                          {format(parseISO(b.data_inizio), 'dd MMM', { locale: it })} - {format(parseISO(b.data_fine), 'dd MMM', { locale: it })} ({nights} {nights === 1 ? 'notte' : 'notti'})
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-xs sm:text-sm font-medium truncate">{b.nome_ospite}</p>
+                          <Badge variant="outline" className={`text-[8px] sm:text-[9px] ${sc.text} ${sc.border} shrink-0 hidden xs:inline-flex`}>
+                            {sourceLabel(b.source)}
+                          </Badge>
+                        </div>
+                        <p className="text-[10px] sm:text-[11px] text-muted-foreground">
+                          {format(parseISO(b.data_inizio), 'dd MMM', { locale: it })} - {format(parseISO(b.data_fine), 'dd MMM', { locale: it })} · {nights}n
+                          {b.property_name ? ` · ${b.property_name}` : ''}
                         </p>
                       </div>
-                      {b.property_name && (
-                        <span className="text-[10px] text-muted-foreground truncate max-w-[100px]">
-                          {b.property_name}
-                        </span>
-                      )}
-                      <Badge variant="outline" className={`text-[9px] ${sc.text} ${sc.border} shrink-0`}>
-                        {sourceLabel(b.source)}
-                      </Badge>
+                      <div className={`w-2 h-2 rounded-full ${sc.dot} shrink-0 sm:hidden`} />
                     </div>
                   );
                 })}
@@ -387,7 +400,7 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
 
       {/* Sheet dettaglio prenotazione */}
       <Sheet open={!!selectedItem} onOpenChange={(o) => !o && setSelectedItem(null)}>
-        <SheetContent className="sm:max-w-md w-[95vw] overflow-y-auto">
+        <SheetContent className="w-full sm:max-w-md p-4 sm:p-6 overflow-y-auto">
           {selectedItem?.type === 'booking' && (
             <BookingDetail
               booking={selectedItem.data}
@@ -429,29 +442,29 @@ function BookingDetail({
   const nights = differenceInCalendarDays(parseISO(booking.data_fine), parseISO(booking.data_inizio));
 
   const navLinks = [
-    { label: 'Prenotazioni', path: '/bookings', icon: CalendarIcon, description: 'Vai alla lista prenotazioni' },
-    { label: 'Pagamenti', path: '/revenue', icon: CreditCard, description: 'Incassi e pagamenti' },
-    { label: 'Documenti', path: '/accoglienza/documenti', icon: FileText, description: 'Documenti ospite' },
-    { label: 'Messaggi', path: '/messaggi', icon: MessageCircle, description: 'Comunicazioni' },
-    { label: 'Ticket', path: '/tickets', icon: Ticket, description: 'Segnalazioni e guasti' },
+    { label: 'Prenotazioni', path: '/bookings', icon: CalendarIcon },
+    { label: 'Pagamenti', path: '/revenue', icon: CreditCard },
+    { label: 'Documenti', path: '/accoglienza/documenti', icon: FileText },
+    { label: 'Messaggi', path: '/messaggi', icon: MessageCircle },
+    { label: 'Ticket', path: '/tickets', icon: Ticket },
   ];
 
   return (
-    <div className="space-y-6 pt-2">
+    <div className="space-y-5 pt-1">
       <SheetHeader>
-        <SheetTitle className="flex items-center gap-3">
-          <div className={`p-2 rounded-full ${sc.bg}`}>
-            <User className={`w-5 h-5 ${sc.text}`} />
+        <SheetTitle className="flex items-center gap-2.5 text-base">
+          <div className={`p-1.5 rounded-full ${sc.bg} shrink-0`}>
+            <User className={`w-4 h-4 ${sc.text}`} />
           </div>
           <div className="min-w-0">
-            <div className="truncate">{booking.nome_ospite}</div>
-            <div className="text-xs font-normal text-muted-foreground">{sourceLabel(booking.source)}</div>
+            <div className="truncate text-sm sm:text-base">{booking.nome_ospite}</div>
+            <div className="text-[11px] font-normal text-muted-foreground">{sourceLabel(booking.source)}</div>
           </div>
         </SheetTitle>
       </SheetHeader>
 
       {/* Info prenotazione */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <InfoCard label="Check-in" value={format(parseISO(booking.data_inizio), 'dd MMM yyyy', { locale: it })} />
         <InfoCard label="Check-out" value={format(parseISO(booking.data_fine), 'dd MMM yyyy', { locale: it })} />
         <InfoCard label="Notti" value={`${nights}`} />
@@ -467,21 +480,21 @@ function BookingDetail({
 
       {/* Contatti */}
       {(booking.email_ospite || booking.telefono_ospite) && (
-        <div className="space-y-1.5">
-          <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contatti</h4>
+        <div className="space-y-1">
+          <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider">Contatti</h4>
           {booking.email_ospite && (
-            <p className="text-sm">{booking.email_ospite}</p>
+            <p className="text-xs sm:text-sm break-all">{booking.email_ospite}</p>
           )}
           {booking.telefono_ospite && (
-            <p className="text-sm">{booking.telefono_ospite}</p>
+            <p className="text-xs sm:text-sm">{booking.telefono_ospite}</p>
           )}
         </div>
       )}
 
       {/* Note */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <StickyNote className="w-3.5 h-3.5" />
+      <div className="space-y-2.5">
+        <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <StickyNote className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           Note
         </h4>
 
@@ -490,7 +503,7 @@ function BookingDetail({
             placeholder="Scrivi una nota..."
             value={noteText}
             onChange={(e) => setNoteText(e.target.value)}
-            className="min-h-[60px] text-sm resize-none"
+            className="min-h-[50px] sm:min-h-[60px] text-xs sm:text-sm resize-none"
             onKeyDown={(e) => {
               if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
                 e.preventDefault();
@@ -501,63 +514,60 @@ function BookingDetail({
           <Button
             size="icon"
             variant="outline"
-            className="shrink-0 self-end"
+            className="shrink-0 self-end h-8 w-8"
             onClick={onAddNote}
             disabled={!noteText.trim() || addingNote}
           >
-            {addingNote ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {addingNote ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>
         </div>
 
         {loadingNotes ? (
-          <div className="flex justify-center py-4">
+          <div className="flex justify-center py-3">
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           </div>
         ) : notes.length > 0 ? (
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             {notes.map(note => (
-              <div key={note.id} className="group flex items-start gap-2 p-2.5 rounded-lg bg-muted/50 border">
+              <div key={note.id} className="group flex items-start gap-2 p-2 rounded-lg bg-muted/50 border">
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm whitespace-pre-wrap">{note.content}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">
+                  <p className="text-xs sm:text-sm whitespace-pre-wrap break-words">{note.content}</p>
+                  <p className="text-[9px] sm:text-[10px] text-muted-foreground mt-0.5">
                     {format(parseISO(note.created_at), "dd MMM yyyy, HH:mm", { locale: it })}
                   </p>
                 </div>
                 <button
                   onClick={() => onDeleteNote(note.id)}
-                  className="opacity-0 group-hover:opacity-100 p-1 rounded hover:bg-destructive/10 transition-all"
+                  className="p-1 rounded hover:bg-destructive/10 transition-all sm:opacity-0 sm:group-hover:opacity-100"
                 >
-                  <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                  <Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-destructive" />
                 </button>
               </div>
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground text-center py-2">Nessuna nota</p>
+          <p className="text-[10px] sm:text-xs text-muted-foreground text-center py-1.5">Nessuna nota</p>
         )}
       </div>
 
-      {/* Navigazione rapida */}
-      <div className="space-y-3">
-        <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-          <ExternalLink className="w-3.5 h-3.5" />
+      {/* Navigazione rapida - griglia 2+3 su mobile */}
+      <div className="space-y-2.5">
+        <h4 className="text-[10px] sm:text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <ExternalLink className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           Naviga a
         </h4>
-        <div className="grid grid-cols-1 gap-1.5">
+        <div className="grid grid-cols-2 sm:grid-cols-1 gap-1.5">
           {navLinks.map(link => {
             const Icon = link.icon;
             return (
               <button
                 key={link.path}
                 onClick={() => onNavigate(link.path)}
-                className="flex items-center gap-3 p-2.5 rounded-lg border hover:bg-muted/50 transition-colors text-left w-full"
+                className="flex items-center gap-2 p-2 sm:p-2.5 rounded-lg border hover:bg-muted/50 active:bg-muted transition-colors text-left w-full"
               >
-                <Icon className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="min-w-0">
-                  <p className="text-sm font-medium">{link.label}</p>
-                  <p className="text-[11px] text-muted-foreground">{link.description}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-muted-foreground ml-auto shrink-0" />
+                <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground shrink-0" />
+                <span className="text-xs sm:text-sm font-medium truncate">{link.label}</span>
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground ml-auto shrink-0 hidden sm:block" />
               </button>
             );
           })}
@@ -571,20 +581,20 @@ function BlockedDetail({ blocked }: { blocked: CalendarBlockedDate }) {
   const nights = differenceInCalendarDays(parseISO(blocked.date_end), parseISO(blocked.date_start));
 
   return (
-    <div className="space-y-6 pt-2">
+    <div className="space-y-5 pt-1">
       <SheetHeader>
-        <SheetTitle className="flex items-center gap-3">
-          <div className={`p-2 rounded-full ${BLOCKED_COLORS.bg}`}>
-            <Ban className={`w-5 h-5 ${BLOCKED_COLORS.text}`} />
+        <SheetTitle className="flex items-center gap-2.5 text-base">
+          <div className={`p-1.5 rounded-full ${BLOCKED_COLORS.bg} shrink-0`}>
+            <Ban className={`w-4 h-4 ${BLOCKED_COLORS.text}`} />
           </div>
           <div className="min-w-0">
-            <div className="truncate">{blocked.reason || 'Date bloccate'}</div>
-            <div className="text-xs font-normal text-muted-foreground">{sourceLabel(blocked.source)}</div>
+            <div className="truncate text-sm sm:text-base">{blocked.reason || 'Date bloccate'}</div>
+            <div className="text-[11px] font-normal text-muted-foreground">{sourceLabel(blocked.source)}</div>
           </div>
         </SheetTitle>
       </SheetHeader>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3">
         <InfoCard label="Da" value={format(parseISO(blocked.date_start), 'dd MMM yyyy', { locale: it })} />
         <InfoCard label="A" value={format(parseISO(blocked.date_end), 'dd MMM yyyy', { locale: it })} />
         <InfoCard label="Giorni" value={`${nights}`} />
@@ -598,9 +608,9 @@ function BlockedDetail({ blocked }: { blocked: CalendarBlockedDate }) {
 
 function InfoCard({ label, value, className = '' }: { label: string; value: string; className?: string }) {
   return (
-    <div className={`rounded-lg bg-muted/40 p-2.5 ${className}`}>
-      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
-      <p className="text-sm font-medium mt-0.5">{value}</p>
+    <div className={`rounded-lg bg-muted/40 p-2 sm:p-2.5 ${className}`}>
+      <p className="text-[9px] sm:text-[10px] text-muted-foreground uppercase tracking-wider">{label}</p>
+      <p className="text-xs sm:text-sm font-medium mt-0.5 break-words">{value}</p>
     </div>
   );
 }
