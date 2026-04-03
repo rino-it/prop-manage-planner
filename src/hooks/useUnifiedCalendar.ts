@@ -79,6 +79,7 @@ export function useUnifiedCalendar(currentMonth: Date) {
       const { data, error } = await supabase
         .from('bookings')
         .select('id, property_id, nome_ospite, email_ospite, telefono_ospite, data_inizio, data_fine, source, tipo_affitto, checkin_status, importo_totale, numero_ospiti, properties_real(nome)')
+        .neq('tipo_affitto', 'lungo')
         .gte('data_fine', rangeStart)
         .lte('data_inizio', rangeEnd)
         .order('data_inizio', { ascending: true });
