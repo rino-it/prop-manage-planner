@@ -124,6 +124,81 @@ export const useManagePreauth = () => {
   });
 };
 
+export const useAddTenantPayment = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (params: {
+      booking_id: string;
+      tipo: string;
+      importo: number;
+      data_scadenza: string;
+      is_preauth: boolean;
+      description?: string;
+      notes?: string;
+      generate_stripe?: boolean;
+    }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // 1. Inserisci il pagamento in tenant_payments
+      const { data: payment, error: insertError } = await supabase
+        .from('tenant_payments')
+        .insert({
+          booking_id: params.booking_id,
+          tipo: params.tipo,
+          importo: params.importo,
+          data_scadenza: params.data_scadenza,
+          stato: 'da_pagare',
+          is_preauth: params.is_preauth,
+          description: params.description || null,
+          notes: params.notes || null,
+          category: params.is_preauth ? 'deposito_cauzionale' : 'extra',
+          user_id: user?.id,
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+
+      // 2. Se richiesto, genera il checkout Stripe
+      if (params.generate_stripe) {
+        const { error: stripeError } = await supabase.functions.invoke('stripe-create-checkout', {
+          body: { payment_id: payment.id }
+        });
+        if (stripeError) throw new Error(`Pagamento creato ma link Stripe fallito: ${stripeError.message}`);
+      }
+
+      return payment;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['booking-payments', variables.booking_id] });
+      toast({ title: '✅ Pagamento aggiunto', description: variables.generate_stripe ? 'Link Stripe generato e pronto per l\'ospite.' : 'Pagamento salvato senza link Stripe.' });
+    },
+    onError: (err: Error) => toast({ title: 'Errore', description: err.message, variant: 'destructive' })
+  });
+};
+
+export const useDeleteTenantPayment = () => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (params: { payment_id: string; booking_id: string }) => {
+      const { error } = await supabase
+        .from('tenant_payments')
+        .delete()
+        .eq('id', params.payment_id);
+      if (error) throw error;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['booking-payments', variables.booking_id] });
+      toast({ title: 'Pagamento eliminato' });
+    },
+    onError: (err: Error) => toast({ title: 'Errore', description: err.message, variant: 'destructive' })
+  });
+};
+
 export const useEmailLog = (bookingId: string | undefined) => {
   return useQuery({
     queryKey: ['email-log', bookingId],

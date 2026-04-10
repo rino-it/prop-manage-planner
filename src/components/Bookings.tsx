@@ -17,7 +17,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import TicketManager from '@/components/TicketManager';
-import { useGeneratePaymentSchedule, useBookingPayments, useEmailLog } from '@/hooks/useStripePayments';
+import { useGeneratePaymentSchedule, useBookingPayments, useEmailLog, useDeleteTenantPayment } from '@/hooks/useStripePayments';
+import AddPaymentDialog from '@/components/AddPaymentDialog';
 import { usePaymentSettings } from '@/hooks/usePaymentSettings';
 import PaymentCard from '@/components/PaymentCard';
 import CauzioneManager from '@/components/CauzioneManager';
@@ -49,6 +50,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   });
 
   const generateSchedule = useGeneratePaymentSchedule();
+  const deletePayment = useDeleteTenantPayment();
+  const [addPaymentOpen, setAddPaymentOpen] = useState(false);
   const [formNumeroOspiti, setFormNumeroOspiti] = useState(1);
   const [formTotalAmount, setFormTotalAmount] = useState('');
 
@@ -483,6 +486,18 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         </TabsContent>
 
                         <TabsContent value="payments" className="mt-0 space-y-4">
+                            {/* Header con bottone aggiungi */}
+                            <div className="flex items-center justify-between">
+                                <p className="text-sm text-gray-500 font-medium">Pagamenti prenotazione</p>
+                                <Button
+                                    size="sm"
+                                    className="bg-blue-600 hover:bg-blue-700 h-8 text-xs"
+                                    onClick={() => setAddPaymentOpen(true)}
+                                >
+                                    <Plus className="w-3.5 h-3.5 mr-1" /> Aggiungi
+                                </Button>
+                            </div>
+
                             {/* Riepilogo */}
                             {activePayments && activePayments.length > 0 && (
                                 <div className="bg-slate-50 rounded-lg border p-3 md:p-4">
@@ -508,12 +523,27 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                                 <div className="min-w-0 flex-1">
                                                     <p className="font-bold text-gray-900 capitalize text-sm truncate">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
                                                     <p className="text-xs text-gray-500 font-medium">{format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
-                                                    {pay.is_preauth && <Badge variant="outline" className="text-[9px] text-blue-600 border-blue-200 mt-1">Pre-auth</Badge>}
+                                                    {pay.description && <p className="text-xs text-gray-400 truncate mt-0.5">{pay.description}</p>}
+                                                    <div className="flex items-center gap-1 mt-1 flex-wrap">
+                                                        {pay.is_preauth && <Badge variant="outline" className="text-[9px] text-blue-600 border-blue-200">Pre-auth</Badge>}
+                                                        {pay.stripe_checkout_url && pay.stato === 'da_pagare' && <Badge variant="outline" className="text-[9px] text-green-600 border-green-200">⚡ Link Stripe</Badge>}
+                                                        {!pay.stripe_checkout_url && pay.stato === 'da_pagare' && <Badge variant="outline" className="text-[9px] text-orange-500 border-orange-200">No link</Badge>}
+                                                    </div>
                                                 </div>
-                                                <div className="text-right shrink-0">
+                                                <div className="text-right shrink-0 flex flex-col items-end gap-1">
                                                     <p className="font-bold text-sm md:text-lg text-slate-800">EUR {pay.importo}</p>
                                                     <Badge variant="outline" className={`text-[9px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : pay.stato === 'pre_autorizzato' ? 'text-blue-600 border-blue-200 bg-blue-50' : pay.stato === 'rilasciato' ? 'text-gray-600 border-gray-200 bg-gray-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato?.toUpperCase()}</Badge>
                                                     {pay.receipt_url && <Button size="sm" variant="ghost" className="h-6 text-[10px] text-blue-600 px-1" onClick={() => window.open(pay.receipt_url, '_blank')}>Ricevuta</Button>}
+                                                    {pay.stato === 'da_pagare' && (
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="h-6 text-[10px] text-red-400 hover:text-red-600 px-1"
+                                                            onClick={() => { if (confirm('Eliminare questo pagamento?')) deletePayment.mutate({ payment_id: pay.id, booking_id: customerSheetOpen?.id }) }}
+                                                        >
+                                                            <Trash2 className="w-3 h-3" />
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -522,7 +552,15 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                         )}
                                     </div>
                                 ))}
-                                {activePayments?.length === 0 && <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed"><CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/><p>Nessun movimento.</p></div>}
+                                {activePayments?.length === 0 && (
+                                    <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed">
+                                        <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/>
+                                        <p className="mb-3">Nessun pagamento.</p>
+                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs" onClick={() => setAddPaymentOpen(true)}>
+                                            <Plus className="w-3.5 h-3.5 mr-1" /> Aggiungi il primo
+                                        </Button>
+                                    </div>
+                                )}
                             </div>
                         </TabsContent>
 
@@ -536,6 +574,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* ADD PAYMENT DIALOG */}
+      <AddPaymentDialog
+        open={addPaymentOpen}
+        onOpenChange={setAddPaymentOpen}
+        bookingId={customerSheetOpen?.id || ''}
+        bookingName={customerSheetOpen?.nome_ospite}
+      />
 
       {managingTicket && (
         <TicketManager 
