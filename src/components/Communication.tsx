@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useMessages, NewMessage } from '@/hooks/useMessages';
+import { multilingualTemplates, MultilingualTemplate } from '@/data/communication-templates-multilang';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,92 +12,115 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Send, MessageCircle, Mail, Phone, FileText,
-  Loader2, CheckCircle, Home, User, Zap
+  Loader2, CheckCircle, Home, User, Zap, Globe
 } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { cn } from '@/lib/utils';
 
-interface CommunicationTemplate {
-  key: string;
-  label: string;
-  category: 'check-in' | 'pagamento' | 'benvenuto' | 'manutenzione';
-  channel: 'whatsapp' | 'email' | 'internal';
-  content: string;
-}
-
-const templates: CommunicationTemplate[] = [
-  {
-    key: 'welcome',
-    label: 'Benvenuto nuovo inquilino',
-    category: 'benvenuto',
-    channel: 'internal',
-    content: `Benvenuto! Siamo lieti di averti come inquilino. Ecco le informazioni principali per il tuo soggiorno:\n\n- Portale inquilino: accedi tramite il link che hai ricevuto\n- Per qualsiasi problema tecnico, apri un ticket dal portale\n- I pagamenti sono gestibili direttamente online\n\nBuon soggiorno!`,
-  },
-  {
-    key: 'checkin-reminder',
-    label: 'Promemoria check-in',
-    category: 'check-in',
-    channel: 'whatsapp',
-    content: `Promemoria: il tuo check-in e' previsto per domani. Ricorda di portare un documento di identita' valido. L'orario di ingresso e' dalle 15:00. Per qualsiasi necessita', contattaci.`,
-  },
-  {
-    key: 'checkin-instructions',
-    label: 'Istruzioni check-in',
-    category: 'check-in',
-    channel: 'email',
-    content: `Ecco le istruzioni per il check-in:\n\n1. Presentati all'indirizzo indicato nella prenotazione\n2. Porta con te un documento di identita' valido\n3. Ritira le chiavi alla reception / cassetta di sicurezza\n4. Accedi al portale ospite per Wi-Fi e servizi aggiuntivi\n\nA presto!`,
-  },
-  {
-    key: 'payment-reminder',
-    label: 'Promemoria pagamento',
-    category: 'pagamento',
-    channel: 'internal',
-    content: `Ti ricordiamo che la prossima scadenza di pagamento e' in arrivo. Puoi effettuare il pagamento dal portale inquilino o tramite bonifico. In caso di difficolta', contattaci per trovare una soluzione.`,
-  },
-  {
-    key: 'payment-overdue',
-    label: 'Pagamento scaduto',
-    category: 'pagamento',
-    channel: 'email',
-    content: `Risulta un pagamento scaduto sul tuo conto. Ti chiediamo di provvedere al saldo il prima possibile per evitare ulteriori ritardi. Accedi al portale per i dettagli o contattaci direttamente.`,
-  },
-  {
-    key: 'maintenance-scheduled',
-    label: 'Manutenzione programmata',
-    category: 'manutenzione',
-    channel: 'internal',
-    content: `Ti informiamo che e' stata programmata una manutenzione presso la tua unita'. Il nostro tecnico interverra' nella data concordata. Per qualsiasi esigenza, apri un ticket dal portale.`,
-  },
-  {
-    key: 'maintenance-completed',
-    label: 'Manutenzione completata',
-    category: 'manutenzione',
-    channel: 'internal',
-    content: `L'intervento di manutenzione richiesto e' stato completato. Se riscontri ancora problemi, apri un nuovo ticket dal portale. Grazie per la pazienza.`,
-  },
-];
+type Language = 'it' | 'en' | 'fr' | 'de';
 
 const categoryLabels: Record<string, string> = {
   'check-in': 'Check-in',
-  pagamento: 'Pagamento',
+  'check-out': 'Check-out',
   benvenuto: 'Benvenuto',
-  manutenzione: 'Manutenzione',
+  regole: 'Regole',
+  wifi: 'WiFi',
+  emergenza: 'Emergenza',
+  feedback: 'Feedback',
 };
 
 const categoryIcons: Record<string, React.ElementType> = {
   'check-in': Home,
-  pagamento: FileText,
+  'check-out': Home,
   benvenuto: User,
-  manutenzione: Zap,
+  regole: FileText,
+  wifi: Zap,
+  emergenza: Phone,
+  feedback: MessageCircle,
+};
+
+const languageLabels: Record<Language, string> = {
+  it: 'Italiano',
+  en: 'English',
+  fr: 'Français',
+  de: 'Deutsch',
+};
+
+// Property-specific placeholder data (for demo - can be extended to fetch from DB)
+const propertyData: Record<string, Record<string, string>> = {
+  '472bb155-27b1-4edd-8fd9-146ea0d24885': { // Villa Sardegna
+    PROPERTY_NAME: 'Villa Sardegna',
+    PROPERTY_ADDRESS: 'Via Lisambuli 33h',
+    EMERGENCY_PHONE: '3917924372',
+    EMERGENCY_EMAIL: 'info@edvcostruzioni.com',
+    ACCESS_METHOD: 'nella cassetta di sicurezza',
+    DOOR_CODE: '1234',
+    WIFI_SSID: 'Villa-Sardegna',
+    WIFI_PASSWORD: 'welcome123',
+    POWER_LOCATION: 'armadio cucina',
+    WATER_LOCATION: 'giardino dietro casa',
+    HEATING_LOCATION: 'bagno principale',
+    TV_INFO: 'Smart TV con Netflix',
+    MUSIC_INFO: 'Bluetooth speaker',
+    KEY_RETURN_METHOD: 'nella cassetta di sicurezza',
+  },
+  'b0b7311a-31cc-4230-a8c4-02a14ee4932a': { // Vertova Trilocale
+    PROPERTY_NAME: 'Vertova Trilocale con Giardino',
+    PROPERTY_ADDRESS: 'Via Cadelora 6, Vertova',
+    EMERGENCY_PHONE: '3917924372',
+    EMERGENCY_EMAIL: 'info@edvcostruzioni.com',
+    ACCESS_METHOD: 'al citofono con codice',
+    DOOR_CODE: '5678',
+    WIFI_SSID: 'Vertova-Trilocale',
+    WIFI_PASSWORD: 'welcome456',
+    POWER_LOCATION: 'corridoio principale',
+    WATER_LOCATION: 'sotto il lavandino cucina',
+    HEATING_LOCATION: 'ripostiglio',
+    TV_INFO: 'TV 55 pollici',
+    MUSIC_INFO: 'Sistema audio integrato',
+    KEY_RETURN_METHOD: 'al citofono',
+  },
+  'ddb3c520-f064-4cc7-8e42-9e000efd61b4': { // Passo Mendola
+    PROPERTY_NAME: 'Villa Imperiale Passo Mendola',
+    PROPERTY_ADDRESS: 'Passo Mendola, Ruffrè',
+    EMERGENCY_PHONE: '3917924372',
+    EMERGENCY_EMAIL: 'info@edvcostruzioni.com',
+    ACCESS_METHOD: 'nel borsellino magnetico',
+    DOOR_CODE: '9012',
+    WIFI_SSID: 'PassoMendola-Villa',
+    WIFI_PASSWORD: 'welcome789',
+    POWER_LOCATION: 'garage',
+    WATER_LOCATION: 'taverna',
+    HEATING_LOCATION: 'cantina',
+    TV_INFO: 'Schermo principale in salotto',
+    MUSIC_INFO: 'Sistema home audio',
+    KEY_RETURN_METHOD: 'nel borsellino magnetico',
+  },
+};
+
+// Function to replace placeholders with property data
+const replacePlaceholders = (text: string, propertyId?: string): string => {
+  const data = propertyId ? propertyData[propertyId] : {};
+  let result = text;
+  
+  Object.entries(data).forEach(([key, value]) => {
+    result = result.replace(new RegExp(`{{${key}}}`, 'g'), value);
+  });
+  
+  // Replace any unreplaced placeholders with placeholder text
+  result = result.replace(/{{[^}]+}}/g, '[PLACEHOLDER]');
+  
+  return result;
 };
 
 export default function Communication() {
   const { sendMessage } = useMessages();
-  const [selectedTemplate, setSelectedTemplate] = useState<CommunicationTemplate | null>(null);
+  const [selectedTemplate, setSelectedTemplate] = useState<MultilingualTemplate | null>(null);
   const [content, setContent] = useState('');
   const [channel, setChannel] = useState<'whatsapp' | 'email' | 'internal'>('internal');
   const [bookingId, setBookingId] = useState<string>('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [language, setLanguage] = useState<Language>('it');
   const [sent, setSent] = useState(false);
 
   const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
@@ -112,13 +136,15 @@ export default function Communication() {
   });
 
   const filteredTemplates = useMemo(() => {
-    if (activeCategory === 'all') return templates;
-    return templates.filter((t) => t.category === activeCategory);
+    if (activeCategory === 'all') return multilingualTemplates;
+    return multilingualTemplates.filter((t) => t.category === activeCategory);
   }, [activeCategory]);
 
-  const applyTemplate = (template: CommunicationTemplate) => {
+  const applyTemplate = (template: MultilingualTemplate) => {
     setSelectedTemplate(template);
-    setContent(template.content);
+    const templateContent = template.languages[language];
+    const processedContent = replacePlaceholders(templateContent, bookingId);
+    setContent(processedContent);
     setChannel(template.channel);
     setSent(false);
   };
@@ -158,16 +184,46 @@ export default function Communication() {
             </CardDescription>
           </CardHeader>
 
-          <div className="px-4 pb-2">
-            <Tabs value={activeCategory} onValueChange={setActiveCategory}>
-              <TabsList className="w-full grid grid-cols-5">
-                <TabsTrigger value="all" className="text-xs">Tutti</TabsTrigger>
-                <TabsTrigger value="check-in" className="text-xs">Check-in</TabsTrigger>
-                <TabsTrigger value="pagamento" className="text-xs">Pag.</TabsTrigger>
-                <TabsTrigger value="benvenuto" className="text-xs">Ben.</TabsTrigger>
-                <TabsTrigger value="manutenzione" className="text-xs">Man.</TabsTrigger>
-              </TabsList>
-            </Tabs>
+          <div className="px-4 pb-4 space-y-3">
+            <div>
+              <Label className="text-xs font-medium mb-2 block">Lingua</Label>
+              <Tabs value={language} onValueChange={(v) => {
+                setLanguage(v as Language);
+                // Update content with new language if template selected
+                if (selectedTemplate) {
+                  const newContent = selectedTemplate.languages[v as Language];
+                  const processedContent = replacePlaceholders(newContent, bookingId);
+                  setContent(processedContent);
+                }
+              }}>
+                <TabsList className="w-full grid grid-cols-4">
+                  <TabsTrigger value="it" className="text-xs">IT</TabsTrigger>
+                  <TabsTrigger value="en" className="text-xs">EN</TabsTrigger>
+                  <TabsTrigger value="fr" className="text-xs">FR</TabsTrigger>
+                  <TabsTrigger value="de" className="text-xs">DE</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+
+            <div>
+              <Label className="text-xs font-medium mb-2 block">Categoria</Label>
+              <Tabs value={activeCategory} onValueChange={setActiveCategory}>
+                <TabsList className="w-full grid grid-cols-4">
+                  <TabsTrigger value="all" className="text-xs">Tutti</TabsTrigger>
+                  <TabsTrigger value="benvenuto" className="text-xs">Ben.</TabsTrigger>
+                  <TabsTrigger value="check-in" className="text-xs">In</TabsTrigger>
+                  <TabsTrigger value="check-out" className="text-xs">Out</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Tabs value={activeCategory} onValueChange={setActiveCategory} className="mt-2">
+                <TabsList className="w-full grid grid-cols-4">
+                  <TabsTrigger value="regole" className="text-xs">Regole</TabsTrigger>
+                  <TabsTrigger value="wifi" className="text-xs">WiFi</TabsTrigger>
+                  <TabsTrigger value="emergenza" className="text-xs">SOS</TabsTrigger>
+                  <TabsTrigger value="feedback" className="text-xs">Feedback</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
 
           <div className="px-2 pb-3 space-y-1 max-h-[calc(100vh-400px)] overflow-y-auto">
@@ -190,12 +246,15 @@ export default function Communication() {
                     <CategoryIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                     <span className="text-sm font-medium">{t.label}</span>
                   </div>
-                  <div className="flex items-center gap-2 mt-1 ml-6">
+                  <div className="flex items-center gap-1 mt-1 ml-6 flex-wrap">
                     <Badge variant="outline" className="text-[10px] px-1.5 py-0">
                       {categoryLabels[t.category]}
                     </Badge>
                     <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                       {t.channel === 'whatsapp' ? 'WhatsApp' : t.channel === 'email' ? 'Email' : 'Interno'}
+                    </Badge>
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-blue-50">
+                      {languageLabels[language]}
                     </Badge>
                   </div>
                 </button>
