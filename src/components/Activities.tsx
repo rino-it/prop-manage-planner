@@ -23,6 +23,7 @@ import { pdf } from '@react-pdf/renderer';
 import { TicketDocument } from './TicketPDF';
 import ActivityCalendar from './ActivityCalendar';
 import UnscheduledList from './UnscheduledList';
+import ActivityPreviewDialog from './ActivityPreviewDialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { StickyNote } from 'lucide-react';
@@ -51,6 +52,7 @@ export default function Activities() {
   const { data: realProperties } = usePropertiesReal();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [previewTicket, setPreviewTicket] = useState<any>(null);
   const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null);
   const [activeView, setActiveView] = useState<'calendar' | 'list'>('calendar');
   const [filterType, setFilterType] = useState('all');
@@ -251,11 +253,11 @@ export default function Activities() {
   };
 
   // Card singolo ticket (usato nella lista storico)
-  const TicketCard = ({ ticket }: { ticket: any }) => {
+  const TicketCard = ({ ticket, onPreview }: { ticket: any; onPreview?: () => void }) => {
     const assignees = getAssigneesDetails(ticket.assigned_to);
     const isGenerating = generatingPdfId === ticket.id;
     return (
-      <Card className="border-l-4 border-l-green-500 opacity-90 bg-slate-50 shadow-sm">
+      <Card className="border-l-4 border-l-green-500 opacity-90 bg-slate-50 shadow-sm cursor-pointer hover:shadow-md transition-shadow" onClick={onPreview}>
         <CardContent className="p-5">
           <div className="flex flex-col md:flex-row justify-between items-start gap-4">
             <div className="flex-1">
@@ -517,7 +519,7 @@ export default function Activities() {
         <div className="space-y-5">
           <ActivityCalendar
             tickets={scheduledTickets}
-            onTicketClick={(t) => setTicketManagerOpen(t)}
+            onTicketClick={(t) => setPreviewTicket(t)}
             onDayClick={(date) => {
               const iso = date.toISOString().split('T')[0];
               setFormData(f => ({ ...f, data_scadenza: iso }));
@@ -526,7 +528,7 @@ export default function Activities() {
           />
           <UnscheduledList
             tickets={unscheduledTickets}
-            onTicketClick={(t) => setTicketManagerOpen(t)}
+            onTicketClick={(t) => setPreviewTicket(t)}
           />
         </div>
       ) : (
@@ -537,10 +539,20 @@ export default function Activities() {
               Nessuna attività completata.
             </div>
           ) : (
-            closedTickets.map((t: any) => <TicketCard key={t.id} ticket={t} />)
+            closedTickets.map((t: any) => <TicketCard key={t.id} ticket={t} onPreview={() => setPreviewTicket(t)} />)
           )}
         </div>
       )}
+
+      <ActivityPreviewDialog
+        ticket={previewTicket}
+        isOpen={!!previewTicket}
+        onClose={() => setPreviewTicket(null)}
+        onManage={() => {
+          setTicketManagerOpen(previewTicket);
+          setPreviewTicket(null);
+        }}
+      />
 
       {ticketManagerOpen && (
         <TicketManager
