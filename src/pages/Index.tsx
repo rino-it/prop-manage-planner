@@ -8,6 +8,7 @@ import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 
 import Sidebar from '@/components/Sidebar';
 import AdminNotificationBell from '@/components/AdminNotificationBell';
+import FloatingChatbot from '@/components/FloatingChatbot';
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -107,6 +108,9 @@ const Index = () => {
           <Outlet />
         </main>
       </div>
+
+      {/* Chatbot assistant — sempre visibile nelle pagine protette */}
+      <FloatingChatbot />
     </div>
   );
 };
