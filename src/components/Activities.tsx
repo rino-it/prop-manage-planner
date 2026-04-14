@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
@@ -9,32 +8,41 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { 
-    Calendar, UserCog, Plus, RotateCcw, 
-    Eye, Home, User, AlertCircle, StickyNote, 
-    Phone, FileText, Share2, Users, ChevronDown, Paperclip, X, Car, Filter
+import {
+  Plus, Home, Car, Users, Paperclip, X, Filter,
+  Share2, ChevronDown, RotateCcw, Eye, Phone, FileText, AlertCircle
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { PageHeader } from '@/components/ui/page-header';
 import TicketManager from '@/components/TicketManager';
 import { UserMultiSelect } from '@/components/UserMultiSelect';
-import { pdf } from '@react-pdf/renderer'; // Import PDF
-import { TicketDocument } from './TicketPDF'; // Import Template
+import { pdf } from '@react-pdf/renderer';
+import { TicketDocument } from './TicketPDF';
+import ActivityCalendar from './ActivityCalendar';
+import UnscheduledList from './UnscheduledList';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Card, CardContent } from '@/components/ui/card';
+import { StickyNote } from 'lucide-react';
 
 // Helper locale per link
 const renderTextWithLinks = (text: string) => {
   if (!text) return null;
   const urlRegex = /(https?:\/\/[^\s]+)/g;
   const parts = text.split(urlRegex);
-  return parts.map((part, i) => 
+  return parts.map((part, i) =>
     urlRegex.test(part) ? (
       <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline hover:text-blue-800 break-all">{part}</a>
     ) : part
   );
+};
+
+const getPriorityColor = (p: string) => {
+  if (p === 'alta' || p === 'critica') return 'bg-red-100 text-red-800 border-red-200';
+  if (p === 'media') return 'bg-orange-100 text-orange-800 border-orange-200';
+  return 'bg-green-100 text-green-800 border-green-200';
 };
 
 export default function Activities() {
@@ -43,9 +51,11 @@ export default function Activities() {
   const { data: realProperties } = usePropertiesReal();
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null); 
-  const [activeTab, setActiveTab] = useState('open'); 
-  const [filterType, setFilterType] = useState('all'); 
+  const [ticketManagerOpen, setTicketManagerOpen] = useState<any>(null);
+  const [activeView, setActiveView] = useState<'calendar' | 'list'>('calendar');
+  const [filterType, setFilterType] = useState('all');
+  const [activeTab, setActiveTab] = useState('open');
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
 
   // FORM DATA
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
@@ -53,14 +63,13 @@ export default function Activities() {
     titolo: '',
     descrizione: '',
     priorita: 'media',
-    target_id: '', 
+    target_id: '',
     booking_id: 'none',
-    assigned_to: [] as string[]
+    assigned_to: [] as string[],
+    data_scadenza: '', // nuovo campo opzionale
   });
-
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [isUploading, setIsUploading] = useState(false);
-  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null); // Loading state
 
   const { data: teamMembers = [] } = useQuery({
     queryKey: ['team-members-list'],
@@ -86,15 +95,15 @@ export default function Activities() {
   const { data: activeTenants } = useQuery({
     queryKey: ['active-tenants-ticket', formData.target_id],
     queryFn: async () => {
-        if (targetType !== 'real' || !formData.target_id) return [];
-        const today = new Date().toISOString();
-        const { data } = await supabase
-            .from('bookings')
-            .select('id, nome_ospite')
-            .eq('property_id', formData.target_id)
-            .lte('data_inizio', today)
-            .gte('data_fine', today);
-        return data || [];
+      if (targetType !== 'real' || !formData.target_id) return [];
+      const today = new Date().toISOString();
+      const { data } = await supabase
+        .from('bookings')
+        .select('id, nome_ospite')
+        .eq('property_id', formData.target_id)
+        .lte('data_inizio', today)
+        .gte('data_fine', today);
+      return data || [];
     },
     enabled: targetType === 'real' && !!formData.target_id
   });
@@ -108,7 +117,7 @@ export default function Activities() {
           *,
           properties_real (nome),
           properties_mobile (veicolo, targa),
-          assigned_partner: profiles!assigned_partner_id(first_name, phone), 
+          assigned_partner: profiles!assigned_partner_id(first_name, phone),
           bookings (
             nome_ospite,
             telefono_ospite,
@@ -116,20 +125,31 @@ export default function Activities() {
           )
         `)
         .order('created_at', { ascending: false });
-      
       if (error) throw error;
       return data;
     },
     refetchInterval: 5000
   });
 
+  // Ticket filtrati per tipo
+  const filteredTickets = tickets?.filter((t: any) => {
+    if (filterType === 'real' && !t.property_real_id) return false;
+    if (filterType === 'mobile' && !t.property_mobile_id) return false;
+    return true;
+  }) || [];
+
+  // Dividi: schedulati vs non schedulati
+  const scheduledTickets   = filteredTickets.filter((t: any) => t.stato !== 'risolto' && t.data_scadenza);
+  const unscheduledTickets = filteredTickets.filter((t: any) => t.stato !== 'risolto' && !t.data_scadenza);
+  const closedTickets      = filteredTickets.filter((t: any) => t.stato === 'risolto');
+
   const handleFileUpload = async (files: File[]) => {
     const uploadedUrls: string[] = [];
     for (const file of files) {
-        const fileName = `ticket_doc_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
-        const { error } = await supabase.storage.from('ticket-files').upload(fileName, file);
-        if (error) throw error;
-        uploadedUrls.push(fileName);
+      const fileName = `ticket_doc_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      const { error } = await supabase.storage.from('ticket-files').upload(fileName, file);
+      if (error) throw error;
+      uploadedUrls.push(fileName);
     }
     return uploadedUrls;
   };
@@ -138,11 +158,8 @@ export default function Activities() {
     mutationFn: async (newTicket: typeof formData) => {
       setIsUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      
       let attachments: string[] = [];
-      if (uploadFiles.length > 0) {
-          attachments = await handleFileUpload(uploadFiles);
-      }
+      if (uploadFiles.length > 0) attachments = await handleFileUpload(uploadFiles);
 
       const payload: any = {
         titolo: newTicket.titolo,
@@ -153,97 +170,51 @@ export default function Activities() {
         stato: 'aperto',
         booking_id: newTicket.booking_id === 'none' ? null : newTicket.booking_id,
         assigned_to: newTicket.assigned_to,
-        attachments: attachments
+        attachments,
+        data_scadenza: newTicket.data_scadenza || null,
       };
 
       if (targetType === 'real') {
-          payload.property_real_id = newTicket.target_id;
-          payload.property_mobile_id = null;
+        payload.property_real_id = newTicket.target_id;
+        payload.property_mobile_id = null;
       } else {
-          payload.property_real_id = null;
-          payload.property_mobile_id = newTicket.target_id;
+        payload.property_real_id = null;
+        payload.property_mobile_id = newTicket.target_id;
       }
-      
+
       const { error } = await supabase.from('tickets').insert(payload);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
       setIsDialogOpen(false);
-      setFormData({ titolo: '', descrizione: '', priorita: 'media', target_id: '', booking_id: 'none', assigned_to: [] });
+      setFormData({ titolo: '', descrizione: '', priorita: 'media', target_id: '', booking_id: 'none', assigned_to: [], data_scadenza: '' });
       setUploadFiles([]);
       setIsUploading(false);
-      toast({ title: "Ticket creato", description: "Assegnato al team e file caricati." });
+      toast({ title: 'Attività creata', description: formData.data_scadenza ? 'Aggiunta al calendario.' : 'Aggiunta a "Da Schedulare".' });
     },
     onError: (err: any) => {
-        setIsUploading(false);
-        toast({ title: "Errore", description: err.message, variant: "destructive" });
+      setIsUploading(false);
+      toast({ title: 'Errore', description: err.message, variant: 'destructive' });
     }
   });
 
   const reopenTicket = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('tickets')
-        .update({ stato: 'aperto', cost: null, resolution_photo_url: null, quote_status: 'none' }) 
-        .eq('id', id);
+      const { error } = await supabase.from('tickets').update({ stato: 'aperto', cost: null, resolution_photo_url: null, quote_status: 'none' }).eq('id', id);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tickets'] });
-      toast({ title: "Ticket Riaperto" });
+      toast({ title: 'Ticket Riaperto' });
     }
   });
 
   const openFile = async (path: string) => {
-      if(!path) return;
-      const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
-      const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-      if (data?.signedUrl) window.open(data.signedUrl, '_blank');
-  };
-
-  // --- FUNZIONE PDF AGGIUNTA ANCHE QUI ---
-  const handleContactPartner = async (ticket: any, phone: string | null) => {
-      if (!phone) {
-          toast({ title: "Nessun telefono", description: "Impossibile inviare WhatsApp.", variant: "destructive" });
-          return;
-      }
-
-      setGeneratingPdfId(ticket.id);
-      toast({ title: "Generazione PDF...", description: "Sto preparando la scheda intervento." });
-
-      try {
-          const imageUrls = await Promise.all((ticket.attachments || []).map(async (path: string) => {
-              const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
-              const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
-              return data?.signedUrl;
-          }));
-
-          const blob = await pdf(<TicketDocument ticket={ticket} publicUrls={imageUrls.filter(Boolean)} />).toBlob();
-
-          const fileName = `delega_${ticket.id}_${Date.now()}.pdf`;
-          const { error: uploadError } = await supabase.storage.from('ticket-files').upload(fileName, blob);
-          if (uploadError) throw uploadError;
-
-          const { data: { publicUrl } } = supabase.storage.from('ticket-files').getPublicUrl(fileName);
-
-          const msg = `Ciao, ti assegno questo intervento: *${ticket.titolo}*\n\n📄 Scarica scheda e foto qui: ${publicUrl}`;
-          window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
-
-          toast({ title: "Inviato!", description: "WhatsApp aperto con link PDF." });
-
-      } catch (e: any) {
-          console.error(e);
-          toast({ title: "Errore", description: "Fallita generazione PDF: " + e.message, variant: "destructive" });
-      } finally {
-          setGeneratingPdfId(null);
-      }
-  };
-
-  const getPriorityColor = (p: string) => {
-    if (p === 'alta' || p === 'critica') return 'bg-red-100 text-red-800 border-red-200';
-    if (p === 'media') return 'bg-orange-100 text-orange-800 border-orange-200';
-    return 'bg-green-100 text-green-800 border-green-200';
+    if (!path) return;
+    const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
+    const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+    if (data?.signedUrl) window.open(data.signedUrl, '_blank');
   };
 
   const getAssigneesDetails = (ids: string[] | null) => {
@@ -251,76 +222,211 @@ export default function Activities() {
     return ids.map(id => teamMembers.find(m => m.id === id)).filter(Boolean);
   };
 
-  const filteredTickets = tickets?.filter((t: any) => {
-      const isResolved = t.stato === 'risolto';
-      if (activeTab === 'open' && isResolved) return false;
-      if (activeTab === 'closed' && !isResolved) return false;
+  const handleContactPartner = async (ticket: any, phone: string | null) => {
+    if (!phone) {
+      toast({ title: 'Nessun telefono', description: 'Impossibile inviare WhatsApp.', variant: 'destructive' });
+      return;
+    }
+    setGeneratingPdfId(ticket.id);
+    toast({ title: 'Generazione PDF...', description: 'Sto preparando la scheda intervento.' });
+    try {
+      const imageUrls = await Promise.all((ticket.attachments || []).map(async (path: string) => {
+        const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
+        const { data } = await supabase.storage.from(bucket).createSignedUrl(path, 3600);
+        return data?.signedUrl;
+      }));
+      const blob = await pdf(<TicketDocument ticket={ticket} publicUrls={imageUrls.filter(Boolean)} />).toBlob();
+      const fileName = `delega_${ticket.id}_${Date.now()}.pdf`;
+      const { error: uploadError } = await supabase.storage.from('ticket-files').upload(fileName, blob);
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from('ticket-files').getPublicUrl(fileName);
+      const msg = `Ciao, ti assegno questo intervento: *${ticket.titolo}*\n\n📄 Scarica scheda e foto qui: ${publicUrl}`;
+      window.open(`https://wa.me/${phone}?text=${encodeURIComponent(msg)}`, '_blank');
+      toast({ title: 'Inviato!', description: 'WhatsApp aperto con link PDF.' });
+    } catch (e: any) {
+      toast({ title: 'Errore', description: 'Fallita generazione PDF: ' + e.message, variant: 'destructive' });
+    } finally {
+      setGeneratingPdfId(null);
+    }
+  };
 
-      if (filterType === 'real' && !t.property_real_id && !t.bookings?.properties_real) return false;
-      if (filterType === 'mobile' && !t.property_mobile_id && !t.properties_mobile) return false;
-
-      return true;
-  });
+  // Card singolo ticket (usato nella lista storico)
+  const TicketCard = ({ ticket }: { ticket: any }) => {
+    const assignees = getAssigneesDetails(ticket.assigned_to);
+    const isGenerating = generatingPdfId === ticket.id;
+    return (
+      <Card className="border-l-4 border-l-green-500 opacity-90 bg-slate-50 shadow-sm">
+        <CardContent className="p-5">
+          <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                <h3 className="font-bold text-base text-gray-900">{ticket.titolo}</h3>
+                <Badge variant="outline" className={getPriorityColor(ticket.priorita)}>{ticket.priorita}</Badge>
+                <Badge className="bg-green-100 text-green-800 border-green-200">Risolto</Badge>
+                {ticket.data_scadenza && (
+                  <Badge variant="outline" className="text-xs text-slate-500 border-slate-200">
+                    📅 {format(parseISO(ticket.data_scadenza), 'dd/MM/yyyy')}
+                  </Badge>
+                )}
+                {assignees.length > 0 && (
+                  <div className="flex -space-x-2 ml-2">
+                    {assignees.map((u: any, i) => (
+                      <div key={i} className="h-6 w-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-700" title={`Assegnato a: ${u.label}`}>
+                        {u.firstName?.charAt(0)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+              <p className="text-gray-600 text-sm mb-2">{ticket.descrizione}</p>
+              {ticket.admin_notes && (
+                <div className="mt-2 mb-3 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
+                  <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-yellow-900 break-all">
+                    <span className="font-bold block mb-1">Note Staff:</span>
+                    {renderTextWithLinks(ticket.admin_notes)}
+                  </div>
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500">
+                <span className="bg-gray-100 px-2 py-1 rounded border">📅 {format(new Date(ticket.created_at), 'dd MMM')}</span>
+                {ticket.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.properties_real.nome}</span>}
+                {ticket.properties_mobile && <span className="font-medium text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">🚗 {ticket.properties_mobile.veicolo}</span>}
+                {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
+                {ticket.attachments?.length > 0 && <span className="text-blue-600">📎 {ticket.attachments.length} file</span>}
+              </div>
+              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
+                {ticket.supplier_contact && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
+                    <Phone className="w-3 h-3" /> Fornitore
+                  </Button>
+                )}
+                {assignees.length === 1 && (
+                  <Button size="sm" variant="outline" disabled={isGenerating} className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50" onClick={() => handleContactPartner(ticket, assignees[0].phone)}>
+                    {isGenerating ? <span className="animate-pulse">PDF...</span> : <><Share2 className="w-3 h-3" /> Contatta {assignees[0].firstName}</>}
+                  </Button>
+                )}
+                {assignees.length > 1 && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50">
+                        {isGenerating ? '...' : <><Share2 className="w-3 h-3" /> Contatta Team <ChevronDown className="w-3 h-3 ml-1" /></>}
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                      {assignees.map((u: any) => (
+                        <DropdownMenuItem key={u.id} onClick={() => handleContactPartner(ticket, u.phone)}>
+                          <Share2 className="w-3 h-3 mr-2 text-green-600" /> {u.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+                {(ticket.quote_url || ticket.ricevuta_url) && (
+                  <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-purple-200 text-purple-700 hover:bg-purple-50" onClick={() => openFile(ticket.quote_url || ticket.ricevuta_url)}>
+                    <FileText className="w-3 h-3" /> {ticket.quote_url ? 'Prev.' : 'Ric.'}
+                  </Button>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 w-full md:w-auto min-w-[130px]">
+              <Button size="sm" variant="outline" className="w-full text-gray-600 bg-white hover:bg-gray-50" onClick={() => setTicketManagerOpen(ticket)}>
+                <Eye className="w-3 h-3 mr-2" /> Storico
+              </Button>
+              <Button size="sm" variant="ghost" className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => { if (confirm('Riaprire?')) reopenTicket.mutate(ticket.id); }}>
+                <RotateCcw className="w-3 h-3 mr-1" /> Riapri
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      
-      <PageHeader title="Attività e Ticket" count={tickets?.length}>
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="w-4 h-4 mr-1.5" /> Nuovo Ticket
+      <PageHeader title="Attività" count={filteredTickets.filter(t => t.stato !== 'risolto').length}>
+        <div className="flex items-center gap-2">
+          {/* Filtro tipo */}
+          <div className="flex items-center gap-1 bg-white p-1 rounded-lg border shadow-sm">
+            <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="text-xs gap-1 h-7">
+              <Filter className="w-3 h-3" /> Tutti
             </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-                <DialogTitle>Nuovo Ticket di Intervento</DialogTitle>
-                <DialogDescription>Crea un ticket, assegna il team e allega foto.</DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 mt-2">
-              
-              <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
-                  <button 
-                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
-                      onClick={() => { setTargetType('real'); setFormData({...formData, target_id: ''}); }}
-                  >
-                      <Home className="w-4 h-4"/> Immobile
-                  </button>
-                  <button 
-                      className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
-                      onClick={() => { setTargetType('mobile'); setFormData({...formData, target_id: ''}); }}
-                  >
-                      <Car className="w-4 h-4"/> Veicolo
-                  </button>
-              </div>
+            <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="text-xs gap-1 h-7">
+              <Home className="w-3 h-3" /> Immobili
+            </Button>
+            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs gap-1 h-7">
+              <Car className="w-3 h-3" /> Veicoli
+            </Button>
+          </div>
 
-              <div className="grid gap-2">
-                <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
-                <Select value={formData.target_id} onValueChange={v => setFormData({...formData, target_id: v, booking_id: 'none'})}>
-                  <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                  <SelectContent>
-                    {targetType === 'real' 
+          {/* Vista toggle */}
+          <div className="flex items-center gap-1 bg-white p-1 rounded-lg border shadow-sm">
+            <Button variant={activeView === 'calendar' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('calendar')} className="text-xs h-7">
+              📅 Calendario
+            </Button>
+            <Button variant={activeView === 'list' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('list')} className="text-xs h-7">
+              📋 Storico
+            </Button>
+          </div>
+
+          {/* Crea attività */}
+          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" className="gap-1.5">
+                <Plus className="w-4 h-4" /> Nuova Attività
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px]">
+              <DialogHeader>
+                <DialogTitle>Nuova Attività</DialogTitle>
+                <DialogDescription>Se non sai ancora la data, lascia "Data prevista" vuoto — l'attività andrà in "Da Schedulare".</DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+
+                {/* Immobile / Veicolo */}
+                <div className="flex items-center justify-center p-1 bg-slate-100 rounded-lg">
+                  <button
+                    className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'real' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                    onClick={() => { setTargetType('real'); setFormData({ ...formData, target_id: '' }); }}
+                  >
+                    <Home className="w-4 h-4" /> Immobile
+                  </button>
+                  <button
+                    className={`flex-1 py-1.5 text-sm font-medium rounded-md flex items-center justify-center gap-2 transition-all ${targetType === 'mobile' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+                    onClick={() => { setTargetType('mobile'); setFormData({ ...formData, target_id: '' }); }}
+                  >
+                    <Car className="w-4 h-4" /> Veicolo
+                  </button>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
+                  <Select value={formData.target_id} onValueChange={v => setFormData({ ...formData, target_id: v, booking_id: 'none' })}>
+                    <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
+                    <SelectContent>
+                      {targetType === 'real'
                         ? realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)
                         : mobileProperties?.map(m => <SelectItem key={m.id} value={m.id}>🚗 {m.veicolo} ({m.targa})</SelectItem>)
-                    }
-                  </SelectContent>
-                </Select>
-              </div>
+                      }
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div className="grid gap-2">
-                <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600"/> Assegna al Team</Label>
-                <UserMultiSelect 
-                    options={teamMembers} 
-                    selected={formData.assigned_to} 
-                    onChange={(selected) => setFormData({...formData, assigned_to: selected})} 
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-2"><Users className="w-4 h-4 text-indigo-600" /> Assegna al Team</Label>
+                  <UserMultiSelect
+                    options={teamMembers}
+                    selected={formData.assigned_to}
+                    onChange={(selected) => setFormData({ ...formData, assigned_to: selected })}
                     placeholder="Seleziona operatori..."
-                />
-              </div>
+                  />
+                </div>
 
-              {targetType === 'real' && (
+                {targetType === 'real' && (
                   <div className="grid gap-2">
-                    <Label className="flex items-center gap-2"><User className="w-4 h-4 text-green-600"/> Inquilino (Opzionale)</Label>
-                    <Select value={formData.booking_id} onValueChange={v => setFormData({...formData, booking_id: v})} disabled={!formData.target_id}>
+                    <Label>Inquilino (Opzionale)</Label>
+                    <Select value={formData.booking_id} onValueChange={v => setFormData({ ...formData, booking_id: v })} disabled={!formData.target_id}>
                       <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">-- Nessuno --</SelectItem>
@@ -328,16 +434,16 @@ export default function Activities() {
                       </SelectContent>
                     </Select>
                   </div>
-              )}
+                )}
 
-              <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div className="grid gap-2">
-                      <Label>Titolo</Label>
-                      <Input value={formData.titolo} onChange={e => setFormData({...formData, titolo: e.target.value})} placeholder="Es. Guasto..." />
+                    <Label>Titolo</Label>
+                    <Input value={formData.titolo} onChange={e => setFormData({ ...formData, titolo: e.target.value })} placeholder="Es. Guasto caldaia..." />
                   </div>
                   <div className="grid gap-2">
                     <Label>Priorità</Label>
-                    <Select value={formData.priorita} onValueChange={v => setFormData({...formData, priorita: v})}>
+                    <Select value={formData.priorita} onValueChange={v => setFormData({ ...formData, priorita: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="bassa">Bassa</SelectItem>
@@ -347,175 +453,102 @@ export default function Activities() {
                       </SelectContent>
                     </Select>
                   </div>
-              </div>
-              
-              <div className="grid gap-2"><Label>Descrizione</Label><Textarea value={formData.descrizione} onChange={e => setFormData({...formData, descrizione: e.target.value})} placeholder="Dettagli..." /></div>
-              
-              <div className="grid gap-2">
-                  <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4"/> Allegati (Foto/Doc)</Label>
+                </div>
+
+                {/* Data prevista — NUOVO */}
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-2">
+                    📅 Data prevista <span className="text-xs text-slate-400 font-normal">(opzionale — lascia vuoto per "Da Schedulare")</span>
+                  </Label>
+                  <Input
+                    type="date"
+                    value={formData.data_scadenza}
+                    onChange={e => setFormData({ ...formData, data_scadenza: e.target.value })}
+                  />
+                  {formData.data_scadenza ? (
+                    <p className="text-xs text-blue-600">✓ Apparirà nel calendario</p>
+                  ) : (
+                    <p className="text-xs text-amber-600">→ Andrà in "Da Schedulare"</p>
+                  )}
+                </div>
+
+                <div className="grid gap-2">
+                  <Label>Descrizione</Label>
+                  <Textarea value={formData.descrizione} onChange={e => setFormData({ ...formData, descrizione: e.target.value })} placeholder="Dettagli intervento..." />
+                </div>
+
+                <div className="grid gap-2">
+                  <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4" /> Allegati (Foto/Doc)</Label>
                   <Input type="file" multiple onChange={(e) => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
                   {uploadFiles.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-1">
-                          {uploadFiles.map((f, i) => (
-                              <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
-                                  {f.name} <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))}/>
-                              </Badge>
-                          ))}
-                      </div>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {uploadFiles.map((f, i) => (
+                        <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
+                          {f.name} <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))} />
+                        </Badge>
+                      ))}
+                    </div>
                   )}
-              </div>
+                </div>
 
-              <Button className="w-full bg-blue-600 hover:bg-blue-700" onClick={() => createTicket.mutate(formData)} disabled={isUploading || !formData.target_id || !formData.titolo}>
-                  {isUploading ? 'Caricamento...' : 'Crea Ticket'}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+                <Button
+                  className="w-full bg-blue-600 hover:bg-blue-700"
+                  onClick={() => createTicket.mutate(formData)}
+                  disabled={isUploading || !formData.target_id || !formData.titolo}
+                >
+                  {isUploading ? 'Caricamento...' : 'Crea Attività'}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </div>
       </PageHeader>
 
-      {isError && <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2"><AlertCircle className="w-5 h-5"/> Errore caricamento dati: {(error as any)?.message}</div>}
-
-      <Tabs defaultValue="open" value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
-            <TabsList className="grid w-full sm:w-[400px] grid-cols-2">
-                <TabsTrigger value="open">In Corso / Aperti</TabsTrigger>
-                <TabsTrigger value="closed">Storico / Chiusi</TabsTrigger>
-            </TabsList>
-
-            <div className="flex items-center gap-2 bg-white p-1 rounded-lg border shadow-sm">
-                <Button variant={filterType === 'all' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')} className="text-xs gap-1"><Filter className="w-3 h-3"/> Tutti</Button>
-                <Button variant={filterType === 'real' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')} className="text-xs gap-1"><Home className="w-3 h-3"/> Immobili</Button>
-                <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs gap-1"><Car className="w-3 h-3"/> Veicoli</Button>
-            </div>
+      {isError && (
+        <div className="bg-red-50 text-red-700 p-4 rounded flex gap-2">
+          <AlertCircle className="w-5 h-5" /> Errore caricamento dati: {(error as any)?.message}
         </div>
+      )}
 
-        <TabsContent value={activeTab} className="space-y-4">
-            <div className="grid gap-4">
-                {isLoading ? <p className="text-center py-8 text-gray-500">Caricamento ticket...</p> : filteredTickets?.length === 0 ? (
-                    <div className="text-center py-12 bg-slate-50 border border-dashed rounded-lg text-gray-500">
-                        Nessun ticket in questa sezione.
-                    </div>
-                ) : filteredTickets?.map((ticket: any) => {
-                    const assignees = getAssigneesDetails(ticket.assigned_to);
-                    const isGenerating = generatingPdfId === ticket.id;
-
-                    return (
-                <Card key={ticket.id} className={`border-l-4 shadow-sm hover:shadow-md transition-all ${ticket.stato === 'risolto' ? 'border-l-green-500 opacity-90 bg-slate-50' : 'border-l-red-500'}`}>
-                    <CardContent className="p-6">
-                    <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                        <div className="flex-1">
-                        
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                            <h3 className="font-bold text-lg text-gray-900">{ticket.titolo}</h3>
-                            <Badge variant="outline" className={getPriorityColor(ticket.priorita)}>{ticket.priorita}</Badge>
-                            {ticket.creato_da === 'ospite' && <Badge className="bg-blue-100 text-blue-800 border-blue-200">Ospite</Badge>}
-                            {ticket.stato === 'risolto' && <Badge className="bg-green-100 text-green-800 border-green-200">Risolto</Badge>}
-                            {ticket.quote_status === 'pending' && <Badge className="bg-orange-100 text-orange-800 border-orange-200">Preventivo</Badge>}
-                            
-                            {assignees.length > 0 && (
-                                <div className="flex -space-x-2 ml-2">
-                                    {assignees.map((u: any, i) => (
-                                        <div key={i} className="h-6 w-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-700 title-tip" title={`Assegnato a: ${u.label}`}>
-                                            {u.firstName?.charAt(0)}
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                        
-                        <p className="text-gray-700 text-sm mb-3">{ticket.descrizione}</p>
-                        
-                        {ticket.admin_notes && (
-                            <div className="mt-2 mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-2">
-                                <StickyNote className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
-                                <div className="text-xs text-yellow-900 break-all">
-                                    <span className="font-bold block mb-1">Note Staff:</span> 
-                                    {renderTextWithLinks(ticket.admin_notes)}
-                                </div>
-                            </div>
-                        )}
-
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mb-2">
-                            <span className="flex items-center bg-gray-100 px-2 py-1 rounded border"><Calendar className="w-3 h-3 mr-1" /> {format(new Date(ticket.created_at), 'dd MMM')}</span>
-                            {ticket.properties_real?.nome && <span className="font-medium text-gray-700 bg-orange-50 px-2 py-1 rounded border border-orange-100">🏠 {ticket.properties_real.nome}</span>}
-                            {ticket.properties_mobile && <span className="font-medium text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">🚗 {ticket.properties_mobile.veicolo}</span>}
-                            {ticket.bookings?.nome_ospite && <span className="font-medium text-blue-700">👤 {ticket.bookings.nome_ospite}</span>}
-                            {ticket.attachments && ticket.attachments.length > 0 && (
-                                <span className="flex items-center text-blue-600"><Paperclip className="w-3 h-3 mr-1"/> {ticket.attachments.length} file</span>
-                            )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t">
-                            {ticket.supplier_contact && (
-                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-blue-200 text-blue-700 hover:bg-blue-50" onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
-                                    <Phone className="w-3 h-3" /> Fornitore
-                                </Button>
-                            )}
-                            
-                            {/* BOTTONE DELEGA PDF */}
-                            {assignees.length === 1 && (
-                                <Button 
-                                    size="sm" 
-                                    variant="outline" 
-                                    disabled={isGenerating}
-                                    className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50" 
-                                    onClick={() => handleContactPartner(ticket, assignees[0].phone)}
-                                >
-                                    {isGenerating ? <span className="animate-pulse">PDF...</span> : <><Share2 className="w-3 h-3" /> Contatta {assignees[0].firstName}</>}
-                                </Button>
-                            )}
-
-                            {assignees.length > 1 && (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-green-200 text-green-700 hover:bg-green-50">
-                                            {isGenerating ? '...' : <><Share2 className="w-3 h-3" /> Contatta Team <ChevronDown className="w-3 h-3 ml-1"/></>}
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        {assignees.map((u: any) => (
-                                            <DropdownMenuItem key={u.id} onClick={() => handleContactPartner(ticket, u.phone)}>
-                                                <Share2 className="w-3 h-3 mr-2 text-green-600"/> {u.label}
-                                            </DropdownMenuItem>
-                                        ))}
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            )}
-
-                            {(ticket.quote_url || ticket.ricevuta_url) && (
-                                <Button size="sm" variant="outline" className="h-7 text-xs gap-1 border-purple-200 text-purple-700 hover:bg-purple-50"
-                                    onClick={() => openFile(ticket.quote_url || ticket.ricevuta_url)}>
-                                    <FileText className="w-3 h-3" /> {ticket.quote_url ? 'Prev.' : 'Ric.'}
-                                </Button>
-                            )}
-                        </div>
-                        </div>
-                        
-                        <div className="flex flex-col gap-2 w-full md:w-auto min-w-[140px]">
-                        {ticket.stato !== 'risolto' ? (
-                            <Button size="sm" className="w-full bg-blue-600 hover:bg-blue-700 shadow-sm" onClick={() => setTicketManagerOpen(ticket)}><UserCog className="w-4 h-4 mr-2" /> Gestisci</Button>
-                        ) : (
-                            <div className="flex flex-col gap-2">
-                                <Button size="sm" variant="outline" className="w-full text-gray-600 bg-white hover:bg-gray-50" onClick={() => setTicketManagerOpen(ticket)}><Eye className="w-3 h-3 mr-2" /> Storico</Button>
-                                <Button size="sm" variant="ghost" className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => { if(confirm("Riaprire?")) reopenTicket.mutate(ticket.id); }}><RotateCcw className="w-3 h-3 mr-1" /> Riapri</Button>
-                            </div>
-                        )}
-                        </div>
-                    </div>
-                    </CardContent>
-                </Card>
-                )})}
+      {isLoading ? (
+        <div className="text-center py-12 text-slate-500">Caricamento attività...</div>
+      ) : activeView === 'calendar' ? (
+        /* ===== VISTA CALENDARIO ===== */
+        <div className="space-y-5">
+          <ActivityCalendar
+            tickets={scheduledTickets}
+            onTicketClick={(t) => setTicketManagerOpen(t)}
+            onDayClick={(date) => {
+              const iso = date.toISOString().split('T')[0];
+              setFormData(f => ({ ...f, data_scadenza: iso }));
+              setIsDialogOpen(true);
+            }}
+          />
+          <UnscheduledList
+            tickets={unscheduledTickets}
+            onTicketClick={(t) => setTicketManagerOpen(t)}
+          />
+        </div>
+      ) : (
+        /* ===== VISTA STORICO ===== */
+        <div className="space-y-4">
+          {closedTickets.length === 0 ? (
+            <div className="text-center py-12 bg-slate-50 border border-dashed rounded-lg text-gray-500">
+              Nessuna attività completata.
             </div>
-        </TabsContent>
-      </Tabs>
+          ) : (
+            closedTickets.map((t: any) => <TicketCard key={t.id} ticket={t} />)
+          )}
+        </div>
+      )}
 
       {ticketManagerOpen && (
-        <TicketManager 
-            ticket={ticketManagerOpen} 
-            isOpen={!!ticketManagerOpen} 
-            onClose={() => setTicketManagerOpen(null)}
-            onUpdate={() => { queryClient.invalidateQueries({ queryKey: ['tickets'] }); }}
-            isReadOnly={ticketManagerOpen.stato === 'risolto'} 
+        <TicketManager
+          ticket={ticketManagerOpen}
+          isOpen={!!ticketManagerOpen}
+          onClose={() => setTicketManagerOpen(null)}
+          onUpdate={() => { queryClient.invalidateQueries({ queryKey: ['tickets'] }); }}
+          isReadOnly={ticketManagerOpen.stato === 'risolto'}
         />
       )}
     </div>
