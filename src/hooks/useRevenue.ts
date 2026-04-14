@@ -130,11 +130,51 @@ export const useRevenue = () => {
     }
   });
 
+  // 5. CONFERMA INCASSO (con data e metodo pagamento)
+  const confirmPayment = useMutation({
+    mutationFn: async ({ id, paymentDate, paymentType }: { id: string; paymentDate: string; paymentType: string }) => {
+      const { error } = await supabase
+        .from('tenant_payments')
+        .update({
+          stato: 'pagato',
+          payment_date: new Date(paymentDate).toISOString(),
+          payment_type: paymentType,
+        })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
+      toast({ title: '✅ Incasso confermato', description: 'Registrato in cassa.' });
+    },
+    onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
+  });
+
+  // 6. AGGIORNA
+  const updatePayment = useMutation({
+    mutationFn: async ({ id, importo, data_scadenza, category, description }: {
+      id: string; importo: number; data_scadenza: string; category: string; description: string;
+    }) => {
+      const { error } = await supabase
+        .from('tenant_payments')
+        .update({ importo, data_scadenza, category, description })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
+      toast({ title: 'Aggiornato' });
+    },
+    onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
+  });
+
   return {
     revenues,
     isLoading,
     createPaymentPlan,
     markAsPaid,
+    confirmPayment,
+    updatePayment,
     deletePayment
   };
 };

@@ -1,319 +1,728 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRevenue } from '@/hooks/useRevenue';
 import { usePropertiesReal } from '@/hooks/useProperties';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Switch } from '@/components/ui/switch';
-import { DollarSign, Calendar as CalendarIcon, Trash2, CheckCircle, RefreshCw, CalendarPlus, Pencil, Plus } from 'lucide-react';
-import { format, isPast, isToday } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useToast } from '@/hooks/use-toast';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/ui/page-header';
+import { useToast } from '@/hooks/use-toast';
+import {
+  CheckCircle, Clock, AlertTriangle, TrendingUp,
+  CalendarPlus, Pencil, Plus, Trash2, RefreshCw,
+  ChevronDown, ChevronUp, CreditCard, Banknote, Building2, Smartphone, Filter
+} from 'lucide-react';
+import {
+  format, isPast, isToday, addDays, parseISO,
+  startOfMonth, endOfMonth, isBefore, isAfter, isWithinInterval,
+  addMonths
+} from 'date-fns';
+import { it } from 'date-fns/locale';
 
+// ─── helpers ─────────────────────────────────────────────────────────────────
+const CATEGORY_LABELS: Record<string, string> = {
+  canone_locazione:   '🏠 Canone',
+  rimborso_utenze:    '💡 Utenze',
+  deposito_cauzionale:'🔒 Deposito',
+  extra:              '⭐ Extra',
+  altro:              '📋 Altro',
+};
+
+const METHOD_OPTIONS = [
+  { value: 'bonifico',  label: 'Bonifico', icon: <Building2 className="w-4 h-4" /> },
+  { value: 'contanti',  label: 'Contanti', icon: <Banknote className="w-4 h-4" /> },
+  { value: 'stripe',    label: 'Stripe / Carta', icon: <CreditCard className="w-4 h-4" /> },
+  { value: 'paypal',    label: 'PayPal', icon: <Smartphone className="w-4 h-4" /> },
+  { value: 'altro',     label: 'Altro', icon: null },
+];
+
+function daysDiff(dateStr: string) {
+  const diff = Math.round((new Date().getTime() - parseISO(dateStr).getTime()) / 86400000);
+  return diff;
+}
+
+function groupByMonth(items: any[]) {
+  const map: Record<string, any[]> = {};
+  items.forEach(r => {
+    const key = format(parseISO(r.payment_date || r.data_scadenza), 'yyyy-MM');
+    if (!map[key]) map[key] = [];
+    map[key].push(r);
+  });
+  return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
+}
+
+// ─── sub-components ───────────────────────────────────────────────────────────
+
+function KpiCard({ label, value, sub, color, icon }: {
+  label: string; value: string; sub?: string; color: string; icon: React.ReactNode;
+}) {
+  return (
+    <Card className={`border ${color}`}>
+      <CardContent className="p-5 flex items-center gap-4">
+        <div className={`p-3 rounded-full ${color.replace('border-', 'bg-').replace('-200', '-100')} shrink-0`}>
+          {icon}
+        </div>
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="text-2xl font-bold text-slate-900 truncate">{value}</p>
+          {sub && <p className="text-xs text-slate-400">{sub}</p>}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate }: {
+  rev: any;
+  onIncassa?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onCalendar?: () => void;
+  showPaidDate?: boolean;
+}) {
+  const overdueDays = rev.stato === 'da_pagare' && isPast(parseISO(rev.data_scadenza)) && !isToday(parseISO(rev.data_scadenza))
+    ? daysDiff(rev.data_scadenza)
+    : null;
+
+  return (
+    <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${overdueDays ? 'bg-red-50/40' : ''}`}>
+      {/* Left */}
+      <div className="flex items-start gap-3 flex-1 min-w-0">
+        <div className={`w-1 self-stretch rounded-full shrink-0 mt-1 ${
+          rev.stato === 'pagato' ? 'bg-green-400' :
+          overdueDays ? 'bg-red-500' : 'bg-amber-400'
+        }`} />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2 mb-0.5">
+            <span className="font-semibold text-sm text-slate-800 truncate">
+              {rev.bookings?.nome_ospite || '—'}
+            </span>
+            {rev.bookings?.properties_real?.nome && (
+              <span className="text-xs bg-orange-50 border border-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                {rev.bookings.properties_real.nome}
+              </span>
+            )}
+            <span className="text-xs text-slate-400">
+              {CATEGORY_LABELS[rev.category] || rev.category || 'Generico'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
+            {showPaidDate && rev.payment_date && (
+              <span className="text-green-600">
+                ✓ Pagato il {format(new Date(rev.payment_date), 'd MMM yyyy', { locale: it })}
+                {rev.payment_type && ` · ${rev.payment_type}`}
+              </span>
+            )}
+            {!showPaidDate && (
+              <span>Scad. {format(parseISO(rev.data_scadenza), 'd MMM yyyy', { locale: it })}</span>
+            )}
+            {overdueDays && (
+              <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
+                {overdueDays}gg di ritardo
+              </Badge>
+            )}
+            {(rev.notes || rev.description) && (
+              <span className="italic text-slate-400">"{rev.notes || rev.description}"</span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Right */}
+      <div className="flex items-center gap-2 shrink-0">
+        <span className={`text-base font-bold tabular-nums ${rev.stato === 'pagato' ? 'text-green-600' : overdueDays ? 'text-red-600' : 'text-slate-700'}`}>
+          €{Number(rev.importo).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        </span>
+
+        {rev.stato !== 'pagato' && onIncassa && (
+          <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 gap-1" onClick={onIncassa}>
+            <CheckCircle className="w-3 h-3" /> Incassa
+          </Button>
+        )}
+        {rev.stato === 'pagato' && (
+          <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 h-7 px-2 text-xs">
+            Pagato
+          </Badge>
+        )}
+
+        {onCalendar && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-700 hover:bg-blue-50" onClick={onCalendar} title="Aggiungi a calendario">
+            <CalendarPlus className="w-3.5 h-3.5" />
+          </Button>
+        )}
+        {onEdit && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+        )}
+        {onDelete && (
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={onDelete}>
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── main component ───────────────────────────────────────────────────────────
 export default function Revenue() {
-  const { revenues, createPaymentPlan, markAsPaid, deletePayment, isLoading } = useRevenue();
+  const { revenues, createPaymentPlan, confirmPayment, updatePayment, deletePayment, isLoading } = useRevenue();
   const { data: properties } = usePropertiesReal();
   const { toast } = useToast();
-  const queryClient = useQueryClient();
-  
-  // STATI
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null); // ID dell'incasso in modifica
 
-  // FORM DATA
+  // ── UI state ──
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<any>(null);
+  const [confirmTarget, setConfirmTarget] = useState<any>(null);
+  const [confirmDate, setConfirmDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [confirmMethod, setConfirmMethod] = useState('bonifico');
+  const [filterProp, setFilterProp] = useState('all');
+  const [filterCat, setFilterCat] = useState('all');
+  const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
+
+  // ── create form ──
   const [selectedProp, setSelectedProp] = useState('');
-  const [formData, setFormData] = useState({
-    booking_id: '',
-    amount: '',
-    date_start: format(new Date(), 'yyyy-MM-dd'),
-    category: 'canone_locazione',
-    description: '',
-    is_recurring: false,
-    months: '12'
+  const [form, setForm] = useState({
+    booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'),
+    category: 'canone_locazione', description: '', is_recurring: false, months: '12',
   });
 
-  // FETCH INQUILINI ATTIVI (Per il form di creazione)
-  const { data: activeTenants } = useQuery({
-    queryKey: ['active-tenants', selectedProp],
+  // ── edit form ──
+  const [editForm, setEditForm] = useState({ amount: '', date_start: '', category: '', description: '' });
+
+  const { data: activeTenants = [] } = useQuery({
+    queryKey: ['active-tenants-revenue', selectedProp],
     queryFn: async () => {
-        if (!selectedProp) return [];
-        const todayISO = new Date().toISOString(); 
-        const { data } = await supabase
-            .from('bookings')
-            .select('id, nome_ospite')
-            .eq('property_id', selectedProp)
-            .lte('data_inizio', todayISO)
-            .gte('data_fine', todayISO);
-        return data || [];
+      if (!selectedProp) return [];
+      const { data } = await supabase
+        .from('bookings')
+        .select('id, nome_ospite')
+        .eq('property_id', selectedProp);
+      return data || [];
     },
-    enabled: !!selectedProp
+    enabled: !!selectedProp,
   });
 
-  // MUTATION: AGGIORNA INCASSO ESISTENTE
-  const updateRevenue = useMutation({
-    mutationFn: async () => {
-      if (!editingId) return;
-      const { error } = await supabase
-        .from('tenant_payments')
-        .update({
-          importo: parseFloat(formData.amount),
-          data_scadenza: formData.date_start,
-          category: formData.category,
-          description: formData.description || ''
-        })
-        .eq('id', editingId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['revenues'] });
-      toast({ title: "Incasso Aggiornato", description: "Data e importo modificati con successo." });
-      handleCloseDialog();
-    },
-    onError: (err: any) => toast({ title: "Errore", description: err.message, variant: "destructive" })
-  });
-
-  // GESTIONE SAVE (Crea o Aggiorna)
-  const handleSubmit = async () => {
-    if (!formData.amount) return;
-
-    if (editingId) {
-      // MODIFICA
-      updateRevenue.mutate();
-    } else {
-      // CREAZIONE
-      if (!formData.booking_id) {
-        toast({ title: "Seleziona un inquilino", variant: "destructive" });
-        return;
+  // ── filtered revenues ──
+  const filtered = useMemo(() => {
+    if (!revenues) return [];
+    return revenues.filter(r => {
+      if (filterProp !== 'all') {
+        const propId = r.bookings?.property_id || (r as any).property_real_id;
+        // match by property name since we don't have direct property_id on row easily
+        if (r.bookings?.properties_real?.nome !== properties?.find(p => p.id === filterProp)?.nome) return false;
       }
-      await createPaymentPlan.mutateAsync({
-        booking_id: formData.booking_id,
-        amount: parseFloat(formData.amount),
-        date_start: new Date(formData.date_start),
-        category: formData.category,
-        description: formData.description || 'Rata canone',
-        is_recurring: formData.is_recurring,
-        months: parseInt(formData.months)
-      });
-      handleCloseDialog();
+      if (filterCat !== 'all' && r.category !== filterCat) return false;
+      return true;
+    });
+  }, [revenues, filterProp, filterCat, properties]);
+
+  // ── sections ──
+  const today = new Date();
+  const in30 = addDays(today, 30);
+
+  const overdue    = filtered.filter(r => r.stato === 'da_pagare' && isPast(parseISO(r.data_scadenza)) && !isToday(parseISO(r.data_scadenza)));
+  const upcoming   = filtered.filter(r => r.stato === 'da_pagare' && !isPast(parseISO(r.data_scadenza)));
+  const paid       = filtered.filter(r => r.stato === 'pagato');
+
+  const thisWeek   = upcoming.filter(r => isBefore(parseISO(r.data_scadenza), addDays(today, 7)));
+  const thisMonth  = upcoming.filter(r => !isBefore(parseISO(r.data_scadenza), addDays(today, 7)) && isBefore(parseISO(r.data_scadenza), in30));
+  const later      = upcoming.filter(r => !isBefore(parseISO(r.data_scadenza), in30));
+
+  // ── KPI ──
+  const totalPaid     = paid.reduce((s, r) => s + Number(r.importo), 0);
+  const totalPending  = upcoming.reduce((s, r) => s + Number(r.importo), 0);
+  const totalOverdue  = overdue.reduce((s, r) => s + Number(r.importo), 0);
+  const totalNext30   = [...thisWeek, ...thisMonth].reduce((s, r) => s + Number(r.importo), 0);
+
+  // ── grouped paid ──
+  const groupedPaid = useMemo(() => groupByMonth(paid), [paid]);
+
+  const fmt = (n: number) => '€' + n.toLocaleString('it-IT', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+  // ── handlers ──
+  const handleCreate = async () => {
+    if (!form.booking_id || !form.amount) {
+      toast({ title: 'Compila tutti i campi obbligatori', variant: 'destructive' });
+      return;
     }
+    await createPaymentPlan.mutateAsync({
+      booking_id: form.booking_id,
+      amount: parseFloat(form.amount),
+      date_start: new Date(form.date_start),
+      category: form.category,
+      description: form.description || 'Rata canone',
+      is_recurring: form.is_recurring,
+      months: parseInt(form.months),
+    });
+    setCreateOpen(false);
+    setForm({ booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'), category: 'canone_locazione', description: '', is_recurring: false, months: '12' });
+    setSelectedProp('');
   };
 
-  // APRE IL DIALOG IN MODALITÀ MODIFICA
   const handleEdit = (rev: any) => {
-    setEditingId(rev.id);
-    
-    // Precompila il form
-    setFormData({
-      booking_id: rev.booking_id || '', 
+    setEditTarget(rev);
+    setEditForm({
       amount: rev.importo.toString(),
-      date_start: rev.data_scadenza, // La data attuale dal DB
+      date_start: rev.data_scadenza,
       category: rev.category || 'canone_locazione',
       description: rev.description || rev.notes || '',
-      is_recurring: false, // Disabilita ricorrenza in modifica
-      months: '1'
     });
-    
-    // Imposta la proprietà per visualizzazione (opzionale)
-    if (rev.bookings?.property_id) setSelectedProp(rev.bookings.property_id);
-    
-    setIsDialogOpen(true);
   };
 
-  const handleOpenCreate = () => {
-    setEditingId(null);
-    setFormData({
-      booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'),
-      category: 'canone_locazione', description: '', is_recurring: false, months: '12'
+  const handleSaveEdit = async () => {
+    if (!editTarget) return;
+    await updatePayment.mutateAsync({
+      id: editTarget.id,
+      importo: parseFloat(editForm.amount),
+      data_scadenza: editForm.date_start,
+      category: editForm.category,
+      description: editForm.description,
     });
-    setSelectedProp('');
-    setIsDialogOpen(true);
+    setEditTarget(null);
   };
 
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false);
-    setEditingId(null);
+  const handleConfirmIncasso = async () => {
+    if (!confirmTarget) return;
+    await confirmPayment.mutateAsync({
+      id: confirmTarget.id,
+      paymentDate: confirmDate,
+      paymentType: confirmMethod,
+    });
+    setConfirmTarget(null);
   };
 
-  // Export Calendario
-  const downloadIcs = (p: any) => {
+  const downloadIcs = (rev: any) => {
     const text = [
       'BEGIN:VCALENDAR', 'VERSION:2.0', 'BEGIN:VEVENT',
-      `SUMMARY:Incasso ${p.bookings?.nome_ospite || 'Affitto'}`,
-      `DESCRIPTION:${p.notes || p.description || ''}`,
-      `DTSTART;VALUE=DATE:${p.data_scadenza.replace(/-/g, '')}`,
-      'END:VEVENT', 'END:VCALENDAR'
+      `SUMMARY:Incasso ${rev.bookings?.nome_ospite || 'Affitto'} - ${fmt(rev.importo)}`,
+      `DESCRIPTION:${rev.notes || rev.description || ''}`,
+      `DTSTART;VALUE=DATE:${rev.data_scadenza.replace(/-/g, '')}`,
+      'END:VEVENT', 'END:VCALENDAR',
     ].join('\n');
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([text], {type: 'text/calendar'}));
-    a.download = `scadenza_${p.data_scadenza}.ics`; a.click();
+    a.href = URL.createObjectURL(new Blob([text], { type: 'text/calendar' }));
+    a.download = `scadenza_${rev.data_scadenza}.ics`;
+    a.click();
   };
 
-  // Calcolo Totali
-  const totalCollected = revenues?.filter(r => r.stato === 'pagato').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
-  const totalPending = revenues?.filter(r => r.stato === 'da_pagare').reduce((acc, curr) => acc + Number(curr.importo), 0) || 0;
+  const toggleMonth = (key: string) => setCollapsedMonths(v => ({ ...v, [key]: !v[key] }));
+
+  // recurring preview
+  const recurringTotal = form.is_recurring && form.amount && form.months
+    ? parseFloat(form.amount) * parseInt(form.months)
+    : null;
 
   return (
     <div className="space-y-6 animate-in fade-in">
-      <PageHeader title="Incassi & Piani" count={revenues?.length}>
-        <Button size="sm" onClick={handleOpenCreate}>
-          <Plus className="w-4 h-4 mr-1.5" /> Nuovo Incasso
-        </Button>
+
+      {/* ── Header ── */}
+      <PageHeader title="Incassi & Piani" count={filtered.filter(r => r.stato === 'da_pagare').length}>
+        <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Filtro proprietà */}
+          <Select value={filterProp} onValueChange={setFilterProp}>
+            <SelectTrigger className="h-8 text-xs w-[160px] bg-white">
+              <Filter className="w-3 h-3 mr-1.5 text-slate-400" />
+              <SelectValue placeholder="Proprietà" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutte le proprietà</SelectItem>
+              {properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          {/* Filtro categoria */}
+          <Select value={filterCat} onValueChange={setFilterCat}>
+            <SelectTrigger className="h-8 text-xs w-[140px] bg-white">
+              <SelectValue placeholder="Categoria" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutte le categorie</SelectItem>
+              {Object.entries(CATEGORY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            </SelectContent>
+          </Select>
+
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+            <Plus className="w-4 h-4" /> Nuovo Incasso
+          </Button>
+        </div>
       </PageHeader>
 
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          
-          <DialogContent className="sm:max-w-[500px]">
-            <DialogHeader>
-              <DialogTitle>{editingId ? 'Modifica Scadenza / Importo' : 'Registra Nuova Entrata'}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
-              
-              {/* SELEZIONE PROPRIETÀ/INQUILINO (Disabilitata in Edit) */}
-              <div className="grid grid-cols-2 gap-4">
-                  <div className="grid gap-2">
-                    <Label>Proprietà</Label>
-                    <Select onValueChange={setSelectedProp} value={selectedProp} disabled={!!editingId}>
-                      <SelectTrigger><SelectValue placeholder="Scegli casa..." /></SelectTrigger>
-                      <SelectContent>{properties?.map(p => <SelectItem key={p.id} value={p.id}>{p.nome}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-2">
-                    <Label>Inquilino</Label>
-                    <Select onValueChange={(v) => setFormData({...formData, booking_id: v})} value={formData.booking_id} disabled={!selectedProp || !!editingId}>
-                      <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                      <SelectContent>{activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-              </div>
+      {/* ── KPI ── */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <KpiCard label="Incassato" value={fmt(totalPaid)} sub={`${paid.length} pagamenti`}
+          color="border-green-200 bg-green-50" icon={<CheckCircle className="w-6 h-6 text-green-600" />} />
+        <KpiCard label="In Attesa" value={fmt(totalPending)} sub={`${upcoming.length} rate`}
+          color="border-amber-200 bg-amber-50" icon={<Clock className="w-6 h-6 text-amber-600" />} />
+        <KpiCard label="Scaduto" value={fmt(totalOverdue)} sub={overdue.length > 0 ? `${overdue.length} rate in ritardo` : 'Tutto in regola ✓'}
+          color={totalOverdue > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200'} icon={<AlertTriangle className={`w-6 h-6 ${totalOverdue > 0 ? 'text-red-600' : 'text-slate-400'}`} />} />
+        <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.length + thisMonth.length} scadenze`}
+          color="border-blue-200 bg-blue-50" icon={<TrendingUp className="w-6 h-6 text-blue-600" />} />
+      </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                 <div className="grid gap-2">
-                    <Label>Importo (€)</Label>
-                    <Input type="number" value={formData.amount} onChange={e => setFormData({...formData, amount: e.target.value})} />
-                 </div>
-                 <div className="grid gap-2">
-                    <Label>Data Scadenza</Label>
-                    <Input type="date" value={formData.date_start} onChange={e => setFormData({...formData, date_start: e.target.value})} />
-                 </div>
-              </div>
+      {/* ── Tabs ── */}
+      <Tabs defaultValue={overdue.length > 0 ? 'overdue' : 'upcoming'}>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="overdue" className="gap-2">
+            {overdue.length > 0 && <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{overdue.length}</span>}
+            🔴 Scaduti
+          </TabsTrigger>
+          <TabsTrigger value="upcoming">
+            📅 In Scadenza
+            {upcoming.length > 0 && <span className="ml-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{upcoming.length}</span>}
+          </TabsTrigger>
+          <TabsTrigger value="paid">
+            ✅ Storico Pagati
+            {paid.length > 0 && <span className="ml-1.5 text-[10px] text-slate-400">{paid.length}</span>}
+          </TabsTrigger>
+        </TabsList>
 
-              <div className="grid gap-2">
-                <Label>Categoria</Label>
-                <Select onValueChange={(v) => setFormData({...formData, category: v})} value={formData.category}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="canone_locazione">🏠 Canone Locazione</SelectItem>
-                    <SelectItem value="rimborso_utenze">💡 Rimborso Utenze</SelectItem>
-                    <SelectItem value="deposito_cauzionale">🔒 Deposito Cauzionale</SelectItem>
-                    <SelectItem value="extra">⭐ Extra / Altro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+        {/* ── SCADUTI ── */}
+        <TabsContent value="overdue" className="mt-4">
+          {isLoading ? <p className="text-center py-8 text-slate-400">Caricamento...</p>
+          : overdue.length === 0 ? (
+            <div className="text-center py-14 bg-green-50 border border-green-100 rounded-xl">
+              <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-2" />
+              <p className="font-semibold text-green-700">Nessun incasso scaduto 🎉</p>
+              <p className="text-xs text-green-500 mt-1">Sei in pari con tutti i pagamenti</p>
+            </div>
+          ) : (
+            <Card>
+              <CardContent className="p-0 divide-y">
+                {overdue.map(r => (
+                  <RevenueRow key={r.id} rev={r}
+                    onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                    onEdit={() => handleEdit(r)}
+                    onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
+                  />
+                ))}
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
 
-              {/* PIANO RATEALE (Solo in creazione) */}
-              {!editingId && (
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                        <Label className="flex items-center gap-2 cursor-pointer"><RefreshCw className="w-4 h-4 text-blue-600" /> Genera Piano Rateale</Label>
-                        <Switch checked={formData.is_recurring} onCheckedChange={(c) => setFormData({...formData, is_recurring: c})} />
-                    </div>
-                    {formData.is_recurring && (
-                        <div className="pt-2"><Label className="text-xs text-gray-500 mb-1">Numero rate mensili</Label><Input type="number" value={formData.months} onChange={e => setFormData({...formData, months: e.target.value})} className="bg-white"/></div>
-                    )}
+        {/* ── IN SCADENZA ── */}
+        <TabsContent value="upcoming" className="mt-4 space-y-4">
+          {isLoading ? <p className="text-center py-8 text-slate-400">Caricamento...</p>
+          : upcoming.length === 0 ? (
+            <div className="text-center py-14 bg-slate-50 border border-dashed rounded-xl text-slate-400">
+              Nessuna rata in scadenza.
+            </div>
+          ) : (
+            <>
+              {thisWeek.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">⚡ Questa settimana</p>
+                  <Card>
+                    <CardContent className="p-0 divide-y">
+                      {thisWeek.map(r => (
+                        <RevenueRow key={r.id} rev={r}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onEdit={() => handleEdit(r)}
+                          onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
+                          onCalendar={() => downloadIcs(r)}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
                 </div>
               )}
 
-              <div className="grid gap-2">
-                <Label>Note</Label>
-                <Input value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Es. Affitto Maggio" />
-              </div>
-              
-              <DialogFooter>
-                <Button variant="outline" onClick={handleCloseDialog}>Annulla</Button>
-                <Button onClick={handleSubmit} className={`font-bold ${editingId ? 'bg-orange-600 hover:bg-orange-700' : 'bg-green-600 hover:bg-green-700'}`}>
-                    {editingId ? 'Salva Modifiche' : 'Registra'}
-                </Button>
-              </DialogFooter>
+              {thisMonth.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-amber-600 mb-2 px-1">📅 Prossimi 30 giorni</p>
+                  <Card>
+                    <CardContent className="p-0 divide-y">
+                      {thisMonth.map(r => (
+                        <RevenueRow key={r.id} rev={r}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onEdit={() => handleEdit(r)}
+                          onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
+                          onCalendar={() => downloadIcs(r)}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {later.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">🗓 Oltre 30 giorni</p>
+                  <Card>
+                    <CardContent className="p-0 divide-y">
+                      {later.map(r => (
+                        <RevenueRow key={r.id} rev={r}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onEdit={() => handleEdit(r)}
+                          onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
+                          onCalendar={() => downloadIcs(r)}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* ── STORICO PAGATI ── */}
+        <TabsContent value="paid" className="mt-4 space-y-3">
+          {isLoading ? <p className="text-center py-8 text-slate-400">Caricamento...</p>
+          : paid.length === 0 ? (
+            <div className="text-center py-14 bg-slate-50 border border-dashed rounded-xl text-slate-400">
+              Nessun incasso registrato ancora.
             </div>
-          </DialogContent>
-        </Dialog>
-
-      {/* KPI */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Card className="bg-green-50 border-green-200">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-4 bg-green-100 rounded-full text-green-700"><CheckCircle className="w-8 h-8" /></div>
-            <div><p className="text-sm text-green-700 font-medium uppercase">Incassato</p><h2 className="text-3xl font-bold text-green-900">€ {totalCollected.toLocaleString()}</h2></div>
-          </CardContent>
-        </Card>
-        <Card className="bg-orange-50 border-orange-200">
-          <CardContent className="p-6 flex items-center gap-4">
-            <div className="p-4 bg-orange-100 rounded-full text-orange-700"><CalendarIcon className="w-8 h-8" /></div>
-            <div><p className="text-sm text-orange-700 font-medium uppercase">In Attesa</p><h2 className="text-3xl font-bold text-orange-900">€ {totalPending.toLocaleString()}</h2></div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* TABELLA */}
-      <Card>
-        <CardHeader><CardTitle>Storico Incassi</CardTitle></CardHeader>
-        <CardContent>
-            <div className="space-y-1">
-                {isLoading ? <p className="p-4 text-center">Caricamento...</p> : revenues?.map((rev) => {
-                    const isOverdue = rev.stato === 'da_pagare' && isPast(new Date(rev.data_scadenza)) && !isToday(new Date(rev.data_scadenza));
-                    return (
-                    <div key={rev.id} className={`flex flex-col md:flex-row items-start md:items-center justify-between p-4 border-b hover:bg-slate-50 transition-colors ${isOverdue ? 'bg-red-50/50' : ''}`}>
-                        <div className="flex items-start gap-4 mb-2 md:mb-0 w-full md:w-1/3">
-                            <div className={`p-2 rounded-full mt-1 ${rev.stato === 'pagato' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}`}><DollarSign className="w-5 h-5" /></div>
-                            <div>
-                                <div className="flex items-center gap-2">
-                                    <p className="font-bold text-gray-900">{rev.bookings?.nome_ospite || 'N/A'}</p>
-                                    <span className="text-xs text-gray-400 bg-white border px-1 rounded">{rev.bookings?.properties_real?.nome}</span>
-                                </div>
-                                <p className="text-sm text-gray-500 capitalize">{rev.category?.replace('_', ' ') || 'Generico'}</p>
-                                {(rev.notes || rev.description) && <p className="text-xs text-blue-600 mt-1 italic">"{rev.notes || rev.description}"</p>}
-                                {isOverdue && <Badge variant="destructive" className="mt-1 h-5 text-[10px]">SCADUTO</Badge>}
-                            </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-4 justify-between w-full md:w-auto mt-2 md:mt-0">
-                             <Button variant="outline" size="icon" className="h-8 w-8 text-blue-500 border-blue-200 hover:bg-blue-50" onClick={() => downloadIcs(rev)}><CalendarPlus className="w-4 h-4" /></Button>
-
-                            <div className="text-right min-w-[100px]">
-                                <p className={`font-bold ${rev.stato === 'pagato' ? 'text-green-600' : 'text-slate-600'}`}>€{rev.importo}</p>
-                                <p className="text-xs text-gray-400">Scad: {format(new Date(rev.data_scadenza), 'dd MMM yyyy')}</p>
-                            </div>
-                            
-                            <div className="flex gap-1">
-                                {rev.stato !== 'pagato' ? (
-                                    <Button size="sm" className="bg-green-600 hover:bg-green-700 h-8 text-xs" onClick={() => markAsPaid.mutate(rev.id)}>Incassa</Button>
-                                ) : (
-                                    <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 h-8 px-3">Pagato</Badge>
-                                )}
-                                
-                                {/* PULSANTE MODIFICA (NUOVO) */}
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-700 hover:bg-blue-50" onClick={() => handleEdit(rev)}>
-                                    <Pencil className="w-4 h-4" />
-                                </Button>
-
-                                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-300 hover:text-red-600 hover:bg-red-50" onClick={() => deletePayment.mutate(rev.id)}>
-                                    <Trash2 className="w-4 h-4" />
-                                </Button>
-                            </div>
-                        </div>
+          ) : (
+            groupedPaid.map(([monthKey, items]) => {
+              const isCollapsed = collapsedMonths[monthKey];
+              const monthTotal = items.reduce((s, r) => s + Number(r.importo), 0);
+              const monthLabel = format(parseISO(monthKey + '-01'), 'MMMM yyyy', { locale: it });
+              return (
+                <div key={monthKey} className="rounded-xl border overflow-hidden">
+                  <button
+                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                    onClick={() => toggleMonth(monthKey)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="font-semibold text-slate-700 capitalize">{monthLabel}</span>
+                      <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-bold">
+                        {fmt(monthTotal)}
+                      </span>
+                      <span className="text-xs text-slate-400">{items.length} pagamenti</span>
                     </div>
-                )})}
-                {revenues?.length === 0 && <div className="text-center py-12 text-gray-400">Nessun movimento registrato.</div>}
+                    {isCollapsed ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                  </button>
+                  {!isCollapsed && (
+                    <div className="divide-y bg-white">
+                      {items.map(r => (
+                        <RevenueRow key={r.id} rev={r} showPaidDate
+                          onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* ─────────────────────────────────────────────────────────
+          DIALOG: CREA NUOVO INCASSO
+      ───────────────────────────────────────────────────────── */}
+      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Nuovo Incasso / Piano Rateale</DialogTitle>
+            <DialogDescription>Seleziona proprietà e inquilino, poi compila i dettagli.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+
+            {/* Step 1: Proprietà */}
+            <div className="grid gap-2">
+              <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">1. Proprietà</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {properties?.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => { setSelectedProp(p.id); setForm(f => ({ ...f, booking_id: '' })); }}
+                    className={`text-left p-3 rounded-lg border text-sm font-medium transition-all
+                      ${selectedProp === p.id ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400' : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}`}
+                  >
+                    🏠 {p.nome}
+                  </button>
+                ))}
+              </div>
             </div>
-        </CardContent>
-      </Card>
+
+            {/* Step 2: Inquilino */}
+            {selectedProp && (
+              <div className="grid gap-2">
+                <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">2. Inquilino</Label>
+                {activeTenants.length === 0 ? (
+                  <p className="text-sm text-slate-400 bg-slate-50 border rounded p-3">Nessun booking per questa proprietà.</p>
+                ) : (
+                  <div className="grid gap-1.5 max-h-32 overflow-y-auto">
+                    {activeTenants.map((t: any) => (
+                      <button
+                        key={t.id}
+                        onClick={() => setForm(f => ({ ...f, booking_id: t.id }))}
+                        className={`text-left p-2.5 rounded-lg border text-sm transition-all
+                          ${form.booking_id === t.id ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                      >
+                        👤 {t.nome_ospite}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Step 3: Dettagli */}
+            {form.booking_id && (
+              <>
+                <div className="grid gap-2">
+                  <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">3. Dettagli</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs">Importo (€) *</Label>
+                      <Input type="number" placeholder="0.00" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
+                    </div>
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs">Prima scadenza *</Label>
+                      <Input type="date" value={form.date_start} onChange={e => setForm(f => ({ ...f, date_start: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs">Categoria</Label>
+                    <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {Object.entries(CATEGORY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs">Note</Label>
+                    <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Es. Affitto maggio 2026" />
+                  </div>
+                </div>
+
+                {/* Step 4: Ricorrenza */}
+                <div className="bg-slate-50 border rounded-lg p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-2 cursor-pointer text-sm">
+                      <RefreshCw className="w-4 h-4 text-blue-500" /> Piano rateale mensile
+                    </Label>
+                    <Switch checked={form.is_recurring} onCheckedChange={c => setForm(f => ({ ...f, is_recurring: c }))} />
+                  </div>
+                  {form.is_recurring && (
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs">Numero di rate mensili</Label>
+                      <Input type="number" min="2" max="60" value={form.months} onChange={e => setForm(f => ({ ...f, months: e.target.value }))} className="bg-white" />
+                    </div>
+                  )}
+                  {recurringTotal && (
+                    <div className="text-xs bg-blue-50 border border-blue-100 rounded p-2 text-blue-700">
+                      📊 Genererà <strong>{form.months} rate</strong> da <strong>€{parseFloat(form.amount || '0').toLocaleString('it-IT')}</strong> / mese → totale <strong>{fmt(recurringTotal)}</strong>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateOpen(false)}>Annulla</Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700 font-bold"
+                onClick={handleCreate}
+                disabled={!form.booking_id || !form.amount || createPaymentPlan.isPending}
+              >
+                {createPaymentPlan.isPending ? 'Registrazione...' : form.is_recurring ? `Genera ${form.months} rate` : 'Registra'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─────────────────────────────────────────────────────────
+          DIALOG: MODIFICA
+      ───────────────────────────────────────────────────────── */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Modifica Incasso</DialogTitle>
+            <DialogDescription>{editTarget?.bookings?.nome_ospite} · {CATEGORY_LABELS[editTarget?.category] || ''}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <Label>Importo (€)</Label>
+                <Input type="number" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} />
+              </div>
+              <div className="grid gap-2">
+                <Label>Data Scadenza</Label>
+                <Input type="date" value={editForm.date_start} onChange={e => setEditForm(f => ({ ...f, date_start: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Categoria</Label>
+              <Select value={editForm.category} onValueChange={v => setEditForm(f => ({ ...f, category: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {Object.entries(CATEGORY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid gap-2">
+              <Label>Note</Label>
+              <Input value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setEditTarget(null)}>Annulla</Button>
+              <Button className="bg-blue-600 hover:bg-blue-700" onClick={handleSaveEdit} disabled={updatePayment.isPending}>
+                {updatePayment.isPending ? 'Salvataggio...' : 'Salva'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─────────────────────────────────────────────────────────
+          DIALOG: CONFERMA INCASSO
+      ───────────────────────────────────────────────────────── */}
+      <Dialog open={!!confirmTarget} onOpenChange={(o) => !o && setConfirmTarget(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Conferma Incasso</DialogTitle>
+            <DialogDescription>
+              {confirmTarget?.bookings?.nome_ospite} ·{' '}
+              <strong>€{Number(confirmTarget?.importo || 0).toLocaleString('it-IT', { minimumFractionDigits: 2 })}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="grid gap-2">
+              <Label>Data pagamento ricevuto</Label>
+              <Input type="date" value={confirmDate} onChange={e => setConfirmDate(e.target.value)} />
+            </div>
+            <div className="grid gap-2">
+              <Label>Metodo di pagamento</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {METHOD_OPTIONS.map(m => (
+                  <button
+                    key={m.value}
+                    onClick={() => setConfirmMethod(m.value)}
+                    className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm font-medium transition-all
+                      ${confirmMethod === m.value ? 'border-green-500 bg-green-50 text-green-700 ring-1 ring-green-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    {m.icon} {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmTarget(null)}>Annulla</Button>
+              <Button className="bg-green-600 hover:bg-green-700 font-bold gap-1.5" onClick={handleConfirmIncasso} disabled={confirmPayment.isPending}>
+                <CheckCircle className="w-4 h-4" />
+                {confirmPayment.isPending ? 'Registrazione...' : 'Conferma Incasso'}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
