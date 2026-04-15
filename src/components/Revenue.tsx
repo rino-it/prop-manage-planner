@@ -523,7 +523,7 @@ export default function Revenue() {
           DIALOG: CREA NUOVO INCASSO
       ───────────────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[85svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuovo Incasso / Piano Rateale</DialogTitle>
             <DialogDescription>Seleziona proprietà e inquilino, poi compila i dettagli.</DialogDescription>
@@ -641,7 +641,7 @@ export default function Revenue() {
           DIALOG: MODIFICA
       ───────────────────────────────────────────────────────── */}
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md max-h-[85svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Modifica Incasso</DialogTitle>
             <DialogDescription>{editTarget?.bookings?.nome_ospite} · {CATEGORY_LABELS[editTarget?.category] || ''}</DialogDescription>
@@ -684,7 +684,7 @@ export default function Revenue() {
           DIALOG: CONFERMA INCASSO
       ───────────────────────────────────────────────────────── */}
       <Dialog open={!!confirmTarget} onOpenChange={(o) => !o && setConfirmTarget(null)}>
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent className="sm:max-w-sm max-h-[85svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Conferma Incasso</DialogTitle>
             <DialogDescription>

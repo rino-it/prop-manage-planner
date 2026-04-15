@@ -379,7 +379,7 @@ export default function Activities() {
                 <Plus className="w-4 h-4" /> Nuova Attività
               </Button>
             </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Nuova Attività</DialogTitle>
                 <DialogDescription>Se non sai ancora la data, lascia "Data prevista" vuoto — l'attività andrà in "Da Schedulare".</DialogDescription>
