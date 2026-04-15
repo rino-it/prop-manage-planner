@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from '@/components/ui/dialog';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -372,18 +373,16 @@ export default function Activities() {
             </Button>
           </div>
 
-          {/* Crea attività */}
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" className="gap-1.5">
-                <Plus className="w-4 h-4" /> Nuova Attività
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>Nuova Attività</DialogTitle>
-                <DialogDescription>Se non sai ancora la data, lascia "Data prevista" vuoto — l'attività andrà in "Da Schedulare".</DialogDescription>
-              </DialogHeader>
+          {/* Crea attività — Sheet per compatibilità iPad/iOS */}
+          <Button size="sm" className="gap-1.5" onClick={() => setIsDialogOpen(true)}>
+            <Plus className="w-4 h-4" /> Nuova Attività
+          </Button>
+          <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+            <SheetContent side="bottom" className="h-[92svh] overflow-y-auto rounded-t-2xl px-4 pb-8">
+              <SheetHeader className="mb-4">
+                <SheetTitle>Nuova Attività</SheetTitle>
+                <SheetDescription>Se non sai ancora la data, lascia "Data prevista" vuoto — l'attività andrà in "Da Schedulare".</SheetDescription>
+              </SheetHeader>
               <div className="space-y-4 mt-2">
 
                 {/* Immobile / Veicolo */}
@@ -406,7 +405,7 @@ export default function Activities() {
                   <Label>{targetType === 'real' ? 'Seleziona Immobile' : 'Seleziona Veicolo'}</Label>
                   <Select value={formData.target_id} onValueChange={v => setFormData({ ...formData, target_id: v, booking_id: 'none' })}>
                     <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="max-h-48 overflow-y-auto">
                       {targetType === 'real'
                         ? realProperties?.map(p => <SelectItem key={p.id} value={p.id}>🏠 {p.nome}</SelectItem>)
                         : mobileProperties?.map(m => <SelectItem key={m.id} value={m.id}>🚗 {m.veicolo} ({m.targa})</SelectItem>)
@@ -430,7 +429,7 @@ export default function Activities() {
                     <Label>Inquilino (Opzionale)</Label>
                     <Select value={formData.booking_id} onValueChange={v => setFormData({ ...formData, booking_id: v })} disabled={!formData.target_id}>
                       <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-48 overflow-y-auto">
                         <SelectItem value="none">-- Nessuno --</SelectItem>
                         {activeTenants?.map(t => <SelectItem key={t.id} value={t.id}>{t.nome_ospite}</SelectItem>)}
                       </SelectContent>
@@ -447,7 +446,7 @@ export default function Activities() {
                     <Label>Priorità</Label>
                     <Select value={formData.priorita} onValueChange={v => setFormData({ ...formData, priorita: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
+                      <SelectContent className="max-h-48 overflow-y-auto">
                         <SelectItem value="bassa">Bassa</SelectItem>
                         <SelectItem value="media">Media</SelectItem>
                         <SelectItem value="alta">Alta</SelectItem>
@@ -501,8 +500,8 @@ export default function Activities() {
                   {isUploading ? 'Caricamento...' : 'Crea Attività'}
                 </Button>
               </div>
-            </DialogContent>
-          </Dialog>
+            </SheetContent>
+          </Sheet>
         </div>
       </PageHeader>
 
