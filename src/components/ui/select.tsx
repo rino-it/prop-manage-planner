@@ -4,7 +4,11 @@ import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
-const Select = SelectPrimitive.Root
+// modal={false} — fix iOS Safari touch-lock bug (Radix overlay non si rimuove su touch devices)
+const Select = (props: React.ComponentProps<typeof SelectPrimitive.Root>) => (
+  <SelectPrimitive.Root modal={false} {...props} />
+)
+Select.displayName = "Select"
 
 const SelectGroup = SelectPrimitive.Group
 
