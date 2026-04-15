@@ -226,6 +226,35 @@ async function processCheckinEmails(supabase: ReturnType<typeof createClient>): 
   return sentCount;
 }
 
+async function triggerTicketReminders(
+  supabase: ReturnType<typeof createClient>
+): Promise<{ sent: number; error?: string }> {
+  const functionUrl =
+    Deno.env.get("SUPABASE_URL")?.replace(/\/$/, "") + "/functions/v1/ticket-reminder-scheduler";
+  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  if (!functionUrl || !serviceKey) {
+    return { sent: 0, error: "Missing configuration" };
+  }
+
+  const response = await fetch(functionUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${serviceKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({}),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.text();
+    return { sent: 0, error: errorData };
+  }
+
+  const result = await response.json();
+  return { sent: result.reminders_sent || 0 };
+}
+
 async function triggerAiDigest(
   supabase: ReturnType<typeof createClient>
 ): Promise<{ sent: boolean; error?: string }> {
@@ -303,12 +332,20 @@ Deno.serve(async (req: Request) => {
       console.error("AI digest trigger failed (non-blocking):", digestError);
     }
 
+    let ticketRemindersResult = null;
+    try {
+      ticketRemindersResult = await triggerTicketReminders(supabase);
+    } catch (ticketError) {
+      console.error("Ticket reminders trigger failed (non-blocking):", ticketError);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         payment_reminders_sent: remindersSent,
         checkin_emails_sent: checkinsSent,
         ai_digest: digestResult,
+        ticket_reminders: ticketRemindersResult,
         timestamp: new Date().toISOString(),
       }),
       {
