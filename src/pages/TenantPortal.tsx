@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils, Lock, MapPin, ExternalLink, Ticket, MessageCircle, Send, CreditCard } from 'lucide-react';
+import { Loader2, Home, FileText, Wrench, LogOut, Download, Euro, AlertTriangle, Plus, FileQuestion, Copy, UserCog, Utensils, Lock, MapPin, ExternalLink, Ticket, MessageCircle, Send, CreditCard, Trash2, Phone, Upload, CheckCircle, IdCard } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -45,6 +45,8 @@ function TenantPortalInner() {
   const [serviceDetailOpen, setServiceDetailOpen] = useState<any>(null);
   const [serviceMessage, setServiceMessage] = useState('');
   const [showContactForm, setShowContactForm] = useState(false);
+  const [isUploadingCI, setIsUploadingCI] = useState(false);
+  const ciInputRef = useRef<HTMLInputElement>(null);
 
   // 1. Recupero Booking tramite ID
   const { data: booking, isLoading: bookingLoading } = useQuery({
@@ -121,6 +123,66 @@ function TenantPortalInner() {
   });
 
   const hasContactInfo = booking?.telefono_ospite && booking?.email_ospite;
+  const isLungo = booking?.tipo_affitto === 'lungo';
+
+  // Query info proprietà lungo termine (differenziata, contatti, regolamento)
+  const { data: propertyInfo } = useQuery({
+    queryKey: ['property-lungo-info', booking?.property_id],
+    queryFn: async () => {
+      if (!booking?.property_id) return null;
+      const { data } = await supabase
+        .from('properties_real')
+        .select('house_rules, differenziata_info, contatti_utili, wifi_ssid, wifi_password')
+        .eq('id', booking.property_id)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!booking?.property_id && isLungo,
+  });
+
+  // Query bollette/spese inoltrate all'inquilino
+  const { data: tenantBills = [] } = useQuery({
+    queryKey: ['tenant-bills', booking?.id],
+    queryFn: async () => {
+      if (!booking?.id) return [];
+      const { data } = await supabase
+        .from('payments')
+        .select('*')
+        .eq('tenant_booking_id', booking.id)
+        .eq('visible_tenant', true)
+        .order('scadenza', { ascending: false });
+      return data || [];
+    },
+    enabled: !!booking?.id && isLungo,
+  });
+
+  // Check CI già caricata
+  const ciDoc = documents.find((d: any) => d.ai_doc_type === 'carta_identita' || d.filename?.toLowerCase().includes('carta') || d.filename?.toLowerCase().includes('identit'));
+
+  // Upload carta identità
+  const uploadCI = async (file: File) => {
+    if (!booking?.id) return;
+    setIsUploadingCI(true);
+    try {
+      const fileName = `ci_${booking.id}_${Date.now()}_${file.name.replace(/\s+/g, '_')}`;
+      const { error: uploadError } = await supabase.storage.from('documents').upload(fileName, file);
+      if (uploadError) throw uploadError;
+      const { error: dbError } = await supabase.from('booking_documents').insert({
+        booking_id: booking.id,
+        filename: file.name,
+        file_url: fileName,
+        ai_doc_type: 'carta_identita',
+        status: 'pending',
+      });
+      if (dbError) throw dbError;
+      queryClient.invalidateQueries({ queryKey: ['tenant-documents', booking.id] });
+      toast({ title: 'Documento caricato', description: 'La tua carta d\'identità è stata inviata al proprietario.' });
+    } catch (e: any) {
+      toast({ title: 'Errore caricamento', description: e.message, variant: 'destructive' });
+    } finally {
+      setIsUploadingCI(false);
+    }
+  };
 
   const handleEmailChange = (email: string) => {
     setContactForm({ ...contactForm, email });
@@ -388,7 +450,183 @@ function TenantPortalInner() {
           </Card>
         )}
 
-        {hasContactInfo && (<>
+        {hasContactInfo && isLungo && (<>
+        {/* ═══════════════════════════════════════════════════
+            PORTALE LUNGO TERMINE
+        ═══════════════════════════════════════════════════ */}
+        <Card className="bg-slate-900 text-white border-none shadow-xl overflow-hidden">
+          <CardHeader>
+            <CardTitle className="text-xl">Ciao, {booking.nome_ospite} 👋</CardTitle>
+            <CardDescription className="text-slate-400">
+              {isReal ? property?.nome : property?.veicolo} · dal {booking.data_inizio ? new Date(booking.data_inizio).toLocaleDateString('it-IT', { day:'2-digit', month:'long', year:'numeric' }) : ''}
+            </CardDescription>
+          </CardHeader>
+          {propertyInfo?.wifi_password && (
+            <CardFooter className="bg-white/5 border-t border-white/10">
+              <div className="flex justify-between items-center w-full py-1">
+                <div>
+                  <p className="text-[10px] text-slate-400 uppercase font-bold">WiFi</p>
+                  <p className="text-sm font-mono">{propertyInfo.wifi_password}</p>
+                </div>
+                <Button size="icon" variant="ghost" className="text-slate-400 hover:text-white" onClick={() => copyToClipboard(propertyInfo.wifi_password)}>
+                  <Copy className="w-4 h-4"/>
+                </Button>
+              </div>
+            </CardFooter>
+          )}
+        </Card>
+
+        {/* Carta identità */}
+        <Card className={ciDoc ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'}>
+          <CardContent className="p-4 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className={`p-2 rounded-full ${ciDoc ? 'bg-green-100' : 'bg-amber-100'}`}>
+                <IdCard className={`w-5 h-5 ${ciDoc ? 'text-green-600' : 'text-amber-600'}`} />
+              </div>
+              <div>
+                <p className={`text-sm font-semibold ${ciDoc ? 'text-green-800' : 'text-amber-800'}`}>
+                  {ciDoc ? 'Documento identità caricato ✓' : 'Carta d\'identità richiesta'}
+                </p>
+                <p className={`text-xs ${ciDoc ? 'text-green-600' : 'text-amber-600'}`}>
+                  {ciDoc ? `${ciDoc.filename} · ${ciDoc.status === 'approved' ? 'Approvato' : 'In revisione'}` : 'Carica il fronte e retro della tua CI'}
+                </p>
+              </div>
+            </div>
+            {!ciDoc && (
+              <>
+                <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 shrink-0"
+                  onClick={() => ciInputRef.current?.click()} disabled={isUploadingCI}>
+                  {isUploadingCI ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Upload className="w-4 h-4 mr-1" /> Carica</>}
+                </Button>
+                <input ref={ciInputRef} type="file" accept="image/*,application/pdf" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadCI(f); }} />
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Tabs defaultValue="casa" className="w-full">
+          <TabsList className="grid w-full grid-cols-3 mb-4">
+            <TabsTrigger value="casa" className="text-xs">🏠 La Casa</TabsTrigger>
+            <TabsTrigger value="bollette" className="text-xs">💡 Bollette</TabsTrigger>
+            <TabsTrigger value="segnalazioni" className="text-xs">🔧 Segnalazioni</TabsTrigger>
+          </TabsList>
+
+          {/* TAB: LA CASA */}
+          <TabsContent value="casa" className="space-y-4">
+            {propertyInfo?.house_rules && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">📋 Regolamento</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{propertyInfo.house_rules}</p>
+                </CardContent>
+              </Card>
+            )}
+            {propertyInfo?.differenziata_info && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">♻️ Raccolta Differenziata</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{propertyInfo.differenziata_info}</p>
+                </CardContent>
+              </Card>
+            )}
+            {propertyInfo?.contatti_utili && (
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-2">📞 Contatti Utili</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{propertyInfo.contatti_utili}</p>
+                </CardContent>
+              </Card>
+            )}
+            {!propertyInfo?.house_rules && !propertyInfo?.differenziata_info && !propertyInfo?.contatti_utili && (
+              <div className="text-center py-12 bg-white rounded-lg border border-dashed text-gray-400">
+                <Home className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Il proprietario non ha ancora aggiunto informazioni sulla casa.</p>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* TAB: BOLLETTE & SPESE */}
+          <TabsContent value="bollette" className="space-y-3">
+            {tenantBills.length === 0 ? (
+              <div className="text-center py-12 bg-white rounded-lg border border-dashed text-gray-400">
+                <Euro className="w-8 h-8 mx-auto mb-2 opacity-20" />
+                <p className="text-sm">Nessuna bolletta inoltrata ancora.</p>
+              </div>
+            ) : (
+              tenantBills.map((bill: any) => {
+                const isPaid = bill.stato === 'pagato';
+                const isOverdue = !isPaid && bill.scadenza && new Date(bill.scadenza) < new Date();
+                return (
+                  <Card key={bill.id} className={`border-l-4 ${isPaid ? 'border-l-green-400' : isOverdue ? 'border-l-red-400' : 'border-l-blue-400'}`}>
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm truncate">{bill.descrizione || bill.categoria}</p>
+                          <p className="text-xs text-slate-500">
+                            Scadenza: {bill.scadenza ? new Date(bill.scadenza).toLocaleDateString('it-IT') : '—'}
+                          </p>
+                          {bill.note && <p className="text-xs text-slate-400 mt-1">{bill.note}</p>}
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="font-bold text-base">€{Number(bill.importo).toFixed(2)}</p>
+                          <Badge className={`text-[10px] mt-1 ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : isOverdue ? 'bg-red-100 text-red-700 border-red-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                            {isPaid ? 'Pagata' : isOverdue ? 'Scaduta' : 'Da Pagare'}
+                          </Badge>
+                        </div>
+                      </div>
+                      {bill.allegato_url && (
+                        <Button size="sm" variant="outline" className="mt-3 h-7 text-xs w-full gap-1"
+                          onClick={() => downloadDoc(bill.allegato_url)}>
+                          <Download className="w-3 h-3" /> Scarica documento
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </TabsContent>
+
+          {/* TAB: SEGNALAZIONI */}
+          <TabsContent value="segnalazioni" className="space-y-4">
+            <Button className="w-full bg-blue-600 shadow-md" onClick={() => setNewTicketOpen(true)}>
+              <Plus className="w-4 h-4 mr-2" /> Nuova Segnalazione
+            </Button>
+            <div className="space-y-3">
+              {tickets.map((ticket: any) => (
+                <Card key={ticket.id}>
+                  <CardContent className="p-4">
+                    <div className="flex justify-between items-start mb-2">
+                      <h4 className="font-bold text-sm">{ticket.titolo}</h4>
+                      <Badge variant="outline" className="text-[10px]">{ticket.stato}</Badge>
+                    </div>
+                    <p className="text-xs text-slate-600 mb-2">{ticket.descrizione}</p>
+                    {ticket.admin_notes && (
+                      <div className="bg-blue-50 p-2 rounded border border-blue-100 text-[11px] text-blue-800">
+                        <strong>Risposta: </strong>{ticket.admin_notes}
+                      </div>
+                    )}
+                    <p className="text-[9px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
+                  </CardContent>
+                </Card>
+              ))}
+              {tickets.length === 0 && <p className="text-center text-gray-400 py-8">Nessuna segnalazione aperta.</p>}
+            </div>
+          </TabsContent>
+        </Tabs>
+        </>)}
+
+        {hasContactInfo && !isLungo && (<>
+        {/* ═══════════════════════════════════════════════════
+            PORTALE BREVE TERMINE (invariato)
+        ═══════════════════════════════════════════════════ */}
         <Card className="bg-slate-900 text-white border-none shadow-xl overflow-hidden relative">
             <CardHeader>
                 <CardTitle className="text-xl">{t('tenant.welcome')} {booking.nome_ospite}</CardTitle>

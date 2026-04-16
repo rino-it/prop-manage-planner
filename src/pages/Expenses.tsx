@@ -19,8 +19,9 @@ import {
   CheckCircle, Clock, AlertTriangle, TrendingDown,
   Pencil, Plus, Trash2,
   ChevronDown, ChevronUp, CreditCard, Banknote, Building2, Smartphone,
-  Filter, Home, Car, Euro, User,
+  Filter, Home, Car, Euro, User, Eye,
 } from 'lucide-react';
+import { Switch } from '@/components/ui/switch';
 import {
   format, isPast, isToday, addDays, parseISO,
   isBefore,
@@ -188,6 +189,8 @@ const DEFAULT_FORM = {
   stato: 'da_pagare',
   competence: 'owner' as 'owner' | 'tenant',
   payment_method: 'bonifico',
+  visible_tenant: false,
+  tenant_booking_id: '',
 };
 
 // ─── main component ───────────────────────────────────────────────────────────
@@ -215,6 +218,21 @@ export default function Expenses() {
     queryKey: ['mobile-properties'],
     queryFn: async () => {
       const { data } = await supabase.from('properties_mobile').select('id, veicolo, targa').eq('status', 'active');
+      return data || [];
+    },
+  });
+
+  // data: inquilini lungo termine attivi (per toggle "Inoltra all'inquilino")
+  const { data: longTermTenants = [] } = useQuery({
+    queryKey: ['long-term-tenants-expenses'],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0];
+      const { data } = await supabase
+        .from('bookings')
+        .select('id, nome_ospite, properties_real(nome)')
+        .eq('tipo_affitto', 'lungo')
+        .lte('data_inizio', today)
+        .gte('data_fine', today);
       return data || [];
     },
   });
@@ -248,6 +266,8 @@ export default function Expenses() {
         user_id: user?.id,
         property_real_id: form.targetType === 'real' ? form.targetId || null : null,
         property_mobile_id: form.targetType === 'mobile' ? form.targetId || null : null,
+        visible_tenant: form.visible_tenant,
+        tenant_booking_id: form.visible_tenant && form.tenant_booking_id ? form.tenant_booking_id : null,
       };
       if (editingId) {
         const { error } = await supabase.from('payments').update(payload).eq('id', editingId);
@@ -315,6 +335,8 @@ export default function Expenses() {
       stato: exp.stato || 'da_pagare',
       competence: exp.competence || 'owner',
       payment_method: exp.payment_method || 'bonifico',
+      visible_tenant: exp.visible_tenant || false,
+      tenant_booking_id: exp.tenant_booking_id || '',
     });
     setSheetOpen(true);
   };
@@ -682,6 +704,39 @@ export default function Expenses() {
                 </Select>
               </div>
             </div>
+
+            {/* Inoltra all'inquilino — solo se ci sono inquilini lungo termine attivi */}
+            {longTermTenants.length > 0 && (
+              <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-sm font-semibold text-blue-800 flex items-center gap-1.5">
+                      <Eye className="w-4 h-4" /> Mostra all'inquilino
+                    </Label>
+                    <p className="text-xs text-blue-600 mt-0.5">La spesa sarà visibile nel portale inquilino</p>
+                  </div>
+                  <Switch
+                    checked={form.visible_tenant}
+                    onCheckedChange={v => setForm(f => ({ ...f, visible_tenant: v, tenant_booking_id: v ? f.tenant_booking_id : '' }))}
+                  />
+                </div>
+                {form.visible_tenant && (
+                  <div className="grid gap-1.5">
+                    <Label className="text-xs">Inquilino destinatario</Label>
+                    <Select value={form.tenant_booking_id} onValueChange={v => setForm(f => ({ ...f, tenant_booking_id: v }))}>
+                      <SelectTrigger><SelectValue placeholder="Seleziona inquilino..." /></SelectTrigger>
+                      <SelectContent>
+                        {longTermTenants.map((t: any) => (
+                          <SelectItem key={t.id} value={t.id}>
+                            {t.nome_ospite} — {(t.properties_real as any)?.nome || ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Actions */}
             <div className="flex gap-2 pt-2">

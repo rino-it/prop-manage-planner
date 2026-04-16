@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import {
   Wifi, Key, Video, MapPin, FileText, Shield,
-  Save, Copy, ExternalLink, Check, Loader2, Home
+  Save, Copy, ExternalLink, Check, Loader2, Home, Trash2, Phone
 } from 'lucide-react';
 
 interface GuideFields {
@@ -24,6 +24,8 @@ interface GuideFields {
   maps_url: string;
   checkin_instructions: string;
   house_rules: string;
+  differenziata_info: string;
+  contatti_utili: string;
 }
 
 const EMPTY_GUIDE: GuideFields = {
@@ -34,6 +36,8 @@ const EMPTY_GUIDE: GuideFields = {
   maps_url: '',
   checkin_instructions: '',
   house_rules: '',
+  differenziata_info: '',
+  contatti_utili: '',
 };
 
 export default function GuestGuide() {
@@ -49,7 +53,7 @@ export default function GuestGuide() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('properties_real')
-        .select('id, nome, citta, via, wifi_ssid, wifi_password, keybox_code, checkin_video_url, maps_url, checkin_instructions, house_rules')
+        .select('id, nome, citta, via, wifi_ssid, wifi_password, keybox_code, checkin_video_url, maps_url, checkin_instructions, house_rules, differenziata_info, contatti_utili')
         .order('nome');
       if (error) throw error;
       return data;
@@ -71,6 +75,8 @@ export default function GuestGuide() {
       maps_url: prop.maps_url || '',
       checkin_instructions: prop.checkin_instructions || '',
       house_rules: prop.house_rules || '',
+      differenziata_info: prop.differenziata_info || '',
+      contatti_utili: prop.contatti_utili || '',
     });
   }, [selectedPropertyId, properties]);
 
@@ -87,6 +93,8 @@ export default function GuestGuide() {
           maps_url: form.maps_url || null,
           checkin_instructions: form.checkin_instructions || null,
           house_rules: form.house_rules || null,
+          differenziata_info: form.differenziata_info || null,
+          contatti_utili: form.contatti_utili || null,
         } as any)
         .eq('id', selectedPropertyId);
       if (error) throw error;
@@ -322,15 +330,51 @@ export default function GuestGuide() {
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Shield className="w-4 h-4 text-orange-500" />
-                Regole della Casa
+                Regole della Casa / Regolamento
               </CardTitle>
-              <CardDescription>Regole che l'ospite deve rispettare durante il soggiorno</CardDescription>
+              <CardDescription>Regole per ospiti brevi e regolamento condominiale per inquilini lungo termine</CardDescription>
             </CardHeader>
             <CardContent>
               <Textarea
                 value={form.house_rules}
                 onChange={(e) => handleChange('house_rules', e.target.value)}
                 placeholder="Es. Silenzio dopo le 22:00. Non fumare all'interno. Raccolta differenziata obbligatoria..."
+                rows={4}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Trash2 className="w-4 h-4 text-green-600" />
+                Raccolta Differenziata
+              </CardTitle>
+              <CardDescription>Istruzioni per la raccolta differenziata (visibile agli inquilini lungo termine)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={form.differenziata_info}
+                onChange={(e) => handleChange('differenziata_info', e.target.value)}
+                placeholder="Es. Lunedì: plastica e vetro (sacchetto giallo). Mercoledì: organico. Venerdì: indifferenziata. Posizionare i sacchi entro le 7:00..."
+                rows={4}
+              />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Phone className="w-4 h-4 text-blue-500" />
+                Contatti Utili
+              </CardTitle>
+              <CardDescription>Numeri utili per gli inquilini (idraulico, elettricista, emergenze, condominio...)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                value={form.contatti_utili}
+                onChange={(e) => handleChange('contatti_utili', e.target.value)}
+                placeholder="Es. Idraulico: Mario Rossi 333-1234567&#10;Elettricista: Giuseppe Bianchi 347-9876543&#10;Emergenze gas: 800-900860&#10;Amministratore condominio: 02-12345678"
                 rows={4}
               />
             </CardContent>
