@@ -87,6 +87,8 @@ export default function Tickets() {
   const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
   const [triagingTicketId, setTriagingTicketId] = useState<string | null>(null);
   const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // FETCH DATI (INVARIATO)
   const { data: teamMembers = [] } = useQuery({
@@ -286,6 +288,22 @@ export default function Tickets() {
       if (error) throw error;
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['tickets'] }); toast({ title: "Ticket Riaperto" }); }
+  });
+
+  const deleteTicket = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('tickets').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      setDeleteTarget(null);
+      setDeleteConfirmText('');
+      toast({ title: 'Ticket eliminato' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Errore eliminazione', description: err.message, variant: 'destructive' });
+    }
   });
 
   const openFile = async (path: string) => {
@@ -603,6 +621,12 @@ export default function Tickets() {
                                                     <Button size="sm" variant="ghost" className="w-full text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={() => { if(confirm("Riaprire?")) reopenTicket.mutate(ticket.id); }}><RotateCcw className="w-3 h-3 mr-1" /> Riapri</Button>
                                                 </div>
                                             )}
+                                            <Button size="sm" variant="ghost"
+                                              className="w-full h-7 text-xs text-red-400 hover:text-red-600 hover:bg-red-50 gap-1"
+                                              title="Elimina ticket"
+                                              onClick={() => { setDeleteTarget(ticket); setDeleteConfirmText(''); }}>
+                                              <Trash2 className="w-3.5 h-3.5" /> Elimina
+                                            </Button>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -626,6 +650,52 @@ export default function Tickets() {
       </Tabs>
 
       {ticketManagerOpen && (<TicketManager ticket={ticketManagerOpen} isOpen={!!ticketManagerOpen} onClose={() => setTicketManagerOpen(null)} onUpdate={() => { queryClient.invalidateQueries({ queryKey: ['tickets'] }); }} isReadOnly={ticketManagerOpen.stato === 'risolto'} />)}
+
+      {/* ── Delete Confirmation Dialog ── */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteConfirmText(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-4 h-4" /> Elimina Ticket
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              Questa azione è <strong>irreversibile</strong>. Per confermare, riscrivi esattamente il titolo del ticket:
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 my-2">
+            <div className="bg-slate-50 border rounded px-3 py-2 text-sm font-mono text-gray-700 select-all break-all">
+              {deleteTarget?.titolo}
+            </div>
+            <Input
+              placeholder="Riscrivi il titolo qui..."
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              className="text-sm"
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter' && deleteConfirmText.trim() === deleteTarget?.titolo?.trim()) {
+                  deleteTicket.mutate(deleteTarget.id);
+                }
+              }}
+            />
+            {deleteConfirmText.length > 0 && deleteConfirmText.trim() !== deleteTarget?.titolo?.trim() && (
+              <p className="text-xs text-red-500">Il testo non corrisponde al titolo.</p>
+            )}
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteConfirmText(''); }}>
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText.trim() !== deleteTarget?.titolo?.trim() || deleteTicket.isPending}
+              onClick={() => deleteTicket.mutate(deleteTarget.id)}
+            >
+              {deleteTicket.isPending ? 'Eliminando...' : 'Elimina Definitivamente'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
