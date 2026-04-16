@@ -4,6 +4,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -12,7 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import {
   Plus, Home, Car, Users, Paperclip, X, Filter,
   Share2, ChevronDown, RotateCcw, CalendarDays, Phone, FileText, AlertCircle,
-  Clock, CheckCircle2, Wrench, AlertTriangle, ChevronRight, StickyNote
+  Clock, CheckCircle2, Wrench, AlertTriangle, ChevronRight, StickyNote, Trash2
 } from 'lucide-react';
 import { format, parseISO, isPast, isThisWeek } from 'date-fns';
 import { it } from 'date-fns/locale';
@@ -69,7 +70,7 @@ function sortByPriorityThenDate(tickets: any[]) {
 
 function TicketRow({
   ticket, teamMembers, generatingPdfId,
-  onPreview, onManage, onReopen, onContactPartner, onOpenFile
+  onPreview, onManage, onReopen, onContactPartner, onOpenFile, onDelete
 }: {
   ticket: any;
   teamMembers: any[];
@@ -79,6 +80,7 @@ function TicketRow({
   onReopen?: () => void;
   onContactPartner: (ticket: any, phone: string | null) => void;
   onOpenFile: (path: string) => void;
+  onDelete: () => void;
 }) {
   const meta = PRIORITY_META[ticket.priorita] ?? PRIORITY_META.media;
   const isGenerating = generatingPdfId === ticket.id;
@@ -236,6 +238,12 @@ function TicketRow({
           onClick={onManage}>
           Gestisci <ChevronRight className="w-3 h-3" />
         </Button>
+        <Button size="sm" variant="ghost"
+          className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+          title="Elimina ticket"
+          onClick={onDelete}>
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
       </div>
     </div>
   );
@@ -290,6 +298,8 @@ export default function Activities() {
   const [filterProp, setFilterProp]               = useState('all');
   const [activeTab, setActiveTab]                 = useState('aperto');
   const [generatingPdfId, setGeneratingPdfId]     = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget]           = useState<any>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
   // form
   const [targetType, setTargetType] = useState<'real' | 'mobile'>('real');
@@ -453,6 +463,22 @@ export default function Activities() {
     }
   });
 
+  const deleteTicket = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('tickets').delete().eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tickets'] });
+      setDeleteTarget(null);
+      setDeleteConfirmText('');
+      toast({ title: 'Ticket eliminato' });
+    },
+    onError: (err: any) => {
+      toast({ title: 'Errore eliminazione', description: err.message, variant: 'destructive' });
+    }
+  });
+
   const openFile = async (path: string) => {
     if (!path) return;
     const bucket = path.startsWith('ticket_doc_') ? 'ticket-files' : 'documents';
@@ -511,6 +537,7 @@ export default function Activities() {
             onReopen={showReopen ? () => reopenTicket.mutate(t.id) : undefined}
             onContactPartner={handleContactPartner}
             onOpenFile={openFile}
+            onDelete={() => { setDeleteTarget(t); setDeleteConfirmText(''); }}
           />
         ))}
       </div>
@@ -784,6 +811,54 @@ export default function Activities() {
           isReadOnly={ticketManagerOpen.stato === 'risolto'}
         />
       )}
+
+      {/* ── Delete Confirmation Dialog ── */}
+      <Dialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) { setDeleteTarget(null); setDeleteConfirmText(''); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <Trash2 className="w-4 h-4" /> Elimina Ticket
+            </DialogTitle>
+            <DialogDescription className="text-sm text-gray-600">
+              Questa azione è <strong>irreversibile</strong>. Per confermare, riscrivi esattamente il titolo del ticket:
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 my-2">
+            <div className="bg-slate-50 border rounded px-3 py-2 text-sm font-mono text-gray-700 select-all break-all">
+              {deleteTarget?.titolo}
+            </div>
+            <Input
+              placeholder="Riscrivi il titolo qui..."
+              value={deleteConfirmText}
+              onChange={e => setDeleteConfirmText(e.target.value)}
+              className="text-sm"
+              autoFocus
+              onKeyDown={e => {
+                if (e.key === 'Enter' && deleteConfirmText.trim() === deleteTarget?.titolo?.trim()) {
+                  deleteTicket.mutate(deleteTarget.id);
+                }
+              }}
+            />
+            {deleteConfirmText.length > 0 && deleteConfirmText.trim() !== deleteTarget?.titolo?.trim() && (
+              <p className="text-xs text-red-500">Il testo non corrisponde al titolo.</p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteConfirmText(''); }}>
+              Annulla
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirmText.trim() !== deleteTarget?.titolo?.trim() || deleteTicket.isPending}
+              onClick={() => deleteTicket.mutate(deleteTarget.id)}
+            >
+              {deleteTicket.isPending ? 'Eliminando...' : 'Elimina Definitivamente'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
