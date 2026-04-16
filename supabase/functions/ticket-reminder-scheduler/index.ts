@@ -53,6 +53,56 @@ async function sendWhatsApp(
   }
 }
 
+async function sendWhatsAppTemplate(
+  phoneNumberId: string,
+  accessToken: string,
+  toPhone: string,
+  templateName: string,
+  languageCode: string,
+  bodyParams: string[]
+): Promise<boolean> {
+  const normalized = toPhone.replace(/[\s\-\+]/g, "");
+
+  try {
+    const response = await fetch(
+      `https://graph.facebook.com/v21.0/${phoneNumberId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          messaging_product: "whatsapp",
+          to: normalized,
+          type: "template",
+          template: {
+            name: templateName,
+            language: { code: languageCode },
+            components: [
+              {
+                type: "body",
+                parameters: bodyParams.map((text) => ({ type: "text", text })),
+              },
+            ],
+          },
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      const err = await response.text();
+      console.error(`WhatsApp template error to ${normalized}:`, err);
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(`WhatsApp template fetch error to ${normalized}:`, err);
+    return false;
+  }
+}
+
 async function processTicketReminders(
   supabase: ReturnType<typeof createClient>
 ): Promise<ReminderResult> {
@@ -160,30 +210,24 @@ async function processTicketReminders(
         continue;
       }
 
-      // Costruisci messaggio
-      let message: string;
-      if (isToday) {
-        message =
-          `⚡ *Attività di OGGI*\n\n` +
-          `*${ticket.titolo}*\n` +
-          (propName ? `📍 ${propName}\n` : "") +
-          (ticket.descrizione ? `\n${ticket.descrizione}` : "") +
-          `\n\n_Buon lavoro, ${profile.first_name || ""}!_`;
-      } else {
-        message =
-          `🔔 *Promemoria attività — DOMANI*\n\n` +
-          `*${ticket.titolo}*\n` +
-          `📅 Data: domani (${tomorrowStr})\n` +
-          (propName ? `📍 ${propName}\n` : "") +
-          (ticket.descrizione ? `\n${ticket.descrizione}` : "") +
-          `\n\n_Ricordati di prepararti in anticipo!_`;
-      }
+      // Costruisci parametri template promemoria_attivita
+      // {{1}} nome operatore, {{2}} titolo ticket, {{3}} data, {{4}} proprietà
+      const dataLabel = isToday
+        ? todayStr
+        : tomorrowStr;
 
-      const sent = await sendWhatsApp(
+      const sent = await sendWhatsAppTemplate(
         config.phone_number_id,
         accessToken,
         profile.phone,
-        message
+        "promemoria_attivita",
+        "it",
+        [
+          profile.first_name || "Operatore",  // {{1}}
+          ticket.titolo,                        // {{2}}
+          dataLabel,                            // {{3}}
+          propName || "",                       // {{4}}
+        ]
       );
 
       if (sent) {
