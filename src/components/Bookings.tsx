@@ -52,6 +52,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const generateSchedule = useGeneratePaymentSchedule();
   const deletePayment = useDeleteTenantPayment();
   const [addPaymentOpen, setAddPaymentOpen] = useState(false);
+  const [addPaymentBookingId, setAddPaymentBookingId] = useState<string | null>(null);
+  const [addPaymentBookingName, setAddPaymentBookingName] = useState<string | undefined>(undefined);
   const [formNumeroOspiti, setFormNumeroOspiti] = useState(1);
   const [formTotalAmount, setFormTotalAmount] = useState('');
 
@@ -492,7 +494,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                 <Button
                                     size="sm"
                                     className="bg-blue-600 hover:bg-blue-700 h-8 text-xs"
-                                    onClick={() => setAddPaymentOpen(true)}
+                                    onClick={() => { setAddPaymentBookingId(customerSheetOpen?.id ?? null); setAddPaymentBookingName(customerSheetOpen?.nome_ospite); setAddPaymentOpen(true); }}
                                 >
                                     <Plus className="w-3.5 h-3.5 mr-1" /> Aggiungi
                                 </Button>
@@ -556,7 +558,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                     <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed">
                                         <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/>
                                         <p className="mb-3">Nessun pagamento.</p>
-                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs" onClick={() => setAddPaymentOpen(true)}>
+                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs" onClick={() => { setAddPaymentBookingId(customerSheetOpen?.id ?? null); setAddPaymentBookingName(customerSheetOpen?.nome_ospite); setAddPaymentOpen(true); }}>
                                             <Plus className="w-3.5 h-3.5 mr-1" /> Aggiungi il primo
                                         </Button>
                                     </div>
@@ -579,8 +581,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       <AddPaymentDialog
         open={addPaymentOpen}
         onOpenChange={setAddPaymentOpen}
-        bookingId={customerSheetOpen?.id ?? null}
-        bookingName={customerSheetOpen?.nome_ospite}
+        bookingId={addPaymentBookingId}
+        bookingName={addPaymentBookingName}
       />
 
       {managingTicket && (
