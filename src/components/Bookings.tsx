@@ -599,6 +599,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                   <Calendar
                     mode="single"
                     selected={editDateInizio}
+                    defaultMonth={editDateInizio}
                     onSelect={(d) => { setEditDateInizio(d); if (editDateFine && d && editDateFine <= d) setEditDateFine(undefined); }}
                     className="w-full"
                   />
@@ -610,6 +611,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                   <Calendar
                     mode="single"
                     selected={editDateFine}
+                    defaultMonth={editDateFine}
                     onSelect={setEditDateFine}
                     disabled={editDateInizio ? { before: addDays(editDateInizio, 1) } : undefined}
                     className="w-full"
