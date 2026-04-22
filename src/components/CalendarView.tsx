@@ -42,6 +42,7 @@ interface CalendarEvent {
   status: string;
   targetTab: string;
   isCompleted: boolean;
+  bookingId?: string;
 }
 
 function getIcon(type: EventType) {
@@ -146,13 +147,13 @@ export default function CalendarView() {
         id: `in-${b.id}`, date: inDate, type: 'checkin',
         title: `Check-in: ${b.nome_ospite}`, subtitle: b.properties_real?.nome || 'Proprieta',
         priority: 'alta', status: 'pending', targetTab: 'bookings',
-        isCompleted: isPast(inDate)
+        isCompleted: isPast(inDate), bookingId: b.id
       });
       events.push({
         id: `out-${b.id}`, date: outDate, type: 'checkout',
         title: `Check-out: ${b.nome_ospite}`, subtitle: b.properties_real?.nome || 'Proprieta',
         priority: 'alta', status: 'pending', targetTab: 'bookings',
-        isCompleted: isPast(outDate)
+        isCompleted: isPast(outDate), bookingId: b.id
       });
     });
 
@@ -273,8 +274,12 @@ export default function CalendarView() {
     hasWarning: { textDecoration: 'underline', textDecorationColor: '#f59e0b' }
   };
 
-  const handleNavigate = (path: string) => {
-    navigate(`/${path}`);
+  const handleNavigate = (path: string, bookingId?: string) => {
+    if (bookingId) {
+      navigate(`/${path}`, { state: { openBookingId: bookingId } });
+    } else {
+      navigate(`/${path}`);
+    }
   };
 
   return (
@@ -343,7 +348,7 @@ export default function CalendarView() {
               {dailyEvents.length > 0 ? (
                 <div className="divide-y divide-slate-100">
                   {dailyEvents.map((evt) => (
-                    <div key={evt.id} className="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer" onClick={() => handleNavigate(evt.targetTab)}>
+                    <div key={evt.id} className="p-3 hover:bg-slate-50 transition-colors flex items-center justify-between cursor-pointer" onClick={() => handleNavigate(evt.targetTab, evt.bookingId)}>
                       <div className="flex items-center gap-3">
                         <div className={`p-1.5 rounded-full ${evt.isCompleted ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600'}`}>
                           {getIcon(evt.type)}
@@ -385,7 +390,7 @@ export default function CalendarView() {
               <div className="divide-y divide-slate-100">
                 {upcomingEvents.length > 0 ? (
                   upcomingEvents.map((e) => (
-                    <div key={e.id} className="p-4 flex items-center justify-between hover:bg-green-50/30 transition-colors cursor-pointer" onClick={() => handleNavigate(e.targetTab)}>
+                    <div key={e.id} className="p-4 flex items-center justify-between hover:bg-green-50/30 transition-colors cursor-pointer" onClick={() => handleNavigate(e.targetTab, e.bookingId)}>
                       <div className="flex items-center gap-3">
                         <div className="bg-white p-1.5 rounded-lg text-slate-600 shadow-sm border border-slate-100 text-center w-12">
                           <span className="text-sm font-bold leading-none block">{format(e.date, 'dd')}</span>
@@ -431,7 +436,7 @@ export default function CalendarView() {
               <div className="divide-y divide-slate-100">
                 {calendarData.recentActivities.length > 0 ? (
                   calendarData.recentActivities.map((e) => (
-                    <div key={e.id} className="p-4 flex items-center justify-between hover:bg-amber-50/30 transition-colors cursor-pointer" onClick={() => handleNavigate(e.targetTab)}>
+                    <div key={e.id} className="p-4 flex items-center justify-between hover:bg-amber-50/30 transition-colors cursor-pointer" onClick={() => handleNavigate(e.targetTab, e.bookingId)}>
                       <div className="flex items-center gap-3">
                         <div className={`p-1.5 rounded-full ${e.isCompleted ? 'bg-slate-100 text-slate-400' : 'bg-amber-50 text-amber-600'}`}>
                           {getIcon(e.type)}
@@ -490,7 +495,7 @@ export default function CalendarView() {
                     </div>
                   ) : (
                     filteredAgendaEvents.map((evt) => (
-                      <div key={evt.id} className="flex items-center gap-4 p-3 bg-white border border-slate-100 rounded-lg hover:shadow-sm transition-all cursor-pointer group" onClick={() => handleNavigate(evt.targetTab)}>
+                      <div key={evt.id} className="flex items-center gap-4 p-3 bg-white border border-slate-100 rounded-lg hover:shadow-sm transition-all cursor-pointer group" onClick={() => handleNavigate(evt.targetTab, evt.bookingId)}>
                         <div className={`flex flex-col items-center justify-center w-12 h-12 rounded-lg font-bold ${evt.isCompleted ? 'bg-slate-100 text-slate-400' : 'bg-blue-50 text-blue-600'}`}>
                           <span className="text-lg leading-none">{format(evt.date, 'dd')}</span>
                           <span className="text-[9px] uppercase leading-none">{format(evt.date, 'MMM')}</span>

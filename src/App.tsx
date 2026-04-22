@@ -1,7 +1,7 @@
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate, useLocation } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
@@ -39,6 +39,16 @@ import Pricing from "./pages/Pricing";
 
 const queryClient = new QueryClient();
 
+function BookingsWrapper() {
+  const location = useLocation();
+  const [openBookingId, setOpenBookingId] = React.useState<string | null>(
+    (location.state as any)?.openBookingId ?? null
+  );
+  return <Bookings initialBookingId={openBookingId} onConsumeId={() => setOpenBookingId(null)} />;
+}
+
+
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -75,7 +85,7 @@ const App = () => (
               <Route path="tenants" element={<Tenants />} />
               <Route path="expenses" element={<Expenses />} />
               <Route path="revenue" element={<Revenue />} />
-              <Route path="bookings" element={<Bookings />} />
+              <Route path="bookings" element={<BookingsWrapper />} />
               <Route path="activities" element={<Activities />} />
               <Route path="team" element={<Team />} />
               <Route path="services" element={<Services />} />
