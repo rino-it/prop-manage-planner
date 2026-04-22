@@ -290,7 +290,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         <Popover>
                             <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal">{formData.data_fine ? format(formData.data_fine, "dd/MM/yyyy") : "Seleziona data"}</Button></PopoverTrigger>
                             <PopoverContent className="p-0" align="start">
-                                <Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} disabled={[...getOccupiedDates(formData.property_id), { before: formData.data_inizio || new Date() }]} />
+                                <Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} disabled={[...getOccupiedDates(formData.property_id), { before: formData.data_inizio ? addDays(formData.data_inizio, 1) : new Date() }]} />
                             </PopoverContent>
                         </Popover>
                     </div>
