@@ -361,11 +361,54 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-base md:text-lg">
                                             <div className="flex items-center gap-2">
                                                 <CalendarIcon className="w-5 h-5 text-blue-600"/>
-                                                <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <button className="font-bold hover:text-blue-600 hover:underline transition-colors cursor-pointer">
+                                                            {format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}
+                                                        </button>
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="p-0 w-auto" align="start">
+                                                        <Calendar
+                                                            mode="single"
+                                                            selected={new Date(customerSheetOpen?.data_inizio)}
+                                                            onSelect={(d) => {
+                                                                if (!d) return;
+                                                                updateBooking.mutate({
+                                                                    ...customerSheetOpen,
+                                                                    data_inizio: d,
+                                                                    data_fine: new Date(customerSheetOpen.data_fine),
+                                                                });
+                                                                setCustomerSheetOpen({ ...customerSheetOpen, data_inizio: format(d, 'yyyy-MM-dd') });
+                                                            }}
+                                                        />
+                                                    </PopoverContent>
+                                                </Popover>
                                             </div>
                                             <span className="text-gray-300 hidden sm:inline">→</span>
                                             <span className="text-gray-300 sm:hidden">fino al</span>
-                                            <span className="font-bold">{format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}</span>
+                                            <Popover>
+                                                <PopoverTrigger asChild>
+                                                    <button className="font-bold hover:text-blue-600 hover:underline transition-colors cursor-pointer">
+                                                        {format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}
+                                                    </button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="p-0 w-auto" align="start">
+                                                    <Calendar
+                                                        mode="single"
+                                                        selected={new Date(customerSheetOpen?.data_fine)}
+                                                        onSelect={(d) => {
+                                                            if (!d) return;
+                                                            updateBooking.mutate({
+                                                                ...customerSheetOpen,
+                                                                data_inizio: new Date(customerSheetOpen.data_inizio),
+                                                                data_fine: d,
+                                                            });
+                                                            setCustomerSheetOpen({ ...customerSheetOpen, data_fine: format(d, 'yyyy-MM-dd') });
+                                                        }}
+                                                        disabled={{ before: addDays(new Date(customerSheetOpen?.data_inizio || new Date()), 1) }}
+                                                    />
+                                                </PopoverContent>
+                                            </Popover>
                                         </div>
                                     </CardContent>
                                 </Card>
