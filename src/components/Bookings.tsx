@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
 import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck, Upload, Loader2 } from 'lucide-react';
-import { format, isBefore, addDays } from 'date-fns';
+import { format, isBefore, addDays, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useToast } from '@/hooks/use-toast';
@@ -241,7 +241,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     if (!bookings || !propertyId) return [];
     return bookings
       .filter(b => b.property_id === propertyId && b.id !== excludeBookingId)
-      .map(b => ({ from: new Date(b.data_inizio), to: new Date(b.data_fine) }));
+      .map(b => ({ from: new Date(b.data_inizio), to: subDays(new Date(b.data_fine), 1) }));
   };
 
   return (
@@ -366,14 +366,22 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                         </Button>
                                     </CardHeader>
                                     <CardContent>
-                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-base md:text-lg">
-                                            <div className="flex items-center gap-2">
-                                                <CalendarIcon className="w-5 h-5 text-blue-600"/>
-                                                <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
+                                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-base md:text-lg">
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Check-in</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <CalendarIcon className="w-4 h-4 text-green-600"/>
+                                                    <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
+                                                </div>
                                             </div>
-                                            <span className="text-gray-300 hidden sm:inline">→</span>
-                                            <span className="text-gray-300 sm:hidden">fino al</span>
-                                            <span className="font-bold">{format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}</span>
+                                            <span className="text-gray-300 hidden sm:inline text-2xl">→</span>
+                                            <div className="flex flex-col">
+                                                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Check-out</span>
+                                                <div className="flex items-center gap-1.5">
+                                                    <CalendarIcon className="w-4 h-4 text-red-500"/>
+                                                    <span className="font-bold">{format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}</span>
+                                                </div>
+                                            </div>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -697,7 +705,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         )}
                         <div className="text-sm text-gray-600 flex items-center gap-2 bg-gray-50 p-2 rounded">
                             <CalendarIcon className="w-4 h-4 text-gray-400" />
-                            {format(new Date(booking.data_inizio), 'dd MMM')} - {format(new Date(booking.data_fine), 'dd MMM yyyy')}
+                            <span className="text-green-600">↓{format(new Date(booking.data_inizio), 'dd MMM')}</span> <span className="text-gray-300">→</span> <span className="text-red-500">↑{format(new Date(booking.data_fine), 'dd MMM yyyy')}</span>
                         </div>
 
                         <div className="grid grid-cols-2 gap-2">
