@@ -36,6 +36,9 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [customerSheetOpen, setCustomerSheetOpen] = useState<any | null>(null);
+  const [editDatesOpen, setEditDatesOpen] = useState(false);
+  const [editDateInizio, setEditDateInizio] = useState<Date | undefined>();
+  const [editDateFine, setEditDateFine] = useState<Date | undefined>();
   const [editingBooking, setEditingBooking] = useState<any>(null);
   const [managingTicket, setManagingTicket] = useState<any>(null);
 
@@ -356,59 +359,21 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         <TabsContent value="overview" className="mt-0 space-y-6">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <Card className="bg-white border-slate-200 shadow-sm">
-                                    <CardHeader className="pb-2"><CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Soggiorno</CardTitle></CardHeader>
+                                    <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                                        <CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Soggiorno</CardTitle>
+                                        <Button variant="ghost" size="sm" className="h-7 px-2 text-gray-400 hover:text-blue-600" onClick={() => { setEditDateInizio(new Date(customerSheetOpen.data_inizio)); setEditDateFine(new Date(customerSheetOpen.data_fine)); setEditDatesOpen(true); }}>
+                                            <Pencil className="w-3.5 h-3.5 mr-1" /> Modifica
+                                        </Button>
+                                    </CardHeader>
                                     <CardContent>
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 text-base md:text-lg">
                                             <div className="flex items-center gap-2">
                                                 <CalendarIcon className="w-5 h-5 text-blue-600"/>
-                                                <Popover>
-                                                    <PopoverTrigger asChild>
-                                                        <button className="font-bold hover:text-blue-600 hover:underline transition-colors cursor-pointer">
-                                                            {format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}
-                                                        </button>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="p-0 w-auto" align="start">
-                                                        <Calendar
-                                                            mode="single"
-                                                            selected={new Date(customerSheetOpen?.data_inizio)}
-                                                            onSelect={(d) => {
-                                                                if (!d) return;
-                                                                updateBooking.mutate({
-                                                                    ...customerSheetOpen,
-                                                                    data_inizio: d,
-                                                                    data_fine: new Date(customerSheetOpen.data_fine),
-                                                                });
-                                                                setCustomerSheetOpen({ ...customerSheetOpen, data_inizio: format(d, 'yyyy-MM-dd') });
-                                                            }}
-                                                        />
-                                                    </PopoverContent>
-                                                </Popover>
+                                                <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
                                             </div>
                                             <span className="text-gray-300 hidden sm:inline">→</span>
                                             <span className="text-gray-300 sm:hidden">fino al</span>
-                                            <Popover>
-                                                <PopoverTrigger asChild>
-                                                    <button className="font-bold hover:text-blue-600 hover:underline transition-colors cursor-pointer">
-                                                        {format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}
-                                                    </button>
-                                                </PopoverTrigger>
-                                                <PopoverContent className="p-0 w-auto" align="start">
-                                                    <Calendar
-                                                        mode="single"
-                                                        selected={new Date(customerSheetOpen?.data_fine)}
-                                                        onSelect={(d) => {
-                                                            if (!d) return;
-                                                            updateBooking.mutate({
-                                                                ...customerSheetOpen,
-                                                                data_inizio: new Date(customerSheetOpen.data_inizio),
-                                                                data_fine: d,
-                                                            });
-                                                            setCustomerSheetOpen({ ...customerSheetOpen, data_fine: format(d, 'yyyy-MM-dd') });
-                                                        }}
-                                                        disabled={{ before: addDays(new Date(customerSheetOpen?.data_inizio || new Date()), 1) }}
-                                                    />
-                                                </PopoverContent>
-                                            </Popover>
+                                            <span className="font-bold">{format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}</span>
                                         </div>
                                     </CardContent>
                                 </Card>
@@ -620,7 +585,62 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         </DialogContent>
       </Dialog>
 
-      {/* ADD PAYMENT DIALOG */}
+      {/* EDIT DATES DIALOG */}
+      <Dialog open={editDatesOpen} onOpenChange={setEditDatesOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><CalendarIcon className="w-4 h-4 text-blue-600"/> Modifica Date Soggiorno</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Check-in</Label>
+                <div className="border rounded-md overflow-hidden">
+                  <Calendar
+                    mode="single"
+                    selected={editDateInizio}
+                    onSelect={(d) => { setEditDateInizio(d); if (editDateFine && d && editDateFine <= d) setEditDateFine(undefined); }}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Check-out</Label>
+                <div className="border rounded-md overflow-hidden">
+                  <Calendar
+                    mode="single"
+                    selected={editDateFine}
+                    onSelect={setEditDateFine}
+                    disabled={editDateInizio ? { before: addDays(editDateInizio, 1) } : undefined}
+                    className="w-full"
+                  />
+                </div>
+              </div>
+            </div>
+            {editDateInizio && editDateFine && (
+              <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-700 font-medium text-center">
+                {format(editDateInizio, 'dd MMM yyyy')} → {format(editDateFine, 'dd MMM yyyy')}
+                <span className="ml-2 text-blue-500 text-xs">({Math.round((editDateFine.getTime() - editDateInizio.getTime()) / 86400000)} notti)</span>
+              </div>
+            )}
+            <Button
+              className="w-full bg-blue-600 hover:bg-blue-700"
+              disabled={!editDateInizio || !editDateFine || updateBooking.isPending}
+              onClick={() => {
+                if (!editDateInizio || !editDateFine) return;
+                updateBooking.mutate({ ...customerSheetOpen, data_inizio: editDateInizio, data_fine: editDateFine });
+                setCustomerSheetOpen({ ...customerSheetOpen, data_inizio: format(editDateInizio, 'yyyy-MM-dd'), data_fine: format(editDateFine, 'yyyy-MM-dd') });
+                setEditDatesOpen(false);
+              }}
+            >
+              {updateBooking.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : null}
+              Salva Modifiche
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+            {/* ADD PAYMENT DIALOG */}
       <AddPaymentDialog
         open={addPaymentOpen}
         onOpenChange={setAddPaymentOpen}
