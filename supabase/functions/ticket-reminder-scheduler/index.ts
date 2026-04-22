@@ -220,13 +220,13 @@ async function processTicketReminders(
         config.phone_number_id,
         accessToken,
         profile.phone,
-        "promemoria_attivita",
-        "it",
+        "appointment_reminder",
+        "en_US",
         [
-          profile.first_name || "Operatore",  // {{1}}
-          ticket.titolo,                        // {{2}}
-          dataLabel,                            // {{3}}
-          propName || "",                       // {{4}}
+          profile.first_name || "Operatore",  // {{1}} nome
+          ticket.titolo,                        // {{2}} titolo ticket
+          dataLabel,                            // {{3}} data
+          propName || "—",                      // {{4}} proprietà
         ]
       );
 
