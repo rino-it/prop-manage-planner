@@ -1,3 +1,4 @@
+import React, { useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -41,7 +42,7 @@ const queryClient = new QueryClient();
 
 function BookingsWrapper() {
   const location = useLocation();
-  const [openBookingId, setOpenBookingId] = React.useState<string | null>(
+  const [openBookingId, setOpenBookingId] = useState<string | null>(
     (location.state as any)?.openBookingId ?? null
   );
   return <Bookings initialBookingId={openBookingId} onConsumeId={() => setOpenBookingId(null)} />;
