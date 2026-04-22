@@ -141,9 +141,13 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
     }
   };
 
-  const navigateTo = (path: string) => {
+  const navigateTo = (path: string, bookingId?: string) => {
     setSelectedItem(null);
-    navigate(path);
+    if (bookingId) {
+      navigate(path, { state: { openBookingId: bookingId } });
+    } else {
+      navigate(path);
+    }
   };
 
   const today = new Date();
@@ -436,13 +440,13 @@ function BookingDetail({
   onAddNote: () => void;
   addingNote: boolean;
   onDeleteNote: (id: string) => void;
-  onNavigate: (path: string) => void;
+  onNavigate: (path: string, bookingId?: string) => void;
 }) {
   const sc = getSourceColors(booking.source);
   const nights = differenceInCalendarDays(parseISO(booking.data_fine), parseISO(booking.data_inizio));
 
   const navLinks = [
-    { label: 'Prenotazioni', path: '/bookings', icon: CalendarIcon },
+    { label: 'Prenotazioni', path: '/bookings', icon: CalendarIcon, useBookingId: true },
     { label: 'Pagamenti', path: '/revenue', icon: CreditCard },
     { label: 'Documenti', path: '/accoglienza/documenti', icon: FileText },
     { label: 'Messaggi', path: '/messaggi', icon: MessageCircle },
@@ -562,7 +566,7 @@ function BookingDetail({
             return (
               <button
                 key={link.path}
-                onClick={() => onNavigate(link.path)}
+                onClick={() => onNavigate(link.path, (link as any).useBookingId ? booking.id : undefined)}
                 className="flex items-center gap-2 p-2 sm:p-2.5 rounded-lg border hover:bg-muted/50 active:bg-muted transition-colors text-left w-full"
               >
                 <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-muted-foreground shrink-0" />
