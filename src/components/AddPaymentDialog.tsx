@@ -14,7 +14,7 @@ import { format } from 'date-fns';
 interface AddPaymentDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  bookingId: string;
+  bookingId: string | null;
   bookingName?: string;
 }
 
@@ -48,7 +48,7 @@ export default function AddPaymentDialog({ open, onOpenChange, bookingId, bookin
   };
 
   const handleSubmit = () => {
-    if (!tipo || !importo || !dataScadenza) return;
+    if (!tipo || !importo || !dataScadenza || !bookingId) return;
     const amount = parseFloat(importo);
     if (isNaN(amount) || amount <= 0) return;
 

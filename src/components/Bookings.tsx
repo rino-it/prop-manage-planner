@@ -579,7 +579,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       <AddPaymentDialog
         open={addPaymentOpen}
         onOpenChange={setAddPaymentOpen}
-        bookingId={customerSheetOpen?.id || ''}
+        bookingId={customerSheetOpen?.id ?? null}
         bookingName={customerSheetOpen?.nome_ospite}
       />
 
