@@ -326,17 +326,17 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                     </div>
                     <div className="min-w-0 flex-1">
                         <DialogTitle className="text-base md:text-xl font-bold text-gray-900 truncate">{customerSheetOpen?.nome_ospite}</DialogTitle>
-                        <p className="text-xs text-gray-500 flex flex-wrap items-center gap-1 mt-0.5">
-                            <span className="font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 truncate max-w-[120px] sm:max-w-[200px]">{customerSheetOpen?.properties_real?.nome}</span>
+                        <p className="text-xs sm:text-sm text-gray-500 flex flex-wrap items-center gap-1 mt-0.5">
+                            <span className="font-semibold text-blue-700 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 truncate max-w-[140px] sm:max-w-[200px]">{customerSheetOpen?.properties_real?.nome}</span>
                             <span className="text-gray-400">|</span>
                             <span className="capitalize">{customerSheetOpen?.tipo_affitto} Termine</span>
                         </p>
                     </div>
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                        <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200 h-7 text-[10px] px-2">
-                            <Copy className="w-3 h-3 mr-1" /> Link
+                        <Button variant="outline" size="sm" onClick={() => copyLink(customerSheetOpen)} className="bg-white hover:bg-slate-50 text-blue-600 border-blue-200 h-9 sm:h-7 text-xs px-2.5">
+                            <Copy className="w-3.5 h-3.5 mr-1" /> Link
                         </Button>
-                        <Badge className={`text-[9px] ${customerSheetOpen?.documents_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                        <Badge className={`text-[10px] ${customerSheetOpen?.documents_approved ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
                             {customerSheetOpen?.documents_approved ? 'Sbloccato' : 'Bloccato'}
                         </Badge>
                     </div>
@@ -347,10 +347,10 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 <Tabs defaultValue="overview" className="flex-1 min-h-0 flex flex-col">
                     <div className="px-4 md:px-6 pt-4 border-b bg-white shrink-0">
                         <TabsList className="w-full grid grid-cols-4">
-                            <TabsTrigger value="overview" className="text-xs sm:text-sm px-1">Panoramica</TabsTrigger>
-                            <TabsTrigger value="docs" className="text-xs sm:text-sm px-1">Documenti</TabsTrigger>
-                            <TabsTrigger value="tickets" className="text-xs sm:text-sm px-1">Ticket</TabsTrigger>
-                            <TabsTrigger value="payments" className="text-xs sm:text-sm px-1">Contabilita</TabsTrigger>
+                            <TabsTrigger value="overview" className="text-sm px-1">Panoramica</TabsTrigger>
+                            <TabsTrigger value="docs" className="text-sm px-1">Documenti</TabsTrigger>
+                            <TabsTrigger value="tickets" className="text-sm px-1">Ticket</TabsTrigger>
+                            <TabsTrigger value="payments" className="text-sm px-1">Contabilita</TabsTrigger>
                         </TabsList>
                     </div>
 
@@ -361,14 +361,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                 <Card className="bg-white border-slate-200 shadow-sm">
                                     <CardHeader className="pb-2 flex flex-row items-center justify-between">
                                         <CardTitle className="text-sm text-gray-500 font-medium uppercase tracking-wider">Soggiorno</CardTitle>
-                                        <Button variant="ghost" size="sm" className="h-7 px-2 text-gray-400 hover:text-blue-600" onClick={() => { setEditDateInizio(new Date(customerSheetOpen.data_inizio)); setEditDateFine(new Date(customerSheetOpen.data_fine)); setEditDatesOpen(true); }}>
+                                        <Button variant="ghost" size="sm" className="h-9 sm:h-7 px-2 text-gray-400 hover:text-blue-600 text-sm sm:text-xs" onClick={() => { setEditDateInizio(new Date(customerSheetOpen.data_inizio)); setEditDateFine(new Date(customerSheetOpen.data_fine)); setEditDatesOpen(true); }}>
                                             <Pencil className="w-3.5 h-3.5 mr-1" /> Modifica
                                         </Button>
                                     </CardHeader>
                                     <CardContent>
                                         <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 text-base md:text-lg">
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Check-in</span>
+                                                <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Check-in</span>
                                                 <div className="flex items-center gap-1.5">
                                                     <CalendarIcon className="w-4 h-4 text-green-600"/>
                                                     <span className="font-bold">{format(new Date(customerSheetOpen?.data_inizio || new Date()), 'dd MMM yyyy')}</span>
@@ -376,7 +376,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                             </div>
                                             <span className="text-gray-300 hidden sm:inline text-2xl">→</span>
                                             <div className="flex flex-col">
-                                                <span className="text-[10px] text-gray-400 uppercase tracking-wider font-semibold">Check-out</span>
+                                                <span className="text-xs text-gray-400 uppercase tracking-wider font-semibold">Check-out</span>
                                                 <div className="flex items-center gap-1.5">
                                                     <CalendarIcon className="w-4 h-4 text-red-500"/>
                                                     <span className="font-bold">{format(new Date(customerSheetOpen?.data_fine || new Date()), 'dd MMM yyyy')}</span>
@@ -407,11 +407,11 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 text-center">
                                     <h3 className="text-2xl font-bold text-blue-700">{activeTickets?.filter(t => t.stato !== 'risolto').length || 0}</h3>
-                                    <p className="text-xs text-blue-600 uppercase font-semibold">Ticket Aperti</p>
+                                    <p className="text-xs sm:text-sm text-blue-600 uppercase font-semibold">Ticket Aperti</p>
                                 </div>
                                 <div className="p-4 bg-red-50 rounded-lg border border-red-100 text-center">
                                     <h3 className="text-2xl font-bold text-red-700">€{activePayments?.filter(p => p.stato === 'da_pagare').reduce((acc, c) => acc + Number(c.importo), 0) || 0}</h3>
-                                    <p className="text-xs text-red-600 uppercase font-semibold">Da Saldare</p>
+                                    <p className="text-xs sm:text-sm text-red-600 uppercase font-semibold">Da Saldare</p>
                                 </div>
                             </div>
                         </TabsContent>
@@ -456,18 +456,18 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                     <div key={doc.id} className="flex items-center gap-2 p-3 border rounded-lg hover:bg-slate-50 transition-colors bg-white shadow-sm">
                                         <div className="p-2 bg-slate-100 rounded text-slate-500 shrink-0"><FileText className="w-4 h-4" /></div>
                                         <div className="min-w-0 flex-1">
-                                            <p className="font-medium text-sm text-gray-900 break-all line-clamp-2">{doc.filename}</p>
-                                            <p className="text-xs text-gray-500">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
+                                            <p className="font-medium text-sm sm:text-base text-gray-900 break-all line-clamp-2">{doc.filename}</p>
+                                            <p className="text-xs text-gray-500 mt-0.5">{format(new Date(doc.uploaded_at), 'dd MMM HH:mm')}</p>
                                         </div>
                                         <div className="flex items-center gap-1 shrink-0">
-                                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
+                                            <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-7 sm:w-7" onClick={() => window.open(getDocUrl(doc.file_url), '_blank')}><Eye className="w-4 h-4 text-gray-500" /></Button>
                                             {doc.status === 'in_revisione' ? (
                                                 <div className="flex gap-1">
-                                                    <Button size="icon" className="h-7 w-7 bg-green-600 hover:bg-green-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })} title="Approva"><Check className="w-4 h-4" /></Button>
-                                                    <Button size="icon" className="h-7 w-7 bg-red-600 hover:bg-red-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'rifiutato' })} title="Rifiuta"><X className="w-4 h-4" /></Button>
+                                                    <Button size="icon" className="h-9 w-9 sm:h-7 sm:w-7 bg-green-600 hover:bg-green-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'approvato' })} title="Approva"><Check className="w-4 h-4" /></Button>
+                                                    <Button size="icon" className="h-9 w-9 sm:h-7 sm:w-7 bg-red-600 hover:bg-red-700" onClick={() => reviewDoc.mutate({ id: doc.id, status: 'rifiutato' })} title="Rifiuta"><X className="w-4 h-4" /></Button>
                                                 </div>
                                             ) : (
-                                                <Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'} className="capitalize text-[10px]">{doc.status}</Badge>
+                                                <Badge variant={doc.status === 'approvato' ? 'default' : 'destructive'} className="capitalize text-[10px] sm:text-xs">{doc.status}</Badge>
                                             )}
                                         </div>
                                     </div>
@@ -486,16 +486,16 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                                 {ticket.titolo}
                                             </h4>
                                             <div className="flex items-center gap-2 shrink-0">
-                                                <Badge variant={ticket.stato === 'risolto' ? 'secondary' : 'destructive'} className="uppercase text-[10px] tracking-wider">{ticket.stato}</Badge>
-                                                <Button size="sm" variant="ghost" className="h-6 text-blue-600 hover:bg-blue-50 hover:text-blue-700 px-2" onClick={() => setManagingTicket(ticket)}>
-                                                    <UserCog className="w-3 h-3 sm:mr-1" /> <span className="hidden sm:inline">Gestisci</span>
+                                                <Badge variant={ticket.stato === 'risolto' ? 'secondary' : 'destructive'} className="uppercase text-[10px] sm:text-xs tracking-wider">{ticket.stato}</Badge>
+                                                <Button size="sm" variant="ghost" className="h-9 sm:h-7 text-blue-600 hover:bg-blue-50 hover:text-blue-700 px-2 text-sm sm:text-xs" onClick={() => setManagingTicket(ticket)}>
+                                                    <UserCog className="w-4 h-4 sm:w-3.5 sm:h-3.5 sm:mr-1" /> <span className="hidden sm:inline">Gestisci</span>
                                                 </Button>
                                             </div>
                                         </div>
-                                        <p className="text-xs md:text-sm text-gray-600 mb-3 bg-slate-50 p-2 rounded border border-slate-100">"{ticket.descrizione}"</p>
+                                        <p className="text-sm text-gray-600 mb-3 bg-slate-50 p-2 rounded border border-slate-100">"{ticket.descrizione}"</p>
                                         <div className="flex items-center justify-between text-xs text-gray-400 pt-2 border-t border-gray-100">
-                                            <span className="flex items-center gap-1"><CalendarIcon className="w-3 h-3"/> {format(new Date(ticket.created_at), 'dd MMM yyyy')}</span>
-                                            {ticket.creato_da === 'ospite' && <span className="flex items-center gap-1 text-blue-500 font-medium"><MessageSquare className="w-3 h-3"/> Ospite</span>}
+                                            <span className="flex items-center gap-1"><CalendarIcon className="w-3.5 h-3.5"/> {format(new Date(ticket.created_at), 'dd MMM yyyy')}</span>
+                                            {ticket.creato_da === 'ospite' && <span className="flex items-center gap-1 text-blue-500 font-medium"><MessageSquare className="w-3.5 h-3.5"/> Ospite</span>}
                                         </div>
                                     </div>
                                 ))}
@@ -509,10 +509,10 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                 <p className="text-sm text-gray-500 font-medium">Pagamenti prenotazione</p>
                                 <Button
                                     size="sm"
-                                    className="bg-blue-600 hover:bg-blue-700 h-8 text-xs"
+                                    className="bg-blue-600 hover:bg-blue-700 h-9 sm:h-8 text-sm sm:text-xs"
                                     onClick={() => { setAddPaymentBookingId(customerSheetOpen?.id ?? null); setAddPaymentBookingName(customerSheetOpen?.nome_ospite); setAddPaymentOpen(true); }}
                                 >
-                                    <Plus className="w-3.5 h-3.5 mr-1" /> Aggiungi
+                                    <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1" /> Aggiungi
                                 </Button>
                             </div>
 
@@ -539,27 +539,27 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                                     <CreditCard className="w-4 h-4" />
                                                 </div>
                                                 <div className="min-w-0 flex-1">
-                                                    <p className="font-bold text-gray-900 capitalize text-sm truncate">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
-                                                    <p className="text-xs text-gray-500 font-medium">{format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                                                    <p className="font-bold text-gray-900 capitalize text-sm sm:text-base truncate">{(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')}</p>
+                                                    <p className="text-xs sm:text-sm text-gray-500 font-medium">{format(new Date(pay.data_scadenza), 'dd MMM yyyy')}</p>
                                                     {pay.description && <p className="text-xs text-gray-400 truncate mt-0.5">{pay.description}</p>}
                                                     <div className="flex items-center gap-1 mt-1 flex-wrap">
-                                                        {pay.is_preauth && <Badge variant="outline" className="text-[9px] text-blue-600 border-blue-200">Pre-auth</Badge>}
-                                                        {pay.stripe_checkout_url && pay.stato === 'da_pagare' && <Badge variant="outline" className="text-[9px] text-green-600 border-green-200">⚡ Link Stripe</Badge>}
-                                                        {!pay.stripe_checkout_url && pay.stato === 'da_pagare' && <Badge variant="outline" className="text-[9px] text-orange-500 border-orange-200">No link</Badge>}
+                                                        {pay.is_preauth && <Badge variant="outline" className="text-[10px] text-blue-600 border-blue-200">Pre-auth</Badge>}
+                                                        {pay.stripe_checkout_url && pay.stato === 'da_pagare' && <Badge variant="outline" className="text-[10px] text-green-600 border-green-200">⚡ Link Stripe</Badge>}
+                                                        {!pay.stripe_checkout_url && pay.stato === 'da_pagare' && <Badge variant="outline" className="text-[10px] text-orange-500 border-orange-200">No link</Badge>}
                                                     </div>
                                                 </div>
                                                 <div className="text-right shrink-0 flex flex-col items-end gap-1">
-                                                    <p className="font-bold text-sm md:text-lg text-slate-800">EUR {pay.importo}</p>
-                                                    <Badge variant="outline" className={`text-[9px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : pay.stato === 'pre_autorizzato' ? 'text-blue-600 border-blue-200 bg-blue-50' : pay.stato === 'rilasciato' ? 'text-gray-600 border-gray-200 bg-gray-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato?.toUpperCase()}</Badge>
-                                                    {pay.receipt_url && <Button size="sm" variant="ghost" className="h-6 text-[10px] text-blue-600 px-1" onClick={() => window.open(pay.receipt_url, '_blank')}>Ricevuta</Button>}
+                                                    <p className="font-bold text-base md:text-lg text-slate-800">EUR {pay.importo}</p>
+                                                    <Badge variant="outline" className={`text-[10px] ${pay.stato === 'pagato' ? 'text-green-600 border-green-200 bg-green-50' : pay.stato === 'pre_autorizzato' ? 'text-blue-600 border-blue-200 bg-blue-50' : pay.stato === 'rilasciato' ? 'text-gray-600 border-gray-200 bg-gray-50' : 'text-red-600 border-red-200 bg-red-50'}`}>{pay.stato?.toUpperCase()}</Badge>
+                                                    {pay.receipt_url && <Button size="sm" variant="ghost" className="h-9 sm:h-7 text-xs text-blue-600 px-2" onClick={() => window.open(pay.receipt_url, '_blank')}>Ricevuta</Button>}
                                                     {pay.stato === 'da_pagare' && (
                                                         <Button
                                                             size="sm"
                                                             variant="ghost"
-                                                            className="h-6 text-[10px] text-red-400 hover:text-red-600 px-1"
+                                                            className="h-9 w-9 sm:h-7 sm:w-7 text-red-400 hover:text-red-600 px-0"
                                                             onClick={() => { if (confirm('Eliminare questo pagamento?')) deletePayment.mutate({ payment_id: pay.id, booking_id: customerSheetOpen?.id }) }}
                                                         >
-                                                            <Trash2 className="w-3 h-3" />
+                                                            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
                                                         </Button>
                                                     )}
                                                 </div>
@@ -574,8 +574,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                                     <div className="text-center py-12 text-gray-400 bg-slate-50 rounded-lg border border-dashed">
                                         <CreditCard className="w-10 h-10 mx-auto mb-3 opacity-20"/>
                                         <p className="mb-3">Nessun pagamento.</p>
-                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs" onClick={() => { setAddPaymentBookingId(customerSheetOpen?.id ?? null); setAddPaymentBookingName(customerSheetOpen?.nome_ospite); setAddPaymentOpen(true); }}>
-                                            <Plus className="w-3.5 h-3.5 mr-1" /> Aggiungi il primo
+                                        <Button size="sm" className="bg-blue-600 hover:bg-blue-700 h-9 sm:h-8 text-sm sm:text-xs" onClick={() => { setAddPaymentBookingId(customerSheetOpen?.id ?? null); setAddPaymentBookingName(customerSheetOpen?.nome_ospite); setAddPaymentOpen(true); }}>
+                                            <Plus className="w-4 h-4 sm:w-3.5 sm:h-3.5 mr-1" /> Aggiungi il primo
                                         </Button>
                                     </div>
                                 )}
@@ -630,7 +630,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
             {editDateInizio && editDateFine && (
               <div className="bg-blue-50 rounded-lg p-3 text-sm text-blue-700 font-medium text-center">
                 {format(editDateInizio, 'dd MMM yyyy')} → {format(editDateFine, 'dd MMM yyyy')}
-                <span className="ml-2 text-blue-500 text-xs">({Math.round((editDateFine.getTime() - editDateInizio.getTime()) / 86400000)} notti)</span>
+                <span className="ml-2 text-blue-500 text-xs sm:text-sm">({Math.round((editDateFine.getTime() - editDateInizio.getTime()) / 86400000)} notti)</span>
               </div>
             )}
             <Button
@@ -701,7 +701,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                 <CardContent>
                     <div className="space-y-4">
                         {booking.source === 'ical_import' && (
-                            <Badge variant="outline" className="text-[10px] text-cyan-600 border-cyan-200 bg-cyan-50 w-fit">iCal Import</Badge>
+                            <Badge variant="outline" className="text-xs text-cyan-600 border-cyan-200 bg-cyan-50 w-fit">iCal Import</Badge>
                         )}
                         <div className="text-sm text-gray-600 flex items-center gap-2 bg-gray-50 p-2 rounded">
                             <CalendarIcon className="w-4 h-4 text-gray-400" />
@@ -709,17 +709,17 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         </div>
 
                         <div className="grid grid-cols-2 gap-2">
-                            <Button variant="outline" size="sm" onClick={() => copyLink(booking)} className="text-xs">
-                                <Copy className="w-3 h-3 mr-2" /> Link
+                            <Button variant="outline" size="sm" onClick={() => copyLink(booking)} className="text-sm h-10 sm:h-9">
+                                <Copy className="w-4 h-4 mr-2" /> Link
                             </Button>
-                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-xs shadow-sm text-white" onClick={() => setCustomerSheetOpen(booking)}>
-                                <User className="w-3 h-3 mr-2" /> Scheda Cliente
+                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-sm h-10 sm:h-9 shadow-sm text-white" onClick={() => setCustomerSheetOpen(booking)}>
+                                <User className="w-4 h-4 mr-2" /> Scheda Cliente
                             </Button>
                         </div>
 
                         <div className="flex justify-end gap-2 border-t pt-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="sm" className="h-8 text-gray-400 hover:text-blue-600" onClick={() => setEditingBooking(booking)}><Pencil className="w-3 h-3" /></Button>
-                            <Button variant="ghost" size="sm" className="h-8 text-gray-400 hover:text-red-600" onClick={() => { if(confirm("Eliminare?")) deleteBooking.mutate(booking.id) }}><Trash2 className="w-3 h-3" /></Button>
+                            <Button variant="ghost" size="sm" className="h-9 w-9 sm:h-8 sm:w-auto text-gray-400 hover:text-blue-600" onClick={() => setEditingBooking(booking)}><Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" className="h-9 w-9 sm:h-8 sm:w-auto text-gray-400 hover:text-red-600" onClick={() => { if(confirm("Eliminare?")) deleteBooking.mutate(booking.id) }}><Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" /></Button>
                         </div>
                     </div>
                 </CardContent>
