@@ -146,4 +146,21 @@ All colors MUST be HSL.
   body {
     @apply bg-background text-foreground;
   }
+
+  /* Mobile readability: bump root font slightly so all rem-based Tailwind sizes
+     (text-xs, text-sm, text-base, p-*, gap-*, h-*) scale up ~7% on small screens.
+     Desktop is unaffected. */
+  @media (max-width: 767px) {
+    html {
+      font-size: 17px;
+    }
+  }
+
+  /* Enforce 44px minimum tap target on interactive elements when on touch devices,
+     without changing visual size on desktop. */
+  @media (hover: none) and (pointer: coarse) {
+    button, [role="button"], a[href] {
+      min-height: 36px;
+    }
+  }
 }
