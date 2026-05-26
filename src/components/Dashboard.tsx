@@ -301,8 +301,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-blue-100 p-2 rounded-lg text-blue-600"><Home className="w-4 h-4" /></div>
             <div>
-              <p className="text-lg font-bold text-foreground">{properties.length}</p>
-              <p className="text-[11px] text-muted-foreground">Proprieta</p>
+              <p className="text-xl sm:text-lg font-bold text-foreground">{properties.length}</p>
+              <p className="text-xs text-muted-foreground">Proprieta</p>
             </div>
           </CardContent>
         </Card>
@@ -310,8 +310,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-green-100 p-2 rounded-lg text-green-600"><CalendarDays className="w-4 h-4" /></div>
             <div>
-              <p className="text-lg font-bold text-foreground">{rawData?.bookings.length || 0}</p>
-              <p className="text-[11px] text-muted-foreground">Prenotazioni</p>
+              <p className="text-xl sm:text-lg font-bold text-foreground">{rawData?.bookings.length || 0}</p>
+              <p className="text-xs text-muted-foreground">Prenotazioni</p>
             </div>
           </CardContent>
         </Card>
@@ -319,8 +319,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-orange-100 p-2 rounded-lg text-orange-600"><Ticket className="w-4 h-4" /></div>
             <div>
-              <p className="text-lg font-bold text-foreground">{rawData?.tickets.length || 0}</p>
-              <p className="text-[11px] text-muted-foreground">Ticket aperti</p>
+              <p className="text-xl sm:text-lg font-bold text-foreground">{rawData?.tickets.length || 0}</p>
+              <p className="text-xs text-muted-foreground">Ticket aperti</p>
             </div>
           </CardContent>
         </Card>
@@ -328,8 +328,8 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
           <CardContent className="p-4 flex items-center gap-3">
             <div className="bg-violet-100 p-2 rounded-lg text-violet-600"><ClipboardList className="w-4 h-4" /></div>
             <div>
-              <p className="text-lg font-bold text-foreground">{rawData?.activities.filter(a => a.stato !== 'completato' && a.stato !== 'svolto').length || 0}</p>
-              <p className="text-[11px] text-muted-foreground">Attivita attive</p>
+              <p className="text-xl sm:text-lg font-bold text-foreground">{rawData?.activities.filter(a => a.stato !== 'completato' && a.stato !== 'svolto').length || 0}</p>
+              <p className="text-xs text-muted-foreground">Attivita attive</p>
             </div>
           </CardContent>
         </Card>
@@ -346,14 +346,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                 <div className="bg-blue-100 p-2 rounded-full text-blue-600"><Globe className="w-5 h-5" /></div>
                 <div>
                   <CardTitle className="text-base">Stato Portali</CardTitle>
-                  <CardDescription className="text-xs">
+                  <CardDescription className="text-xs sm:text-xs">
                     {(portalConnections || []).length > 0
                       ? `${(portalConnections || []).filter((c: { status: string }) => c.status === 'active').length} attivi su ${(portalConnections || []).length}`
                       : 'Nessun portale connesso'}
                   </CardDescription>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="text-xs text-blue-600" onClick={() => onNavigate('portali')}>
+              <Button variant="ghost" size="sm" className="text-sm sm:text-xs text-blue-600 h-9 sm:h-8" onClick={() => onNavigate('portali')}>
                 Gestisci <ChevronRight className="w-3 h-3 ml-0.5" />
               </Button>
             </div>
@@ -379,14 +379,14 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                         <p className="text-sm font-semibold text-slate-700">
                           {PORTAL_LABELS[conn.portal_name] || conn.portal_name}
                         </p>
-                        <p className="text-[10px] text-slate-500">
+                        <p className="text-xs text-slate-500">
                           {conn.properties_real?.nome || ''}{conn.last_sync ? ` - Sync: ${format(new Date(conn.last_sync), 'dd/MM HH:mm')}` : ''}
                         </p>
                       </div>
                     </div>
                     <Badge
                       variant={conn.status === 'active' ? 'default' : 'secondary'}
-                      className={`text-[10px] ${
+                      className={`text-xs ${
                         conn.status === 'active' ? 'bg-green-100 text-green-700 border-green-200'
                         : conn.status === 'error' ? 'bg-red-100 text-red-700 border-red-200'
                         : 'bg-slate-100 text-slate-500'
@@ -462,7 +462,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   <CardDescription className="text-xs">Servizi integrabili per le tue proprieta</CardDescription>
                 </div>
               </div>
-              <Button variant="ghost" size="sm" className="text-xs text-purple-600" onClick={() => onNavigate('marketplace')}>
+              <Button variant="ghost" size="sm" className="text-sm sm:text-xs text-purple-600 h-9 sm:h-8" onClick={() => onNavigate('marketplace')}>
                 Catalogo <ChevronRight className="w-3 h-3 ml-0.5" />
               </Button>
             </div>
@@ -476,16 +476,16 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-slate-700">{service.name}</p>
-                    <p className="text-[10px] text-slate-500">{service.description}</p>
+                    <p className="text-xs text-slate-500">{service.description}</p>
                   </div>
-                  <Badge variant="secondary" className="text-[10px] bg-purple-50 text-purple-600 border-purple-100">
+                  <Badge variant="secondary" className="text-xs bg-purple-50 text-purple-600 border-purple-100">
                     8 servizi
                   </Badge>
                 </div>
               ))}
             </div>
-            <div className="p-3 border-t bg-purple-50/30 text-center cursor-pointer hover:bg-purple-50/50 transition-colors" onClick={() => onNavigate('marketplace')}>
-              <p className="text-xs text-purple-600 font-medium">Esplora il catalogo completo</p>
+            <div className="p-3 border-t bg-purple-50/30 text-center cursor-pointer hover:bg-purple-50/50 transition-colors min-h-[44px] flex items-center justify-center" onClick={() => onNavigate('marketplace')}>
+              <p className="text-sm sm:text-xs text-purple-600 font-medium">Esplora il catalogo completo</p>
             </div>
           </CardContent>
         </Card>
@@ -501,7 +501,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <CardDescription className="text-xs">{dashboardData.urgencies.length} attivita richiedono attenzione</CardDescription>
             </div>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setIsUrgencyOpen(true)} className="text-xs">
+          <Button variant="outline" size="sm" onClick={() => setIsUrgencyOpen(true)} className="text-sm sm:text-xs h-9 sm:h-8">
             Vedi Tutte ({dashboardData.urgencies.length})
           </Button>
         </CardHeader>
@@ -582,7 +582,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
               <div key={u.id} className="p-3 bg-red-50 border border-red-100 rounded-lg cursor-pointer hover:shadow-md transition-all" onClick={() => onNavigate(u.targetTab)}>
                 <div className="flex justify-between items-start mb-1">
                   <h4 className="font-bold text-sm text-red-900">{u.title}</h4>
-                  <Badge variant="destructive" className="text-[10px]">URGENTE</Badge>
+                  <Badge variant="destructive" className="text-xs">URGENTE</Badge>
                 </div>
                 <p className="text-xs text-red-700 mb-2">{u.subtitle}</p>
                 <div className="flex items-center gap-2 text-xs text-red-500 font-medium">
