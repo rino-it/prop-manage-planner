@@ -19,7 +19,7 @@ import {
   CheckCircle, Clock, AlertTriangle, TrendingDown,
   Pencil, Plus, Trash2,
   ChevronDown, ChevronUp, CreditCard, Banknote, Building2, Smartphone,
-  Filter, Home, Car, Euro, User, Eye,
+  Filter, Home, Car, Euro, User, Eye, HandCoins, Undo2,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -121,26 +121,34 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
             <span className="text-xs text-slate-400">
               {CATEGORY_LABELS[exp.categoria] || exp.categoria || 'Altro'}
             </span>
-            {exp.competence === 'tenant' && (
+            {exp.competence === 'tenant' && !exp.is_advance && (
               <span className="text-xs bg-purple-50 border border-purple-100 text-purple-700 px-2 py-0.5 rounded-full">
                 <User className="w-3 h-3 inline mr-1" />Inquilino
+              </span>
+            )}
+            {exp.is_advance && exp.debtor_name && (
+              <span className="text-xs bg-emerald-50 border border-emerald-200 text-emerald-700 px-2 py-0.5 rounded-full">
+                <HandCoins className="w-3 h-3 inline mr-1" />{exp.debtor_name}
               </span>
             )}
           </div>
           <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500">
             {showPaidDate && exp.data_pagamento && (
               <span className="text-green-600">
-                ✓ Pagato il {format(new Date(exp.data_pagamento), 'd MMM yyyy', { locale: it })}
+                {exp.is_advance ? '↩︎ Rimborsato' : '✓ Pagato'} il {format(new Date(exp.data_pagamento), 'd MMM yyyy', { locale: it })}
                 {exp.payment_method && ` · ${exp.payment_method}`}
               </span>
             )}
             {!showPaidDate && (
-              <span>Scad. {format(parseISO(exp.scadenza), 'd MMM yyyy', { locale: it })}</span>
+              <span>{exp.is_advance ? 'Anticipato' : 'Scad.'} {format(parseISO(exp.scadenza), 'd MMM yyyy', { locale: it })}</span>
             )}
-            {overdueDays && (
+            {overdueDays && !exp.is_advance && (
               <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
                 {overdueDays}gg di ritardo
               </Badge>
+            )}
+            {exp.is_advance && exp.reimbursement_note && (
+              <span className="italic text-slate-400 truncate">"{exp.reimbursement_note}"</span>
             )}
           </div>
         </div>
@@ -148,18 +156,22 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
 
       {/* Right */}
       <div className="flex items-center gap-2 shrink-0">
-        <span className={`text-base font-bold tabular-nums ${exp.stato === 'pagato' ? 'text-slate-500' : overdueDays ? 'text-red-600' : 'text-red-500'}`}>
-          -€{fmtFull(Number(exp.importo))}
+        <span className={`text-base font-bold tabular-nums ${
+          exp.is_advance
+            ? (exp.stato === 'pagato' ? 'text-slate-500' : 'text-emerald-600')
+            : (exp.stato === 'pagato' ? 'text-slate-500' : overdueDays ? 'text-red-600' : 'text-red-500')
+        }`}>
+          {exp.is_advance ? '€' : '-€'}{fmtFull(Number(exp.importo))}
         </span>
 
         {exp.stato !== 'pagato' && onPaga && (
-          <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 gap-1" onClick={onPaga}>
-            <CheckCircle className="w-3 h-3" /> Paga
+          <Button size="sm" className={`h-8 text-xs gap-1 ${exp.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`} onClick={onPaga}>
+            {exp.is_advance ? <><Undo2 className="w-3 h-3" /> Rimborsato</> : <><CheckCircle className="w-3 h-3" /> Paga</>}
           </Button>
         )}
         {exp.stato === 'pagato' && (
           <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 h-7 px-2 text-xs">
-            Pagato
+            {exp.is_advance ? 'Rimborsato' : 'Pagato'}
           </Badge>
         )}
 
@@ -191,6 +203,8 @@ const DEFAULT_FORM = {
   payment_method: 'bonifico',
   visible_tenant: false,
   tenant_booking_id: '',
+  is_advance: false,
+  debtor_name: '',
 };
 
 // ─── main component ───────────────────────────────────────────────────────────
@@ -205,6 +219,7 @@ export default function Expenses() {
   const [confirmTarget, setConfirmTarget] = useState<any>(null);
   const [confirmDate, setConfirmDate]   = useState(format(new Date(), 'yyyy-MM-dd'));
   const [confirmMethod, setConfirmMethod] = useState('bonifico');
+  const [confirmNote, setConfirmNote]   = useState('');
   const [filterProp, setFilterProp]     = useState('all');
   const [filterCat, setFilterCat]       = useState('all');
   const [filterType, setFilterType]     = useState('all'); // all | real | mobile
@@ -261,13 +276,15 @@ export default function Expenses() {
         categoria: form.categoria,
         scadenza: form.scadenza,
         stato: form.stato,
-        competence: form.competence,
+        competence: form.is_advance ? 'owner' : form.competence,
         payment_method: form.payment_method,
         user_id: user?.id,
         property_real_id: form.targetType === 'real' ? form.targetId || null : null,
         property_mobile_id: form.targetType === 'mobile' ? form.targetId || null : null,
-        visible_tenant: form.visible_tenant,
-        tenant_booking_id: form.visible_tenant && form.tenant_booking_id ? form.tenant_booking_id : null,
+        visible_tenant: form.is_advance ? false : form.visible_tenant,
+        tenant_booking_id: form.is_advance ? null : (form.visible_tenant && form.tenant_booking_id ? form.tenant_booking_id : null),
+        is_advance: form.is_advance,
+        debtor_name: form.is_advance ? (form.debtor_name?.trim() || null) : null,
       };
       if (editingId) {
         const { error } = await supabase.from('payments').update(payload).eq('id', editingId);
@@ -287,19 +304,19 @@ export default function Expenses() {
     onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
   });
 
-  // mutation: confirm payment
+  // mutation: confirm payment / reimbursement
   const confirmPayment = useMutation({
-    mutationFn: async ({ id, date, method }: { id: string; date: string; method: string }) => {
-      const { error } = await supabase
-        .from('payments')
-        .update({ stato: 'pagato', data_pagamento: date, payment_method: method })
-        .eq('id', id);
+    mutationFn: async ({ id, date, method, note, isAdvance }: { id: string; date: string; method: string; note?: string; isAdvance?: boolean }) => {
+      const update: any = { stato: 'pagato', data_pagamento: date, payment_method: method };
+      if (isAdvance) update.reimbursement_note = note?.trim() || null;
+      const { error } = await supabase.from('payments').update(update).eq('id', id);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['unified-expenses'] });
       setConfirmTarget(null);
-      toast({ title: 'Pagamento confermato' });
+      setConfirmNote('');
+      toast({ title: vars.isAdvance ? 'Rimborso registrato' : 'Pagamento confermato' });
     },
     onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
   });
@@ -337,6 +354,8 @@ export default function Expenses() {
       payment_method: exp.payment_method || 'bonifico',
       visible_tenant: exp.visible_tenant || false,
       tenant_booking_id: exp.tenant_booking_id || '',
+      is_advance: !!exp.is_advance,
+      debtor_name: exp.debtor_name || '',
     });
     setSheetOpen(true);
   };
@@ -361,9 +380,17 @@ export default function Expenses() {
   const today = new Date();
   const in30  = addDays(today, 30);
 
-  const overdue  = filtered.filter(ex => ex.stato === 'da_pagare' && isPast(parseISO(ex.scadenza)) && !isToday(parseISO(ex.scadenza)));
-  const upcoming = filtered.filter(ex => ex.stato === 'da_pagare' && !isPast(parseISO(ex.scadenza)));
-  const paid     = filtered.filter(ex => ex.stato === 'pagato');
+  // gli anticipi vivono nella loro tab dedicata e non concorrono ai KPI/bucket delle spese ordinarie
+  const ordinary = filtered.filter(ex => !ex.is_advance);
+  const advancesAll = filtered.filter(ex => ex.is_advance);
+
+  const overdue  = ordinary.filter(ex => ex.stato === 'da_pagare' && isPast(parseISO(ex.scadenza)) && !isToday(parseISO(ex.scadenza)));
+  const upcoming = ordinary.filter(ex => ex.stato === 'da_pagare' && !isPast(parseISO(ex.scadenza)));
+  const paid     = ordinary.filter(ex => ex.stato === 'pagato');
+
+  const advancesPending  = advancesAll.filter(ex => ex.stato !== 'pagato');
+  const advancesRefunded = advancesAll.filter(ex => ex.stato === 'pagato');
+  const totalAdvancesPending = advancesPending.reduce((s, ex) => s + Number(ex.importo), 0);
 
   const thisWeek  = upcoming.filter(ex => isBefore(parseISO(ex.scadenza), addDays(today, 7)));
   const thisMonth = upcoming.filter(ex => !isBefore(parseISO(ex.scadenza), addDays(today, 7)) && isBefore(parseISO(ex.scadenza), in30));
@@ -381,7 +408,7 @@ export default function Expenses() {
     <div className="space-y-6 animate-in fade-in">
 
       {/* ── Header ── */}
-      <PageHeader title="Spese" count={filtered.filter(ex => ex.stato === 'da_pagare').length}>
+      <PageHeader title="Spese" count={ordinary.filter(ex => ex.stato === 'da_pagare').length}>
         <div className="flex items-center gap-2 flex-wrap">
 
           {/* Tipo toggle */}
@@ -434,7 +461,7 @@ export default function Expenses() {
 
       {/* ── Tabs ── */}
       <Tabs defaultValue={overdue.length > 0 ? 'overdue' : 'upcoming'}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="overdue" className="gap-2">
             {overdue.length > 0 && (
               <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
@@ -447,6 +474,12 @@ export default function Expenses() {
             📅 In Scadenza
             {upcoming.length > 0 && (
               <span className="ml-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{upcoming.length}</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="advances">
+            💸 Anticipi
+            {advancesPending.length > 0 && (
+              <span className="ml-1.5 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{advancesPending.length}</span>
             )}
           </TabsTrigger>
           <TabsTrigger value="paid">
@@ -470,7 +503,7 @@ export default function Expenses() {
               <CardContent className="p-0 divide-y">
                 {overdue.map(ex => (
                   <ExpenseRow key={ex.id} exp={ex}
-                    onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                    onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
                     onEdit={() => openEdit(ex)}
                     onDelete={() => { if (confirm('Eliminare questa spesa?')) deleteExpense.mutate(ex.id); }}
                   />
@@ -497,7 +530,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {thisWeek.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
-                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -513,7 +546,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
-                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -529,7 +562,70 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {later.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
-                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
+                          onEdit={() => openEdit(ex)}
+                          onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </>
+          )}
+        </TabsContent>
+
+        {/* ── ANTICIPI ── */}
+        <TabsContent value="advances" className="mt-4 space-y-4">
+          {/* Banner riassuntivo */}
+          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <div className="p-3 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
+              <HandCoins className="w-6 h-6" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Da farsi rimborsare</p>
+              <p className="text-2xl font-bold text-emerald-800 tabular-nums">{fmt(totalAdvancesPending)}</p>
+              <p className="text-xs text-emerald-600">{advancesPending.length} anticip{advancesPending.length === 1 ? 'o' : 'i'} apert{advancesPending.length === 1 ? 'o' : 'i'}</p>
+            </div>
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 gap-1.5 shrink-0"
+              onClick={() => { setEditingId(null); setForm({ ...DEFAULT_FORM, is_advance: true }); setSheetOpen(true); }}>
+              <Plus className="w-4 h-4" /> Nuovo Anticipo
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <p className="text-center py-8 text-slate-400">Caricamento...</p>
+          ) : advancesAll.length === 0 ? (
+            <div className="text-center py-14 bg-slate-50 border border-dashed rounded-xl text-slate-400">
+              <HandCoins className="w-10 h-10 mx-auto mb-2 opacity-30" />
+              <p>Nessun anticipo registrato.</p>
+              <p className="text-xs mt-1">Registra le spese che hai anticipato per conto di altri.</p>
+            </div>
+          ) : (
+            <>
+              {advancesPending.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 mb-2 px-1">⏳ Da rimborsare</p>
+                  <Card>
+                    <CardContent className="p-0 divide-y">
+                      {advancesPending.map(ex => (
+                        <ExpenseRow key={ex.id} exp={ex}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
+                          onEdit={() => openEdit(ex)}
+                          onDelete={() => { if (confirm('Eliminare questo anticipo?')) deleteExpense.mutate(ex.id); }}
+                        />
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+              {advancesRefunded.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">✅ Rimborsati</p>
+                  <Card>
+                    <CardContent className="p-0 divide-y">
+                      {advancesRefunded.map(ex => (
+                        <ExpenseRow key={ex.id} exp={ex} showPaidDate
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -600,6 +696,30 @@ export default function Expenses() {
           </SheetHeader>
 
           <div className="space-y-4 pt-4">
+            {/* Toggle Anticipo da rimborsare */}
+            <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <HandCoins className="w-4 h-4" /> Anticipo da rimborsare
+                  </Label>
+                  <p className="text-xs text-emerald-700 mt-0.5">Spesa pagata per conto di terzi, di cui aspetti il rimborso</p>
+                </div>
+                <Switch
+                  checked={form.is_advance}
+                  onCheckedChange={v => setForm(f => ({ ...f, is_advance: v, debtor_name: v ? f.debtor_name : '' }))}
+                />
+              </div>
+              {form.is_advance && (
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">Chi deve rimborsare</Label>
+                  <Input placeholder="Nome del debitore (es. Mario Rossi, Condominio, ecc.)"
+                    value={form.debtor_name}
+                    onChange={e => setForm(f => ({ ...f, debtor_name: e.target.value }))} />
+                </div>
+              )}
+            </div>
+
             {/* Tipo: immobile / veicolo */}
             <div className="flex items-center p-1 bg-slate-100 rounded-lg gap-1">
               <button
@@ -641,7 +761,7 @@ export default function Expenses() {
                 </div>
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-xs">Scadenza *</Label>
+                <Label className="text-xs">{form.is_advance ? 'Data anticipo *' : 'Scadenza *'}</Label>
                 <Input type="date" value={form.scadenza} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value }))} />
               </div>
             </div>
@@ -669,8 +789,8 @@ export default function Expenses() {
                 <Select value={form.stato} onValueChange={v => setForm(f => ({ ...f, stato: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="da_pagare">🔴 Da Pagare</SelectItem>
-                    <SelectItem value="pagato">🟢 Pagato</SelectItem>
+                    <SelectItem value="da_pagare">{form.is_advance ? '🟠 Da Rimborsare' : '🔴 Da Pagare'}</SelectItem>
+                    <SelectItem value="pagato">{form.is_advance ? '🟢 Rimborsato' : '🟢 Pagato'}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -691,22 +811,24 @@ export default function Expenses() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-1.5">
-                <Label className="text-xs">A carico di</Label>
-                <Select value={form.competence} onValueChange={v => setForm(f => ({ ...f, competence: v as 'owner' | 'tenant' }))}>
-                  <SelectTrigger className={form.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="owner">🏠 Proprietario</SelectItem>
-                    <SelectItem value="tenant">👤 Inquilino</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              {!form.is_advance && (
+                <div className="grid gap-1.5">
+                  <Label className="text-xs">A carico di</Label>
+                  <Select value={form.competence} onValueChange={v => setForm(f => ({ ...f, competence: v as 'owner' | 'tenant' }))}>
+                    <SelectTrigger className={form.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="owner">🏠 Proprietario</SelectItem>
+                      <SelectItem value="tenant">👤 Inquilino</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
-            {/* Inoltra all'inquilino — solo se ci sono inquilini lungo termine attivi */}
-            {longTermTenants.length > 0 && (
+            {/* Inoltra all'inquilino — solo se ci sono inquilini lungo termine attivi e non è un anticipo */}
+            {longTermTenants.length > 0 && !form.is_advance && (
               <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
@@ -759,19 +881,22 @@ export default function Expenses() {
       <Dialog open={!!confirmTarget} onOpenChange={o => !o && setConfirmTarget(null)}>
         <DialogContent className="sm:max-w-sm max-h-[85svh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Conferma Pagamento</DialogTitle>
+            <DialogTitle>{confirmTarget?.is_advance ? 'Conferma Rimborso' : 'Conferma Pagamento'}</DialogTitle>
             <DialogDescription>
               {confirmTarget?.descrizione || '—'} ·{' '}
-              <strong>-€{fmtFull(Number(confirmTarget?.importo || 0))}</strong>
+              <strong>{confirmTarget?.is_advance ? '' : '-'}€{fmtFull(Number(confirmTarget?.importo || 0))}</strong>
+              {confirmTarget?.is_advance && confirmTarget?.debtor_name && (
+                <> · da <strong>{confirmTarget.debtor_name}</strong></>
+              )}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="grid gap-2">
-              <Label>Data pagamento effettuato</Label>
+              <Label>{confirmTarget?.is_advance ? 'Data rimborso ricevuto' : 'Data pagamento effettuato'}</Label>
               <Input type="date" value={confirmDate} onChange={e => setConfirmDate(e.target.value)} />
             </div>
             <div className="grid gap-2">
-              <Label>Metodo di pagamento</Label>
+              <Label>{confirmTarget?.is_advance ? 'Come hai ricevuto il rimborso' : 'Metodo di pagamento'}</Label>
               <div className="grid grid-cols-2 gap-2">
                 {METHOD_OPTIONS.map(m => (
                   <button
@@ -785,15 +910,28 @@ export default function Expenses() {
                 ))}
               </div>
             </div>
+            {confirmTarget?.is_advance && (
+              <div className="grid gap-2">
+                <Label>Nota (opzionale)</Label>
+                <Input placeholder="Es. ricevuto in contanti al check-out"
+                  value={confirmNote} onChange={e => setConfirmNote(e.target.value)} />
+              </div>
+            )}
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmTarget(null)}>Annulla</Button>
               <Button
-                className="bg-green-600 hover:bg-green-700 font-bold gap-1.5"
-                onClick={() => confirmPayment.mutate({ id: confirmTarget.id, date: confirmDate, method: confirmMethod })}
+                className={`font-bold gap-1.5 ${confirmTarget?.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`}
+                onClick={() => confirmPayment.mutate({
+                  id: confirmTarget.id,
+                  date: confirmDate,
+                  method: confirmMethod,
+                  note: confirmNote,
+                  isAdvance: !!confirmTarget.is_advance,
+                })}
                 disabled={confirmPayment.isPending}
               >
-                <CheckCircle className="w-4 h-4" />
-                {confirmPayment.isPending ? 'Salvataggio...' : 'Conferma Pagamento'}
+                {confirmTarget?.is_advance ? <Undo2 className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+                {confirmPayment.isPending ? 'Salvataggio...' : confirmTarget?.is_advance ? 'Registra Rimborso' : 'Conferma Pagamento'}
               </Button>
             </DialogFooter>
           </div>

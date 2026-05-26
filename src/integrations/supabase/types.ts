@@ -741,6 +741,7 @@ export type Database = {
           competence: string | null
           created_at: string
           data_pagamento: string | null
+          debtor_name: string | null
           descrizione: string
           escalation_applica_ogni_anno: boolean | null
           escalation_attiva: boolean | null
@@ -749,12 +750,14 @@ export type Database = {
           id: string
           importo: number
           importo_originale: number | null
+          is_advance: boolean
           metodo_pagamento: string | null
           note: string | null
           payment_method: string | null
           payment_status: string | null
           property_mobile_id: string | null
           property_real_id: string | null
+          reimbursement_note: string | null
           ricorrenza_tipo: string
           scadenza: string
           stato: string | null
@@ -768,6 +771,7 @@ export type Database = {
           competence?: string | null
           created_at?: string
           data_pagamento?: string | null
+          debtor_name?: string | null
           descrizione: string
           escalation_applica_ogni_anno?: boolean | null
           escalation_attiva?: boolean | null
@@ -776,12 +780,14 @@ export type Database = {
           id?: string
           importo: number
           importo_originale?: number | null
+          is_advance?: boolean
           metodo_pagamento?: string | null
           note?: string | null
           payment_method?: string | null
           payment_status?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
+          reimbursement_note?: string | null
           ricorrenza_tipo?: string
           scadenza: string
           stato?: string | null
@@ -795,6 +801,7 @@ export type Database = {
           competence?: string | null
           created_at?: string
           data_pagamento?: string | null
+          debtor_name?: string | null
           descrizione?: string
           escalation_applica_ogni_anno?: boolean | null
           escalation_attiva?: boolean | null
@@ -803,12 +810,14 @@ export type Database = {
           id?: string
           importo?: number
           importo_originale?: number | null
+          is_advance?: boolean
           metodo_pagamento?: string | null
           note?: string | null
           payment_method?: string | null
           payment_status?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
+          reimbursement_note?: string | null
           ricorrenza_tipo?: string
           scadenza?: string
           stato?: string | null
