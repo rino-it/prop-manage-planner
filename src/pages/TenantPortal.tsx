@@ -406,7 +406,7 @@ function TenantPortalInner() {
             <div className="bg-blue-100 p-2 rounded-lg"><Home className="w-5 h-5 text-blue-600"/></div>
             <div>
                 <h1 className="font-bold text-sm text-slate-900 truncate max-w-[180px]">{isReal ? property?.nome : property?.veicolo}</h1>
-                <p className="text-[10px] text-slate-500">{t('portal.tenant')}</p>
+                <p className="text-xs text-slate-500">{t('portal.tenant')}</p>
             </div>
         </div>
         <div className="flex items-center gap-2">
@@ -430,9 +430,9 @@ function TenantPortalInner() {
                 <div>
                   <Label className="text-xs uppercase text-slate-500">{t('label.email')}</Label>
                   <Input placeholder={t('placeholder.email')} value={contactForm.email} onChange={e => handleEmailChange(e.target.value)} className={emailError ? 'border-red-400' : ''} />
-                  {emailError && <p className="text-xs text-red-600 mt-1">{emailError}</p>}
+                  {emailError && <p className="text-sm sm:text-xs text-red-600 mt-1">{emailError}</p>}
                   {emailSuggestion && (
-                    <button type="button" className="text-xs text-blue-600 mt-1 underline" onClick={() => { handleEmailChange(emailSuggestion); }}>
+                    <button type="button" className="text-sm sm:text-xs text-blue-600 mt-1 underline" onClick={() => { handleEmailChange(emailSuggestion); }}>
                       Forse intendevi: {emailSuggestion}?
                     </button>
                   )}
@@ -465,10 +465,10 @@ function TenantPortalInner() {
             <CardFooter className="bg-white/5 border-t border-white/10">
               <div className="flex justify-between items-center w-full py-1">
                 <div>
-                  <p className="text-[10px] text-slate-400 uppercase font-bold">WiFi</p>
+                  <p className="text-xs text-slate-400 uppercase font-bold">WiFi</p>
                   <p className="text-sm font-mono">{propertyInfo.wifi_password}</p>
                 </div>
-                <Button size="icon" variant="ghost" className="text-slate-400 hover:text-white" onClick={() => copyToClipboard(propertyInfo.wifi_password)}>
+                <Button size="icon" variant="ghost" className="h-9 w-9 sm:h-7 sm:w-7 text-slate-400 hover:text-white" onClick={() => copyToClipboard(propertyInfo.wifi_password)}>
                   <Copy className="w-4 h-4"/>
                 </Button>
               </div>
@@ -494,7 +494,7 @@ function TenantPortalInner() {
             </div>
             {!ciDoc && (
               <>
-                <Button size="sm" variant="outline" className="border-amber-300 text-amber-700 shrink-0"
+                <Button size="sm" variant="outline" className="h-9 sm:h-8 border-amber-300 text-amber-700 shrink-0"
                   onClick={() => ciInputRef.current?.click()} disabled={isUploadingCI}>
                   {isUploadingCI ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Upload className="w-4 h-4 mr-1" /> Carica</>}
                 </Button>
@@ -506,10 +506,10 @@ function TenantPortalInner() {
         </Card>
 
         <Tabs defaultValue="casa" className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="casa" className="text-xs">🏠 La Casa</TabsTrigger>
-            <TabsTrigger value="bollette" className="text-xs">💡 Bollette</TabsTrigger>
-            <TabsTrigger value="segnalazioni" className="text-xs">🔧 Segnalazioni</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 mb-4 h-auto">
+            <TabsTrigger value="casa" className="text-xs sm:text-xs py-2">🏠 La Casa</TabsTrigger>
+            <TabsTrigger value="bollette" className="text-xs sm:text-xs py-2">💡 Bollette</TabsTrigger>
+            <TabsTrigger value="segnalazioni" className="text-xs sm:text-xs py-2">🔧 Segnalazioni</TabsTrigger>
           </TabsList>
 
           {/* TAB: LA CASA */}
@@ -576,13 +576,13 @@ function TenantPortalInner() {
                         </div>
                         <div className="text-right shrink-0">
                           <p className="font-bold text-base">€{Number(bill.importo).toFixed(2)}</p>
-                          <Badge className={`text-[10px] mt-1 ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : isOverdue ? 'bg-red-100 text-red-700 border-red-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
+                          <Badge className={`text-xs sm:text-[10px] mt-1 ${isPaid ? 'bg-green-100 text-green-700 border-green-200' : isOverdue ? 'bg-red-100 text-red-700 border-red-200' : 'bg-blue-100 text-blue-700 border-blue-200'}`}>
                             {isPaid ? 'Pagata' : isOverdue ? 'Scaduta' : 'Da Pagare'}
                           </Badge>
                         </div>
                       </div>
                       {bill.allegato_url && (
-                        <Button size="sm" variant="outline" className="mt-3 h-7 text-xs w-full gap-1"
+                        <Button size="sm" variant="outline" className="mt-3 h-9 sm:h-7 text-sm sm:text-xs w-full gap-1"
                           onClick={() => downloadDoc(bill.allegato_url)}>
                           <Download className="w-3 h-3" /> Scarica documento
                         </Button>
@@ -603,21 +603,21 @@ function TenantPortalInner() {
               {tickets.map((ticket: any) => (
                 <Card key={ticket.id}>
                   <CardContent className="p-4">
-                    <div className="flex justify-between items-start mb-2">
+                    <div className="flex justify-between items-start mb-2 gap-2">
                       <h4 className="font-bold text-sm">{ticket.titolo}</h4>
-                      <Badge variant="outline" className="text-[10px]">{ticket.stato}</Badge>
+                      <Badge variant="outline" className="text-[10px] shrink-0">{ticket.stato}</Badge>
                     </div>
-                    <p className="text-xs text-slate-600 mb-2">{ticket.descrizione}</p>
+                    <p className="text-sm sm:text-xs text-slate-600 mb-2">{ticket.descrizione}</p>
                     {ticket.admin_notes && (
-                      <div className="bg-blue-50 p-2 rounded border border-blue-100 text-[11px] text-blue-800">
+                      <div className="bg-blue-50 p-2 rounded border border-blue-100 text-xs sm:text-[11px] text-blue-800">
                         <strong>Risposta: </strong>{ticket.admin_notes}
                       </div>
                     )}
-                    <p className="text-[9px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
+                    <p className="text-[10px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
                   </CardContent>
                 </Card>
               ))}
-              {tickets.length === 0 && <p className="text-center text-gray-400 py-8">Nessuna segnalazione aperta.</p>}
+              {tickets.length === 0 && <p className="text-sm text-center text-gray-400 py-8">Nessuna segnalazione aperta.</p>}
             </div>
           </TabsContent>
         </Tabs>
@@ -636,10 +636,10 @@ function TenantPortalInner() {
                 <CardFooter className="bg-white/5 border-t border-white/10">
                     <div className="flex justify-between items-center w-full py-1">
                         <div>
-                            <p className="text-[10px] text-slate-400 uppercase font-bold">{t('label.wifiPassword')}</p>
+                            <p className="text-xs text-slate-400 uppercase font-bold">{t('label.wifiPassword')}</p>
                             <p className="text-sm font-mono">{property.wifi_password}</p>
                         </div>
-                        <Button size="icon" variant="ghost" className="text-slate-400 hover:text-white" onClick={() => copyToClipboard(property.wifi_password)}>
+                        <Button size="icon" variant="ghost" className="h-9 w-9 sm:h-7 sm:w-7 text-slate-400 hover:text-white" onClick={() => copyToClipboard(property.wifi_password)}>
                             <Copy className="w-4 h-4"/>
                         </Button>
                     </div>
@@ -648,16 +648,16 @@ function TenantPortalInner() {
         </Card>
 
         <Tabs defaultValue="status" className="w-full">
-            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-4">
-                <TabsTrigger value="status" className="text-xs">{t('tab.status')}</TabsTrigger>
-                <TabsTrigger value="services" className="text-xs">{t('tab.services')}</TabsTrigger>
-                <TabsTrigger value="docs" className="text-xs">{t('tab.files')}</TabsTrigger>
-                <TabsTrigger value="support" className="text-xs">{t('tab.help')}</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-4 h-auto">
+                <TabsTrigger value="status" className="text-xs py-2">{t('tab.status')}</TabsTrigger>
+                <TabsTrigger value="services" className="text-xs py-2">{t('tab.services')}</TabsTrigger>
+                <TabsTrigger value="docs" className="text-xs py-2">{t('tab.files')}</TabsTrigger>
+                <TabsTrigger value="support" className="text-xs py-2">{t('tab.help')}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="status" className="space-y-4">
                 <h3 className="font-bold text-slate-700 flex items-center gap-2"><Euro className="w-4 h-4"/> {t('payments.plan')}</h3>
-                {payments.length === 0 ? <p className="text-center text-gray-400 py-8 bg-white rounded-lg border">{t('empty.payments')}</p> : (
+                {payments.length === 0 ? <p className="text-sm text-center text-gray-400 py-8 bg-white rounded-lg border">{t('empty.payments')}</p> : (
                     <div className="space-y-3">
                         {payments.map((pay: any) => (
                             <Card key={pay.id} className="border-l-4 border-l-blue-500">
@@ -666,7 +666,7 @@ function TenantPortalInner() {
                                         <div>
                                             <p className="font-bold text-sm capitalize"><T text={(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')} /></p>
                                             <p className="text-xs text-gray-500">Scad: {pay.data_scadenza ? format(new Date(pay.data_scadenza), 'dd MMM yyyy') : 'N/D'}</p>
-                                            {pay.is_preauth && <p className="text-[10px] text-blue-600 mt-1">{t('payment.preauthNote') || 'Pre-autorizzazione'}</p>}
+                                            {pay.is_preauth && <p className="text-xs sm:text-[10px] text-blue-600 mt-1">{t('payment.preauthNote') || 'Pre-autorizzazione'}</p>}
                                         </div>
                                         <div className="text-right">
                                             <p className="font-bold text-lg">EUR {pay.importo}</p>
@@ -677,7 +677,7 @@ function TenantPortalInner() {
                                             <div className="flex gap-2">
                                                 <Badge className="bg-green-100 text-green-700 border-0 flex-1 justify-center py-1">{t('badge.paid')}</Badge>
                                                 {pay.receipt_url && (
-                                                    <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => window.open(pay.receipt_url, '_blank')}>
+                                                    <Button size="sm" variant="outline" className="h-9 sm:h-7 text-sm sm:text-xs" onClick={() => window.open(pay.receipt_url, '_blank')}>
                                                         {t('payment.receipt') || 'Ricevuta'}
                                                     </Button>
                                                 )}
@@ -688,7 +688,7 @@ function TenantPortalInner() {
                                                 {pay.is_preauth ? (t('payment.authorize') || 'Autorizza') : (t('payment.payNow') || 'Paga Ora')}
                                             </Button>
                                         ) : (
-                                            <Button size="sm" variant="outline" className="w-full h-7 text-[10px] border-orange-200 text-orange-600" onClick={() => setPaymentTicketOpen(pay)}>
+                                            <Button size="sm" variant="outline" className="w-full h-9 sm:h-7 text-sm sm:text-xs border-orange-200 text-orange-600" onClick={() => setPaymentTicketOpen(pay)}>
                                                 {t('button.notify')}
                                             </Button>
                                         )}
@@ -710,17 +710,17 @@ function TenantPortalInner() {
                                 <CardContent className="p-3 flex flex-col justify-between flex-1 min-w-0">
                                     <div>
                                         <h4 className="font-bold text-sm truncate"><T text={svc.titolo} /></h4>
-                                        <p className="text-xs text-slate-500 line-clamp-2 mt-1"><T text={svc.descrizione} /></p>
+                                        <p className="text-sm sm:text-xs text-slate-500 line-clamp-2 mt-1"><T text={svc.descrizione} /></p>
                                     </div>
                                     <div className="flex items-center justify-between mt-2">
                                         <span className="font-bold text-blue-600 text-sm">€{svc.prezzo}</span>
-                                        <Button size="sm" variant="outline" className="h-7 text-xs">{t('button.details')}</Button>
+                                        <Button size="sm" variant="outline" className="h-9 sm:h-7 text-sm sm:text-xs">{t('button.details')}</Button>
                                     </div>
                                 </CardContent>
                             </div>
                         </Card>
                     ))}
-                    {services.length === 0 && <p className="text-center text-gray-400 py-8">{t('empty.services')}</p>}
+                    {services.length === 0 && <p className="text-sm text-center text-gray-400 py-8">{t('empty.services')}</p>}
                 </div>
             </TabsContent>
 
@@ -734,7 +734,7 @@ function TenantPortalInner() {
                                     <FileText className="w-5 h-5 text-blue-500 shrink-0"/>
                                     <span className="text-sm font-medium truncate">{doc.filename}</span>
                                 </div>
-                                <Button size="icon" variant="ghost" onClick={() => downloadDoc(doc.file_url)}>
+                                <Button size="icon" variant="ghost" className="h-9 w-9 sm:h-10 sm:w-10" onClick={() => downloadDoc(doc.file_url)}>
                                     <Download className="w-4 h-4 text-blue-600"/>
                                 </Button>
                             </div>
@@ -751,21 +751,21 @@ function TenantPortalInner() {
                     {tickets.map((ticket: any) => (
                         <Card key={ticket.id}>
                             <CardContent className="p-4">
-                                <div className="flex justify-between items-start mb-2">
+                                <div className="flex justify-between items-start mb-2 gap-2">
                                     <h4 className="font-bold text-sm"><T text={ticket.titolo || t('support.report')} /></h4>
-                                    <Badge variant="outline" className="text-[10px]">{ticket.stato}</Badge>
+                                    <Badge variant="outline" className="text-[10px] shrink-0">{ticket.stato}</Badge>
                                 </div>
-                                <p className="text-xs text-slate-600 mb-2"><T text={ticket.descrizione} /></p>
+                                <p className="text-sm sm:text-xs text-slate-600 mb-2"><T text={ticket.descrizione} /></p>
                                 {ticket.admin_notes && (
-                                    <div className="bg-blue-50 p-2 rounded border border-blue-100 text-[11px] text-blue-800">
+                                    <div className="bg-blue-50 p-2 rounded border border-blue-100 text-xs sm:text-[11px] text-blue-800">
                                         <strong>{t('label.staff')}</strong> <T text={ticket.admin_notes} />
                                     </div>
                                 )}
-                                <p className="text-[9px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
+                                <p className="text-[10px] text-gray-400 text-right mt-1">{format(new Date(ticket.created_at), 'dd/MM/yyyy')}</p>
                             </CardContent>
                         </Card>
                     ))}
-                    {tickets.length === 0 && <p className="text-center text-gray-400 py-8">{t('empty.reports')}</p>}
+                    {tickets.length === 0 && <p className="text-sm text-center text-gray-400 py-8">{t('empty.reports')}</p>}
                 </div>
             </TabsContent>
         </Tabs>
@@ -780,7 +780,7 @@ function TenantPortalInner() {
                 <div className="space-y-2"><Label>{t('placeholder.subject')}</Label><Input placeholder={t('placeholder.subjectExample')} value={ticketData.titolo} onChange={e => setTicketData({...ticketData, titolo: e.target.value})} /></div>
                 <div className="space-y-2"><Label>{t('label.description')}</Label><Textarea placeholder={t('placeholder.details')} value={ticketData.descrizione} onChange={e => setTicketData({...ticketData, descrizione: e.target.value})} /></div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="gap-2">
                 <Button variant="outline" onClick={() => setNewTicketOpen(false)}>{t('button.cancel')}</Button>
                 <Button onClick={() => handleCreateTicket.mutate()} className="bg-blue-600 w-full" disabled={!ticketData.titolo}>{t('button.send')}</Button>
             </DialogFooter>
@@ -829,7 +829,7 @@ function TenantPortalInner() {
                       <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-lg">
                           <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
                           <span className="text-sm text-slate-700 flex-1">{serviceDetailOpen.indirizzo}</span>
-                          <Button size="sm" variant="ghost" className="h-7 text-xs text-blue-600 shrink-0" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(serviceDetailOpen.indirizzo)}`, '_blank')}>
+                          <Button size="sm" variant="ghost" className="h-9 sm:h-7 text-sm sm:text-xs text-blue-600 shrink-0" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(serviceDetailOpen.indirizzo)}`, '_blank')}>
                               <MapPin className="w-3 h-3 mr-1" />{t('button.navigate')}
                           </Button>
                       </div>
@@ -841,7 +841,7 @@ function TenantPortalInner() {
                               <ExternalLink className="w-4 h-4 mr-2" />{t('button.viewOffer')}
                           </Button>
                       )}
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                           <Button variant="outline" onClick={() => generateVoucher(serviceDetailOpen)}>
                               <Ticket className="w-4 h-4 mr-2" />{t('button.downloadVoucher')}
                           </Button>
