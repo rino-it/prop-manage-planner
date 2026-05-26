@@ -103,7 +103,7 @@ function TicketRow({
       {/* Body */}
       <div className="flex-1 px-4 py-3 min-w-0">
         <div className="flex flex-wrap items-center gap-2 mb-1">
-          <span className="font-semibold text-sm text-gray-900 truncate max-w-[260px]">{ticket.titolo}</span>
+          <span className="font-semibold text-[15px] sm:text-sm text-gray-900 truncate max-w-[260px]">{ticket.titolo}</span>
 
           {!isResolved && (
             <Badge variant="outline" className={`text-[10px] px-1.5 py-0 ${meta.badge}`}>
@@ -132,7 +132,7 @@ function TicketRow({
         </div>
 
         {/* Meta row */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] sm:text-xs text-gray-500">
           {ticket.properties_real?.nome && (
             <span className="flex items-center gap-1">
               <Home className="w-3 h-3 text-gray-400" /> {ticket.properties_real.nome}
@@ -159,7 +159,7 @@ function TicketRow({
 
         {/* Admin notes */}
         {ticket.admin_notes && (
-          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-900 flex items-start gap-1.5">
+          <div className="mt-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-[13px] sm:text-xs text-yellow-900 flex items-start gap-1.5">
             <StickyNote className="w-3 h-3 mt-0.5 shrink-0 text-yellow-600" />
             <span className="break-all">{renderTextWithLinks(ticket.admin_notes)}</span>
           </div>
@@ -168,14 +168,14 @@ function TicketRow({
         {/* Action buttons (bottom row) */}
         <div className="flex flex-wrap gap-2 mt-3 pt-2 border-t border-gray-100" onClick={e => e.stopPropagation()}>
           {ticket.supplier_contact && (
-            <Button size="sm" variant="outline" className="h-6 text-[11px] gap-1 border-blue-200 text-blue-700 hover:bg-blue-50 px-2"
+            <Button size="sm" variant="outline" className="h-9 sm:h-6 text-xs sm:text-[11px] gap-1 border-blue-200 text-blue-700 hover:bg-blue-50 px-2"
               onClick={() => window.open(`tel:${ticket.supplier_contact}`)}>
               <Phone className="w-3 h-3" /> Fornitore
             </Button>
           )}
           {assignees.length === 1 && (
             <Button size="sm" variant="outline" disabled={isGenerating}
-              className="h-6 text-[11px] gap-1 border-green-200 text-green-700 hover:bg-green-50 px-2"
+              className="h-9 sm:h-6 text-xs sm:text-[11px] gap-1 border-green-200 text-green-700 hover:bg-green-50 px-2"
               onClick={() => onContactPartner(ticket, assignees[0].phone)}>
               {isGenerating ? <span className="animate-pulse">PDF...</span>
                 : <><Share2 className="w-3 h-3" /> {assignees[0].firstName}</>}
@@ -185,7 +185,7 @@ function TicketRow({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button size="sm" variant="outline"
-                  className="h-6 text-[11px] gap-1 border-green-200 text-green-700 hover:bg-green-50 px-2">
+                  className="h-9 sm:h-6 text-xs sm:text-[11px] gap-1 border-green-200 text-green-700 hover:bg-green-50 px-2">
                   {isGenerating ? '...' : <><Share2 className="w-3 h-3" /> Team <ChevronDown className="w-3 h-3" /></>}
                 </Button>
               </DropdownMenuTrigger>
@@ -200,14 +200,14 @@ function TicketRow({
           )}
           {(ticket.quote_url || ticket.ricevuta_url) && (
             <Button size="sm" variant="outline"
-              className="h-6 text-[11px] gap-1 border-purple-200 text-purple-700 hover:bg-purple-50 px-2"
+              className="h-9 sm:h-6 text-xs sm:text-[11px] gap-1 border-purple-200 text-purple-700 hover:bg-purple-50 px-2"
               onClick={() => onOpenFile(ticket.quote_url || ticket.ricevuta_url)}>
               <FileText className="w-3 h-3" /> {ticket.quote_url ? 'Prev.' : 'Ric.'}
             </Button>
           )}
           {isResolved && onReopen && (
             <Button size="sm" variant="ghost"
-              className="h-6 text-[11px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2"
+              className="h-9 sm:h-6 text-xs sm:text-[11px] text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-2"
               onClick={() => { if (confirm('Riaprire questo ticket?')) onReopen(); }}>
               <RotateCcw className="w-3 h-3 mr-1" /> Riapri
             </Button>
@@ -221,28 +221,28 @@ function TicketRow({
           <div className="flex -space-x-2">
             {assignees.slice(0, 3).map((u: any, i: number) => (
               <div key={i}
-                className="h-6 w-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-indigo-700"
+                className="h-7 w-7 sm:h-6 sm:w-6 rounded-full bg-indigo-100 border-2 border-white flex items-center justify-center text-[11px] sm:text-[10px] font-bold text-indigo-700"
                 title={u.label}>
                 {u.firstName?.charAt(0) || '?'}
               </div>
             ))}
             {assignees.length > 3 && (
-              <div className="h-6 w-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[10px] text-slate-600">
+              <div className="h-7 w-7 sm:h-6 sm:w-6 rounded-full bg-slate-100 border-2 border-white flex items-center justify-center text-[11px] sm:text-[10px] text-slate-600">
                 +{assignees.length - 3}
               </div>
             )}
           </div>
         )}
         <Button size="sm" variant="ghost"
-          className="h-7 text-[11px] text-blue-600 hover:bg-blue-50 gap-1 px-2"
+          className="h-9 sm:h-7 text-xs sm:text-[11px] text-blue-600 hover:bg-blue-50 gap-1 px-2"
           onClick={onManage}>
           Gestisci <ChevronRight className="w-3 h-3" />
         </Button>
         <Button size="sm" variant="ghost"
-          className="h-7 w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
+          className="h-9 w-9 sm:h-7 sm:w-7 p-0 text-red-400 hover:text-red-600 hover:bg-red-50"
           title="Elimina ticket"
           onClick={onDelete}>
-          <Trash2 className="w-3.5 h-3.5" />
+          <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
         </Button>
       </div>
     </div>
@@ -275,7 +275,7 @@ function KpiStrip({ tickets }: { tickets: any[] }) {
           <Icon className={`w-5 h-5 ${color} shrink-0`} />
           <div>
             <div className={`text-xl font-bold ${color}`}>{value}</div>
-            <div className="text-xs text-gray-500 leading-tight">{label}</div>
+            <div className="text-[13px] sm:text-xs text-gray-500 leading-tight">{label}</div>
           </div>
         </div>
       ))}
@@ -519,13 +519,13 @@ export default function Activities() {
   const renderTicketList = (list: any[], showReopen = false) => {
     if (list.length === 0) {
       return (
-        <div className="text-center py-10 text-gray-400 bg-slate-50 border border-dashed rounded-xl text-sm">
+        <div className="text-center py-10 text-gray-400 bg-slate-50 border border-dashed rounded-xl text-base sm:text-sm">
           Nessuna attività qui.
         </div>
       );
     }
     return (
-      <div className="space-y-2.5">
+      <div className="space-y-3 sm:space-y-2.5">
         {list.map((t: any) => (
           <TicketRow
             key={t.id}
@@ -556,15 +556,15 @@ export default function Activities() {
         <div className="flex items-center gap-2 flex-wrap">
           {/* Tipo toggle */}
           <div className="flex items-center gap-1 bg-white p-1 rounded-lg border shadow-sm">
-            <Button variant={filterType === 'all'    ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')}    className="text-xs gap-1 h-7"><Filter className="w-3 h-3" /> Tutti</Button>
-            <Button variant={filterType === 'real'   ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')}   className="text-xs gap-1 h-7"><Home className="w-3 h-3" /> Immobili</Button>
-            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs gap-1 h-7"><Car  className="w-3 h-3" /> Veicoli</Button>
+            <Button variant={filterType === 'all'    ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')}    className="text-xs gap-1 h-9 sm:h-7"><Filter className="w-3 h-3" /> Tutti</Button>
+            <Button variant={filterType === 'real'   ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')}   className="text-xs gap-1 h-9 sm:h-7"><Home className="w-3 h-3" /> Immobili</Button>
+            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="text-xs gap-1 h-9 sm:h-7"><Car  className="w-3 h-3" /> Veicoli</Button>
           </div>
 
           {/* Proprietà dropdown (solo se real) */}
           {filterType !== 'mobile' && realProperties && realProperties.length > 1 && (
             <Select value={filterProp} onValueChange={setFilterProp}>
-              <SelectTrigger className="h-9 text-xs w-40 bg-white border shadow-sm">
+              <SelectTrigger className="h-9 text-xs w-full sm:w-40 bg-white border shadow-sm">
                 <SelectValue placeholder="Proprietà..." />
               </SelectTrigger>
               <SelectContent className="max-h-52 overflow-y-auto">
@@ -580,7 +580,7 @@ export default function Activities() {
           <Button
             variant={showCalendar ? 'secondary' : 'outline'}
             size="sm"
-            className="h-9 text-xs gap-1.5"
+            className="h-9 text-sm sm:text-xs gap-1.5"
             onClick={() => setShowCalendar(v => !v)}
           >
             <CalendarDays className="w-3.5 h-3.5" />
@@ -588,7 +588,7 @@ export default function Activities() {
           </Button>
 
           {/* New ticket */}
-          <Button size="sm" className="gap-1.5 h-9" onClick={() => setIsDialogOpen(true)}>
+          <Button size="sm" className="gap-1.5 h-9 text-sm" onClick={() => setIsDialogOpen(true)}>
             <Plus className="w-4 h-4" /> Nuova Attività
           </Button>
         </div>
@@ -607,8 +607,8 @@ export default function Activities() {
         /* ── CALENDARIO (secondary) ── */
         <div className="space-y-5">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-medium text-gray-600">Vista Calendario</h2>
-            <Button variant="ghost" size="sm" className="text-xs text-gray-500" onClick={() => setShowCalendar(false)}>
+            <h2 className="text-base sm:text-sm font-medium text-gray-600">Vista Calendario</h2>
+            <Button variant="ghost" size="sm" className="h-9 sm:h-8 text-sm sm:text-xs text-gray-500" onClick={() => setShowCalendar(false)}>
               ← Torna alla lista
             </Button>
           </div>
@@ -635,7 +635,7 @@ export default function Activities() {
           {/* 3-tab list */}
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="bg-white border shadow-sm">
-              <TabsTrigger value="aperto" className="text-xs gap-1.5">
+              <TabsTrigger value="aperto" className="text-sm sm:text-xs gap-1.5">
                 <Clock className="w-3.5 h-3.5" />
                 Da Fare
                 {tabTickets.aperto.length > 0 && (
@@ -644,7 +644,7 @@ export default function Activities() {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="in_lavorazione" className="text-xs gap-1.5">
+              <TabsTrigger value="in_lavorazione" className="text-sm sm:text-xs gap-1.5">
                 <Wrench className="w-3.5 h-3.5" />
                 In Corso
                 {tabTickets.in_lavorazione.length > 0 && (
@@ -653,7 +653,7 @@ export default function Activities() {
                   </Badge>
                 )}
               </TabsTrigger>
-              <TabsTrigger value="risolto" className="text-xs gap-1.5">
+              <TabsTrigger value="risolto" className="text-sm sm:text-xs gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 Risolti
                 {tabTickets.risolto.length > 0 && (
@@ -758,8 +758,8 @@ export default function Activities() {
               <Input type="date" value={formData.data_scadenza}
                 onChange={e => setFormData({ ...formData, data_scadenza: e.target.value })} />
               {formData.data_scadenza
-                ? <p className="text-xs text-blue-600">✓ Apparirà nel calendario</p>
-                : <p className="text-xs text-amber-600">→ Andrà in "Da Schedulare"</p>
+                ? <p className="text-sm sm:text-xs text-blue-600">✓ Apparirà nel calendario</p>
+                : <p className="text-sm sm:text-xs text-amber-600">→ Andrà in "Da Schedulare"</p>
               }
             </div>
 
@@ -772,20 +772,20 @@ export default function Activities() {
 
             <div className="grid gap-2">
               <Label className="flex items-center gap-2"><Paperclip className="w-4 h-4" /> Allegati</Label>
-              <Input type="file" multiple onChange={e => setUploadFiles(Array.from(e.target.files || []))} className="text-xs" />
+              <Input type="file" multiple onChange={e => setUploadFiles(Array.from(e.target.files || []))} className="text-sm sm:text-xs" />
               {uploadFiles.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1">
+                <div className="flex flex-wrap gap-1.5 sm:gap-1 mt-1">
                   {uploadFiles.map((f, i) => (
-                    <Badge key={i} variant="secondary" className="text-[10px] flex gap-1 items-center">
+                    <Badge key={i} variant="secondary" className="text-xs sm:text-[10px] flex gap-1.5 sm:gap-1 items-center py-1 sm:py-0">
                       {f.name}
-                      <X className="w-3 h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))} />
+                      <X className="w-4 h-4 sm:w-3 sm:h-3 cursor-pointer" onClick={() => setUploadFiles(uploadFiles.filter((_, idx) => idx !== i))} />
                     </Badge>
                   ))}
                 </div>
               )}
             </div>
 
-            <Button className="w-full bg-blue-600 hover:bg-blue-700"
+            <Button className="w-full h-11 sm:h-10 text-sm bg-blue-600 hover:bg-blue-700"
               onClick={() => createTicket.mutate(formData)}
               disabled={isUploading || !formData.target_id || !formData.titolo}>
               {isUploading ? 'Caricamento...' : 'Crea Attività'}
@@ -846,11 +846,12 @@ export default function Activities() {
           </div>
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => { setDeleteTarget(null); setDeleteConfirmText(''); }}>
+            <Button variant="outline" className="h-11 sm:h-10" onClick={() => { setDeleteTarget(null); setDeleteConfirmText(''); }}>
               Annulla
             </Button>
             <Button
               variant="destructive"
+              className="h-11 sm:h-10"
               disabled={deleteConfirmText.trim() !== deleteTarget?.titolo?.trim() || deleteTicket.isPending}
               onClick={() => deleteTicket.mutate(deleteTarget.id)}
             >
