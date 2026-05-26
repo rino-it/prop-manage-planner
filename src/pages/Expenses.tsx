@@ -165,7 +165,7 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
         </span>
 
         {exp.stato !== 'pagato' && onPaga && (
-          <Button size="sm" className={`h-8 text-xs gap-1 ${exp.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`} onClick={onPaga}>
+          <Button size="sm" className={`h-9 sm:h-8 text-xs gap-1 ${exp.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`} onClick={onPaga}>
             {exp.is_advance ? <><Undo2 className="w-3 h-3" /> Rimborsato</> : <><CheckCircle className="w-3 h-3" /> Paga</>}
           </Button>
         )}
@@ -176,12 +176,12 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
         )}
 
         {onEdit && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
             <Pencil className="w-3.5 h-3.5" />
           </Button>
         )}
         {onDelete && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={onDelete}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={onDelete}>
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         )}
@@ -412,15 +412,15 @@ export default function Expenses() {
         <div className="flex items-center gap-2 flex-wrap">
 
           {/* Tipo toggle */}
-          <div className="flex bg-white p-0.5 rounded-md border h-8">
-            <Button variant={filterType === 'all'    ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')}    className="h-7 px-2 text-xs">Tutti</Button>
-            <Button variant={filterType === 'real'   ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')}   className="h-7 px-2 text-xs"><Home className="w-3 h-3" /></Button>
-            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="h-7 px-2 text-xs"><Car className="w-3 h-3" /></Button>
+          <div className="flex bg-white p-0.5 rounded-md border h-9 sm:h-8">
+            <Button variant={filterType === 'all'    ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')}    className="h-8 sm:h-7 px-3 sm:px-2 text-xs">Tutti</Button>
+            <Button variant={filterType === 'real'   ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')}   className="h-8 sm:h-7 px-3 sm:px-2 text-xs"><Home className="w-3 h-3" /></Button>
+            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="h-8 sm:h-7 px-3 sm:px-2 text-xs"><Car className="w-3 h-3" /></Button>
           </div>
 
           {/* Filtro proprietà */}
           <Select value={filterProp} onValueChange={setFilterProp}>
-            <SelectTrigger className="h-8 text-xs w-[150px] bg-white">
+            <SelectTrigger className="h-9 sm:h-8 text-xs w-full sm:w-[150px] bg-white">
               <Filter className="w-3 h-3 mr-1.5 text-slate-400" />
               <SelectValue placeholder="Proprietà" />
             </SelectTrigger>
@@ -432,7 +432,7 @@ export default function Expenses() {
 
           {/* Filtro categoria */}
           <Select value={filterCat} onValueChange={setFilterCat}>
-            <SelectTrigger className="h-8 text-xs w-[140px] bg-white">
+            <SelectTrigger className="h-9 sm:h-8 text-xs w-full sm:w-[140px] bg-white">
               <SelectValue placeholder="Categoria" />
             </SelectTrigger>
             <SelectContent>
@@ -441,7 +441,7 @@ export default function Expenses() {
             </SelectContent>
           </Select>
 
-          <Button size="sm" onClick={openCreate} className="gap-1.5">
+          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 sm:h-8">
             <Plus className="w-4 h-4" /> Nuova Spesa
           </Button>
         </div>
@@ -525,7 +525,7 @@ export default function Expenses() {
             <>
               {thisWeek.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">⚡ Questa settimana</p>
+                  <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">⚡ Questa settimana</p>
                   <Card>
                     <CardContent className="p-0 divide-y">
                       {thisWeek.map(ex => (
@@ -541,7 +541,7 @@ export default function Expenses() {
               )}
               {thisMonth.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-amber-600 mb-2 px-1">📅 Prossimi 30 giorni</p>
+                  <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-amber-600 mb-2 px-1">📅 Prossimi 30 giorni</p>
                   <Card>
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(ex => (
@@ -557,7 +557,7 @@ export default function Expenses() {
               )}
               {later.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">🗓 Oltre 30 giorni</p>
+                  <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">🗓 Oltre 30 giorni</p>
                   <Card>
                     <CardContent className="p-0 divide-y">
                       {later.map(ex => (
@@ -578,16 +578,18 @@ export default function Expenses() {
         {/* ── ANTICIPI ── */}
         <TabsContent value="advances" className="mt-4 space-y-4">
           {/* Banner riassuntivo */}
-          <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
-            <div className="p-3 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
-              <HandCoins className="w-6 h-6" />
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-4">
+            <div className="flex items-center gap-3 flex-1 min-w-0">
+              <div className="p-3 rounded-full bg-emerald-100 text-emerald-700 shrink-0">
+                <HandCoins className="w-6 h-6" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Da farsi rimborsare</p>
+                <p className="text-2xl font-bold text-emerald-800 tabular-nums">{fmt(totalAdvancesPending)}</p>
+                <p className="text-xs text-emerald-600">{advancesPending.length} anticip{advancesPending.length === 1 ? 'o' : 'i'} apert{advancesPending.length === 1 ? 'o' : 'i'}</p>
+              </div>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Da farsi rimborsare</p>
-              <p className="text-2xl font-bold text-emerald-800 tabular-nums">{fmt(totalAdvancesPending)}</p>
-              <p className="text-xs text-emerald-600">{advancesPending.length} anticip{advancesPending.length === 1 ? 'o' : 'i'} apert{advancesPending.length === 1 ? 'o' : 'i'}</p>
-            </div>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 gap-1.5 shrink-0"
+            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 gap-1.5 shrink-0 h-9 w-full sm:w-auto"
               onClick={() => { setEditingId(null); setForm({ ...DEFAULT_FORM, is_advance: true }); setSheetOpen(true); }}>
               <Plus className="w-4 h-4" /> Nuovo Anticipo
             </Button>
@@ -605,7 +607,7 @@ export default function Expenses() {
             <>
               {advancesPending.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-emerald-700 mb-2 px-1">⏳ Da rimborsare</p>
+                  <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-emerald-700 mb-2 px-1">⏳ Da rimborsare</p>
                   <Card>
                     <CardContent className="p-0 divide-y">
                       {advancesPending.map(ex => (
@@ -621,7 +623,7 @@ export default function Expenses() {
               )}
               {advancesRefunded.length > 0 && (
                 <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">✅ Rimborsati</p>
+                  <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-slate-400 mb-2 px-1">✅ Rimborsati</p>
                   <Card>
                     <CardContent className="p-0 divide-y">
                       {advancesRefunded.map(ex => (
@@ -712,7 +714,7 @@ export default function Expenses() {
               </div>
               {form.is_advance && (
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">Chi deve rimborsare</Label>
+                  <Label className="text-sm sm:text-xs">Chi deve rimborsare</Label>
                   <Input placeholder="Nome del debitore (es. Mario Rossi, Condominio, ecc.)"
                     value={form.debtor_name}
                     onChange={e => setForm(f => ({ ...f, debtor_name: e.target.value }))} />
@@ -738,7 +740,7 @@ export default function Expenses() {
 
             {/* Proprietà / Veicolo */}
             <div className="grid gap-1.5">
-              <Label className="text-xs">Seleziona {form.targetType === 'real' ? 'Proprietà' : 'Veicolo'}</Label>
+              <Label className="text-sm sm:text-xs">Seleziona {form.targetType === 'real' ? 'Proprietà' : 'Veicolo'}</Label>
               <Select value={form.targetId} onValueChange={v => setForm(f => ({ ...f, targetId: v }))}>
                 <SelectTrigger><SelectValue placeholder="Seleziona..." /></SelectTrigger>
                 <SelectContent>
@@ -753,7 +755,7 @@ export default function Expenses() {
             {/* Importo + Scadenza */}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label className="text-xs">Importo (€) *</Label>
+                <Label className="text-sm sm:text-xs">Importo (€) *</Label>
                 <div className="relative">
                   <Euro className="absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
                   <Input type="number" className="pl-8" placeholder="0.00"
@@ -761,14 +763,14 @@ export default function Expenses() {
                 </div>
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-xs">{form.is_advance ? 'Data anticipo *' : 'Scadenza *'}</Label>
+                <Label className="text-sm sm:text-xs">{form.is_advance ? 'Data anticipo *' : 'Scadenza *'}</Label>
                 <Input type="date" value={form.scadenza} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value }))} />
               </div>
             </div>
 
             {/* Descrizione */}
             <div className="grid gap-1.5">
-              <Label className="text-xs">Descrizione</Label>
+              <Label className="text-sm sm:text-xs">Descrizione</Label>
               <Input placeholder="Es. Bolletta Enel" value={form.descrizione}
                 onChange={e => setForm(f => ({ ...f, descrizione: e.target.value }))} />
             </div>
@@ -776,7 +778,7 @@ export default function Expenses() {
             {/* Categoria + Stato */}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label className="text-xs">Categoria</Label>
+                <Label className="text-sm sm:text-xs">Categoria</Label>
                 <Select value={form.categoria} onValueChange={v => setForm(f => ({ ...f, categoria: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -785,7 +787,7 @@ export default function Expenses() {
                 </Select>
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-xs">Stato</Label>
+                <Label className="text-sm sm:text-xs">Stato</Label>
                 <Select value={form.stato} onValueChange={v => setForm(f => ({ ...f, stato: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -799,7 +801,7 @@ export default function Expenses() {
             {/* Metodo + Competenza */}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label className="text-xs">Metodo pagamento</Label>
+                <Label className="text-sm sm:text-xs">Metodo pagamento</Label>
                 <Select value={form.payment_method} onValueChange={v => setForm(f => ({ ...f, payment_method: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -813,7 +815,7 @@ export default function Expenses() {
               </div>
               {!form.is_advance && (
                 <div className="grid gap-1.5">
-                  <Label className="text-xs">A carico di</Label>
+                  <Label className="text-sm sm:text-xs">A carico di</Label>
                   <Select value={form.competence} onValueChange={v => setForm(f => ({ ...f, competence: v as 'owner' | 'tenant' }))}>
                     <SelectTrigger className={form.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
                       <SelectValue />
@@ -844,7 +846,7 @@ export default function Expenses() {
                 </div>
                 {form.visible_tenant && (
                   <div className="grid gap-1.5">
-                    <Label className="text-xs">Inquilino destinatario</Label>
+                    <Label className="text-sm sm:text-xs">Inquilino destinatario</Label>
                     <Select value={form.tenant_booking_id} onValueChange={v => setForm(f => ({ ...f, tenant_booking_id: v }))}>
                       <SelectTrigger><SelectValue placeholder="Seleziona inquilino..." /></SelectTrigger>
                       <SelectContent>
@@ -862,9 +864,9 @@ export default function Expenses() {
 
             {/* Actions */}
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setSheetOpen(false)}>Annulla</Button>
+              <Button variant="outline" className="flex-1 h-11 sm:h-10" onClick={() => setSheetOpen(false)}>Annulla</Button>
               <Button
-                className="flex-1 bg-red-600 hover:bg-red-700 font-bold"
+                className="flex-1 h-11 sm:h-10 bg-red-600 hover:bg-red-700 font-bold"
                 onClick={() => saveExpense.mutate()}
                 disabled={!form.importo || saveExpense.isPending}
               >
@@ -917,10 +919,10 @@ export default function Expenses() {
                   value={confirmNote} onChange={e => setConfirmNote(e.target.value)} />
               </div>
             )}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setConfirmTarget(null)}>Annulla</Button>
+            <DialogFooter className="gap-2 sm:gap-0">
+              <Button variant="outline" className="h-11 sm:h-10" onClick={() => setConfirmTarget(null)}>Annulla</Button>
               <Button
-                className={`font-bold gap-1.5 ${confirmTarget?.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`}
+                className={`h-11 sm:h-10 font-bold gap-1.5 ${confirmTarget?.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`}
                 onClick={() => confirmPayment.mutate({
                   id: confirmTarget.id,
                   date: confirmDate,
