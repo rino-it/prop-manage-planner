@@ -28,7 +28,7 @@ export default function NotificationBell() {
 
       // Scarichiamo i dati CON i riferimenti (property_id / mobile_id)
       const [expenses, tickets, revenues] = await Promise.all([
-        supabase.from('payments').select('*, properties_mobile(targa)').eq('stato', 'da_pagare'),
+        supabase.from('payments').select('*, properties_mobile(targa)').eq('stato', 'da_pagare').eq('is_advance', false),
         supabase.from('tickets').select('*, properties_mobile(targa)').neq('stato', 'risolto'),
         supabase.from('tenant_payments').select('*, bookings(nome_ospite)').eq('stato', 'da_pagare')
       ]);

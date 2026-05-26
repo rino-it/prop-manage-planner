@@ -84,7 +84,7 @@ export default function Dashboard({ onNavigate }: DashboardProps) {
         supabase.from('bookings').select('id, data_inizio, data_fine, nome_ospite, properties_real(nome)')
           .or(`data_inizio.gte.${rangeStart},data_fine.lte.${rangeEnd}`),
         supabase.from('payments').select('*, properties_real(nome), properties_mobile(veicolo, targa)')
-          .gte('scadenza', rangeStart).lte('scadenza', rangeEnd),
+          .gte('scadenza', rangeStart).lte('scadenza', rangeEnd).eq('is_advance', false),
         supabase.from('tenant_payments').select('*')
           .gte('data_scadenza', rangeStart).lte('data_scadenza', rangeEnd),
         supabase.from('tickets').select('*, properties_real(nome)')

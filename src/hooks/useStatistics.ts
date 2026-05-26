@@ -111,7 +111,8 @@ export function useStatistics(filters: StatisticsFilters) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('payments')
-        .select('id, property_real_id, importo, scadenza, stato, categoria, descrizione');
+        .select('id, property_real_id, importo, scadenza, stato, categoria, descrizione')
+        .eq('is_advance', false);
       if (error) throw error;
       return data;
     },
