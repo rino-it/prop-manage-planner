@@ -65,14 +65,14 @@ function KpiCard({ label, value, sub, color, icon }: {
 }) {
   return (
     <Card className={`border ${color}`}>
-      <CardContent className="p-5 flex items-center gap-4">
-        <div className={`p-3 rounded-full ${color.replace('border-', 'bg-').replace('-200', '-100')} shrink-0`}>
+      <CardContent className="p-3 sm:p-5 flex items-center gap-3 sm:gap-4">
+        <div className={`p-2 sm:p-3 rounded-full ${color.replace('border-', 'bg-').replace('-200', '-100')} shrink-0`}>
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="text-2xl font-bold text-slate-900 truncate">{value}</p>
-          {sub && <p className="text-xs text-slate-400">{sub}</p>}
+          <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
+          <p className="text-xl sm:text-2xl font-bold text-slate-900 truncate">{value}</p>
+          {sub && <p className="text-[10px] sm:text-xs text-slate-400">{sub}</p>}
         </div>
       </CardContent>
     </Card>
@@ -109,7 +109,7 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
                 {rev.bookings.properties_real.nome}
               </span>
             )}
-            <span className="text-xs text-slate-400">
+            <span className="text-[11px] sm:text-xs text-slate-400">
               {CATEGORY_LABELS[rev.category] || rev.category || 'Generico'}
             </span>
           </div>
@@ -124,7 +124,7 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
               <span>Scad. {format(parseISO(rev.data_scadenza), 'd MMM yyyy', { locale: it })}</span>
             )}
             {overdueDays && (
-              <Badge variant="destructive" className="text-[10px] h-4 px-1.5">
+              <Badge variant="destructive" className="text-[11px] sm:text-[10px] h-5 sm:h-4 px-1.5">
                 {overdueDays}gg di ritardo
               </Badge>
             )}
@@ -136,14 +136,14 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
       </div>
 
       {/* Right */}
-      <div className="flex items-center gap-2 shrink-0">
-        <span className={`text-base font-bold tabular-nums ${rev.stato === 'pagato' ? 'text-green-600' : overdueDays ? 'text-red-600' : 'text-slate-700'}`}>
+      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 flex-wrap justify-end w-full sm:w-auto">
+        <span className={`text-base sm:text-base font-bold tabular-nums ${rev.stato === 'pagato' ? 'text-green-600' : overdueDays ? 'text-red-600' : 'text-slate-700'}`}>
           €{Number(rev.importo).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
         </span>
 
         {rev.stato !== 'pagato' && onIncassa && (
-          <Button size="sm" className="h-8 text-xs bg-green-600 hover:bg-green-700 gap-1" onClick={onIncassa}>
-            <CheckCircle className="w-3 h-3" /> Incassa
+          <Button size="sm" className="h-9 sm:h-8 text-xs bg-green-600 hover:bg-green-700 gap-1" onClick={onIncassa}>
+            <CheckCircle className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> Incassa
           </Button>
         )}
         {rev.stato === 'pagato' && (
@@ -153,18 +153,18 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
         )}
 
         {onCalendar && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400 hover:text-blue-700 hover:bg-blue-50" onClick={onCalendar} title="Aggiungi a calendario">
-            <CalendarPlus className="w-3.5 h-3.5" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-blue-400 hover:text-blue-700 hover:bg-blue-50" onClick={onCalendar} title="Aggiungi a calendario">
+            <CalendarPlus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </Button>
         )}
         {onEdit && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
-            <Pencil className="w-3.5 h-3.5" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
+            <Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </Button>
         )}
         {onDelete && (
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={onDelete}>
-            <Trash2 className="w-3.5 h-3.5" />
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={onDelete}>
+            <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </Button>
         )}
       </div>
@@ -330,7 +330,7 @@ export default function Revenue() {
 
           {/* Filtro proprietà */}
           <Select value={filterProp} onValueChange={setFilterProp}>
-            <SelectTrigger className="h-8 text-xs w-[160px] bg-white">
+            <SelectTrigger className="h-9 sm:h-8 text-xs w-[150px] sm:w-[160px] bg-white">
               <Filter className="w-3 h-3 mr-1.5 text-slate-400" />
               <SelectValue placeholder="Proprietà" />
             </SelectTrigger>
@@ -342,7 +342,7 @@ export default function Revenue() {
 
           {/* Filtro categoria */}
           <Select value={filterCat} onValueChange={setFilterCat}>
-            <SelectTrigger className="h-8 text-xs w-[140px] bg-white">
+            <SelectTrigger className="h-9 sm:h-8 text-xs w-[140px] bg-white">
               <SelectValue placeholder="Categoria" />
             </SelectTrigger>
             <SelectContent>
@@ -351,14 +351,14 @@ export default function Revenue() {
             </SelectContent>
           </Select>
 
-          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5">
+          <Button size="sm" onClick={() => setCreateOpen(true)} className="gap-1.5 h-9 sm:h-8">
             <Plus className="w-4 h-4" /> Nuovo Incasso
           </Button>
         </div>
       </PageHeader>
 
       {/* ── KPI ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard label="Incassato" value={fmt(totalPaid)} sub={`${paid.length} pagamenti`}
           color="border-green-200 bg-green-50" icon={<CheckCircle className="w-6 h-6 text-green-600" />} />
         <KpiCard label="In Attesa" value={fmt(totalPending)} sub={`${upcoming.length} rate`}
@@ -371,18 +371,18 @@ export default function Revenue() {
 
       {/* ── Tabs ── */}
       <Tabs defaultValue={overdue.length > 0 ? 'overdue' : 'upcoming'}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overdue" className="gap-2">
-            {overdue.length > 0 && <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">{overdue.length}</span>}
-            🔴 Scaduti
+        <TabsList className="grid w-full grid-cols-3 h-auto">
+          <TabsTrigger value="overdue" className="gap-1 sm:gap-2 text-xs sm:text-sm px-1 sm:px-3">
+            {overdue.length > 0 && <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shrink-0">{overdue.length}</span>}
+            <span className="truncate">🔴 Scaduti</span>
           </TabsTrigger>
-          <TabsTrigger value="upcoming">
-            📅 In Scadenza
-            {upcoming.length > 0 && <span className="ml-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full">{upcoming.length}</span>}
+          <TabsTrigger value="upcoming" className="text-xs sm:text-sm px-1 sm:px-3">
+            <span className="truncate">📅 <span className="hidden sm:inline">In </span>Scadenza</span>
+            {upcoming.length > 0 && <span className="ml-1 sm:ml-1.5 bg-amber-100 text-amber-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full shrink-0">{upcoming.length}</span>}
           </TabsTrigger>
-          <TabsTrigger value="paid">
-            ✅ Storico Pagati
-            {paid.length > 0 && <span className="ml-1.5 text-[10px] text-slate-400">{paid.length}</span>}
+          <TabsTrigger value="paid" className="text-xs sm:text-sm px-1 sm:px-3">
+            <span className="truncate">✅ <span className="hidden sm:inline">Storico </span>Pagati</span>
+            {paid.length > 0 && <span className="ml-1 sm:ml-1.5 text-[10px] text-slate-400 shrink-0">{paid.length}</span>}
           </TabsTrigger>
         </TabsList>
 
@@ -491,17 +491,17 @@ export default function Revenue() {
               return (
                 <div key={monthKey} className="rounded-xl border overflow-hidden">
                   <button
-                    className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors"
+                    className="w-full flex items-center justify-between px-3 sm:px-4 py-3 bg-slate-50 hover:bg-slate-100 transition-colors gap-2"
                     onClick={() => toggleMonth(monthKey)}
                   >
-                    <div className="flex items-center gap-3">
-                      <span className="font-semibold text-slate-700 capitalize">{monthLabel}</span>
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
+                      <span className="font-semibold text-sm sm:text-base text-slate-700 capitalize">{monthLabel}</span>
                       <span className="text-xs bg-green-100 text-green-700 border border-green-200 px-2 py-0.5 rounded-full font-bold">
                         {fmt(monthTotal)}
                       </span>
                       <span className="text-xs text-slate-400">{items.length} pagamenti</span>
                     </div>
-                    {isCollapsed ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                    {isCollapsed ? <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" /> : <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />}
                   </button>
                   {!isCollapsed && (
                     <div className="divide-y bg-white">
@@ -523,7 +523,7 @@ export default function Revenue() {
           DIALOG: CREA NUOVO INCASSO
       ───────────────────────────────────────────────────────── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="sm:max-w-lg max-h-[85svh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-lg max-h-[85svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuovo Incasso / Piano Rateale</DialogTitle>
             <DialogDescription>Seleziona proprietà e inquilino, poi compila i dettagli.</DialogDescription>
@@ -575,7 +575,7 @@ export default function Revenue() {
               <>
                 <div className="grid gap-2">
                   <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">3. Dettagli</Label>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="grid gap-1.5">
                       <Label className="text-xs">Importo (€) *</Label>
                       <Input type="number" placeholder="0.00" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
@@ -641,13 +641,13 @@ export default function Revenue() {
           DIALOG: MODIFICA
       ───────────────────────────────────────────────────────── */}
       <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
-        <DialogContent className="sm:max-w-md max-h-[85svh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-md max-h-[85svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Modifica Incasso</DialogTitle>
             <DialogDescription>{editTarget?.bookings?.nome_ospite} · {CATEGORY_LABELS[editTarget?.category] || ''}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-2">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
               <div className="grid gap-2">
                 <Label>Importo (€)</Label>
                 <Input type="number" value={editForm.amount} onChange={e => setEditForm(f => ({ ...f, amount: e.target.value }))} />
@@ -684,7 +684,7 @@ export default function Revenue() {
           DIALOG: CONFERMA INCASSO
       ───────────────────────────────────────────────────────── */}
       <Dialog open={!!confirmTarget} onOpenChange={(o) => !o && setConfirmTarget(null)}>
-        <DialogContent className="sm:max-w-sm max-h-[85svh] overflow-y-auto">
+        <DialogContent className="w-[calc(100%-1rem)] max-w-[95vw] sm:max-w-sm max-h-[85svh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Conferma Incasso</DialogTitle>
             <DialogDescription>
