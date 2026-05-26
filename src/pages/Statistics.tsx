@@ -89,7 +89,7 @@ export default function Statistics() {
     <div className="space-y-6">
       <PageHeader title="Statistiche">
         <Select value={propertyId ?? 'all'} onValueChange={(v) => setPropertyId(v === 'all' ? null : v)}>
-          <SelectTrigger className="w-[200px]">
+          <SelectTrigger className="w-full sm:w-[200px]">
             <SelectValue placeholder="Tutte le proprieta" />
           </SelectTrigger>
           <SelectContent>
@@ -100,7 +100,7 @@ export default function Statistics() {
           </SelectContent>
         </Select>
         <Select value={period} onValueChange={(v) => setPeriod(v as PeriodFilter)}>
-          <SelectTrigger className="w-[140px]">
+          <SelectTrigger className="w-full sm:w-[140px]">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -168,12 +168,14 @@ export default function Statistics() {
       </div>
 
       <Tabs defaultValue="finanze" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="finanze">Incassi vs Spese</TabsTrigger>
-          <TabsTrigger value="prenotazioni">Trend Prenotazioni</TabsTrigger>
-          <TabsTrigger value="occupazione">Occupazione per Proprieta</TabsTrigger>
-          <TabsTrigger value="rendimento">Top Rendimento</TabsTrigger>
-        </TabsList>
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <TabsList className="w-max sm:w-auto">
+            <TabsTrigger value="finanze">Incassi vs Spese</TabsTrigger>
+            <TabsTrigger value="prenotazioni">Trend Prenotazioni</TabsTrigger>
+            <TabsTrigger value="occupazione">Occupazione per Proprieta</TabsTrigger>
+            <TabsTrigger value="rendimento">Top Rendimento</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="finanze">
           <Card>
