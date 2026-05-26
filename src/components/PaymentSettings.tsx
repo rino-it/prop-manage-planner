@@ -140,7 +140,7 @@ export default function PaymentSettings({ propertyId }: PaymentSettingsProps) {
           </CollapsibleTrigger>
           <CollapsibleContent>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="caparra_percentage">Caparra (%)</Label>
                   <Input
@@ -166,7 +166,7 @@ export default function PaymentSettings({ propertyId }: PaymentSettingsProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="saldo_due_days_before">Saldo scadenza (giorni prima)</Label>
                   <Input
@@ -192,7 +192,7 @@ export default function PaymentSettings({ propertyId }: PaymentSettingsProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="cauzione_preauth_days_before">Pre-auth cauzione (giorni prima)</Label>
                   <Input
@@ -217,7 +217,7 @@ export default function PaymentSettings({ propertyId }: PaymentSettingsProps) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="tassa_soggiorno_per_night">Tassa soggiorno per notte (EUR)</Label>
                   <Input
@@ -313,7 +313,7 @@ export default function PaymentSettings({ propertyId }: PaymentSettingsProps) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="checkin_email_days_before">Email check-in (giorni prima)</Label>
                   <Input
