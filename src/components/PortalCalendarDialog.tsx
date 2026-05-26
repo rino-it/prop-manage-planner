@@ -215,7 +215,7 @@ export default function PortalCalendarDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl w-[95vw]">
+      <DialogContent className="max-w-[95vw] sm:max-w-2xl w-[95vw]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarIcon className="w-5 h-5" />
@@ -228,13 +228,13 @@ export default function PortalCalendarDialog({
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <Button variant="outline" size="sm" onClick={() => setCurrentMonth(m => subMonths(m, 1))}>
+            <Button variant="outline" size="sm" className="h-9 w-9 sm:h-8 sm:w-8 p-0" onClick={() => setCurrentMonth(m => subMonths(m, 1))}>
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <span className="font-semibold text-sm capitalize">
+            <span className="font-semibold text-sm sm:text-base capitalize">
               {format(currentMonth, 'MMMM yyyy', { locale: it })}
             </span>
-            <Button variant="outline" size="sm" onClick={() => setCurrentMonth(m => addMonths(m, 1))}>
+            <Button variant="outline" size="sm" className="h-9 w-9 sm:h-8 sm:w-8 p-0" onClick={() => setCurrentMonth(m => addMonths(m, 1))}>
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
@@ -265,7 +265,7 @@ export default function PortalCalendarDialog({
           <div className="border rounded-lg overflow-hidden">
             <div className="grid grid-cols-7 bg-slate-50 border-b">
               {WEEKDAYS.map(d => (
-                <div key={d} className="text-center text-[11px] font-medium text-muted-foreground py-2">
+                <div key={d} className="text-center text-xs font-medium text-muted-foreground py-2">
                   {d}
                 </div>
               ))}
@@ -302,7 +302,7 @@ export default function PortalCalendarDialog({
                   <div
                     key={idx}
                     className={`
-                      relative min-h-[52px] border-b border-r p-1 transition-colors
+                      relative min-h-[56px] sm:min-h-[52px] border-b border-r p-1 transition-colors
                       ${hasBooking || hasBlock ? 'cursor-pointer hover:brightness-95' : ''}
                       ${inMonth ? '' : 'opacity-30'}
                       ${cellBg} ${cellBorder}
@@ -318,7 +318,7 @@ export default function PortalCalendarDialog({
                     </span>
 
                     {label && (
-                      <div className={`mt-0.5 px-1 py-0.5 rounded text-[9px] truncate ${labelColor} font-medium`}>
+                      <div className={`mt-0.5 px-1 py-0.5 rounded text-[10px] sm:text-[9px] truncate ${labelColor} font-medium`}>
                         {label}
                       </div>
                     )}
@@ -333,13 +333,14 @@ export default function PortalCalendarDialog({
           </div>
 
           {portalUrl && (
-            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-50 border">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-3 rounded-lg bg-slate-50 border">
               <span className="text-sm text-muted-foreground">
                 Per bloccare o sbloccare date, gestisci direttamente su {portalLabel(portalName)}
               </span>
               <Button
                 variant="outline"
                 size="sm"
+                className="h-10 sm:h-9 w-full sm:w-auto"
                 onClick={() => window.open(portalUrl, '_blank', 'noopener')}
               >
                 <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
@@ -349,8 +350,8 @@ export default function PortalCalendarDialog({
           )}
 
           {(allMonthBookings.length > 0 || monthBlocked.length > 0) && (
-            <ScrollArea className="max-h-[200px]">
-              <div className="space-y-1.5">
+            <ScrollArea className="max-h-[240px] sm:max-h-[200px]">
+              <div className="space-y-2 sm:space-y-1.5">
                 {allMonthBookings.map(b => {
                   const start = parseISO(b.data_inizio);
                   const end = parseISO(b.data_fine);
@@ -359,16 +360,16 @@ export default function PortalCalendarDialog({
                   return (
                     <div
                       key={b.id}
-                      className={`flex items-center gap-3 p-2 rounded-lg border ${sc.border} ${sc.bg}`}
+                      className={`flex items-center gap-3 p-2.5 sm:p-2 rounded-lg border ${sc.border} ${sc.bg}`}
                     >
-                      <User className={`w-3.5 h-3.5 ${sc.text} shrink-0`} />
+                      <User className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${sc.text} shrink-0`} />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{b.nome_ospite}</p>
-                        <p className="text-[11px] text-muted-foreground">
+                        <p className="text-xs sm:text-[11px] text-muted-foreground">
                           {format(start, 'dd MMM', { locale: it })} - {format(end, 'dd MMM', { locale: it })} ({nights} {nights === 1 ? 'notte' : 'notti'})
                         </p>
                       </div>
-                      <Badge variant="outline" className={`text-[9px] ${sc.text} ${sc.border}`}>
+                      <Badge variant="outline" className={`text-[10px] sm:text-[9px] ${sc.text} ${sc.border}`}>
                         {sourceLabel(b.source)}
                       </Badge>
                     </div>
@@ -378,16 +379,16 @@ export default function PortalCalendarDialog({
                 {monthBlocked.map(bl => (
                   <div
                     key={bl.id}
-                    className={`flex items-center gap-3 p-2 rounded-lg border ${BLOCKED_COLORS.border} ${BLOCKED_COLORS.bg}`}
+                    className={`flex items-center gap-3 p-2.5 sm:p-2 rounded-lg border ${BLOCKED_COLORS.border} ${BLOCKED_COLORS.bg}`}
                   >
-                    <Ban className={`w-3.5 h-3.5 ${BLOCKED_COLORS.text} shrink-0`} />
+                    <Ban className={`w-4 h-4 sm:w-3.5 sm:h-3.5 ${BLOCKED_COLORS.text} shrink-0`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{bl.reason || 'Bloccato'}</p>
-                      <p className="text-[11px] text-muted-foreground">
+                      <p className="text-xs sm:text-[11px] text-muted-foreground">
                         {format(parseISO(bl.date_start), 'dd MMM', { locale: it })} - {format(parseISO(bl.date_end), 'dd MMM', { locale: it })}
                       </p>
                     </div>
-                    <Badge variant="outline" className={`text-[9px] ${BLOCKED_COLORS.text} ${BLOCKED_COLORS.border}`}>
+                    <Badge variant="outline" className={`text-[10px] sm:text-[9px] ${BLOCKED_COLORS.text} ${BLOCKED_COLORS.border}`}>
                       {sourceLabel(bl.source)}
                     </Badge>
                   </div>
@@ -404,7 +405,7 @@ export default function PortalCalendarDialog({
         </div>
 
         <Dialog open={!!selectedItem} onOpenChange={(o) => !o && setSelectedItem(null)}>
-          <DialogContent className="sm:max-w-sm">
+          <DialogContent className="max-w-[95vw] sm:max-w-md">
             <DialogHeader>
               <DialogTitle className="text-base">
                 {selectedItemType === 'booking' ? 'Dettaglio prenotazione' : 'Date bloccate'}
@@ -428,7 +429,7 @@ export default function PortalCalendarDialog({
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">Check-in</p>
                     <p className="font-medium">{format(parseISO((selectedItem as PortalBooking).data_inizio), 'dd MMM yyyy', { locale: it })}</p>
@@ -457,7 +458,7 @@ export default function PortalCalendarDialog({
                     </p>
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">Da</p>
                     <p className="font-medium">{format(parseISO((selectedItem as BlockedDate).date_start), 'dd MMM yyyy', { locale: it })}</p>
