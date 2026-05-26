@@ -446,17 +446,17 @@ function GuestPortalInner() {
               {t('welcome.title')} {prop?.nome || 'la tua casa'}
             </h1>
             {booking.data_inizio && booking.data_fine && (
-              <div className="flex items-center gap-2 mt-2 text-xs opacity-90">
-                <Clock className="w-3 h-3" />
+              <div className="flex items-center gap-2 mt-2 text-sm opacity-90">
+                <Clock className="w-3.5 h-3.5" />
                 <span>{format(parseISO(booking.data_inizio), 'dd MMM', { locale: it })} — {format(parseISO(booking.data_fine), 'dd MMM yyyy', { locale: it })}</span>
               </div>
             )}
             {prop?.indirizzo && (
               <button
-                className="flex items-center gap-1.5 mt-2 text-xs opacity-80 hover:opacity-100 transition-opacity"
+                className="flex items-center gap-1.5 mt-2 text-sm opacity-80 hover:opacity-100 transition-opacity py-1"
                 onClick={() => window.open(mapsUrl, '_blank')}
               >
-                <MapPin className="w-3 h-3" />
+                <MapPin className="w-3.5 h-3.5" />
                 <span className="underline underline-offset-2">{prop.indirizzo}{prop.citta ? `, ${prop.citta}` : ''}</span>
               </button>
             )}
@@ -468,24 +468,24 @@ function GuestPortalInner() {
           <div className="flex justify-between items-center px-2">
             {[{ s: 1, l: t('steps.contacts') }, { s: 2, l: t('steps.documents') }, { s: 3, l: t('steps.verification') }, { s: 4, l: t('steps.access') }].map((step, i) => (
                 <React.Fragment key={step.s}>
-                  <div className="flex flex-col items-center gap-1">
-                      <div className={`w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${currentStep >= step.s ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-300'}`}>
+                  <div className="flex flex-col items-center gap-1.5">
+                      <div className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold transition-all ${currentStep >= step.s ? 'bg-slate-900 text-white shadow-md' : 'bg-slate-100 text-slate-300'}`}>
                           {currentStep > step.s ? <CheckCircle className="w-4 h-4"/> : step.s}
                       </div>
-                      <span className={`text-[9px] uppercase font-bold leading-tight text-center max-w-[60px] ${currentStep >= step.s ? 'text-slate-900' : 'text-slate-300'}`}>{step.l}</span>
+                      <span className={`text-[10px] uppercase font-bold leading-tight text-center max-w-[70px] ${currentStep >= step.s ? 'text-slate-900' : 'text-slate-300'}`}>{step.l}</span>
                   </div>
-                  {i < 3 && <div className={`flex-1 h-0.5 mx-1 mt-[-12px] rounded-full ${currentStep > step.s ? 'bg-slate-900' : 'bg-slate-100'}`} />}
+                  {i < 3 && <div className={`flex-1 h-0.5 mx-1 mt-[-18px] rounded-full ${currentStep > step.s ? 'bg-slate-900' : 'bg-slate-100'}`} />}
                 </React.Fragment>
             ))}
           </div>
           {/* Contextual message */}
-          {currentStep === 1 && <p className="text-center text-xs text-slate-500 mt-2 px-2">{t('contact.prompt')}</p>}
-          {currentStep === 2 && <p className="text-center text-xs text-slate-500 mt-2 px-2">{t('docs.uploadPrompt')}</p>}
-          {currentStep === 3 && <p className="text-center text-xs text-yellow-700 mt-2 px-2">{t('checkin.pending')}</p>}
+          {currentStep === 1 && <p className="text-center text-sm text-slate-500 mt-3 px-2">{t('contact.prompt')}</p>}
+          {currentStep === 2 && <p className="text-center text-sm text-slate-500 mt-3 px-2">{t('docs.uploadPrompt')}</p>}
+          {currentStep === 3 && <p className="text-center text-sm text-yellow-700 mt-3 px-2">{t('checkin.pending')}</p>}
           {currentStep === 4 && (
-            <div className="flex items-center justify-center gap-1.5 mt-2">
-              <CheckCircle className="w-3.5 h-3.5 text-green-600" />
-              <p className="text-xs font-semibold text-green-700">{t('checkin.active')}</p>
+            <div className="flex items-center justify-center gap-1.5 mt-3">
+              <CheckCircle className="w-4 h-4 text-green-600" />
+              <p className="text-sm font-semibold text-green-700">{t('checkin.active')}</p>
             </div>
           )}
         </div>
@@ -522,9 +522,9 @@ function GuestPortalInner() {
                     <div className="space-y-4 animate-in fade-in">
                           <div className="text-center mb-2">
                             {isPendingApproval ? (
-                                <><ShieldCheck className="w-10 h-10 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900 text-sm">{t('docs.received')}</h3><p className="text-xs text-yellow-700">{t('docs.hostChecking')}</p></>
+                                <><ShieldCheck className="w-10 h-10 text-yellow-600 mx-auto mb-2"/><h3 className="font-bold text-yellow-900 text-base">{t('docs.received')}</h3><p className="text-sm text-yellow-700">{t('docs.hostChecking')}</p></>
                             ) : (
-                                <><UploadCloud className="w-10 h-10 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900 text-sm">{t('docs.upload')}</h3><p className="text-xs text-slate-500">{t('docs.uploadPrompt')}</p></>
+                                <><UploadCloud className="w-10 h-10 text-slate-300 mx-auto mb-2"/><h3 className="font-bold text-slate-900 text-base">{t('docs.upload')}</h3><p className="text-sm text-slate-500">{t('docs.uploadPrompt')}</p></>
                             )}
                           </div>
                           {!isPendingApproval && (
@@ -543,7 +543,7 @@ function GuestPortalInner() {
                           <div className="space-y-2">
                              {documents?.filter((d:any) => d.status === 'in_revisione').map((doc: any) => (
                                  <div key={doc.id} className="flex items-center justify-between p-2.5 bg-white border rounded-lg shadow-sm">
-                                     <div className="flex items-center gap-2 min-w-0"><FileText className="w-4 h-4 text-blue-500 shrink-0" /><span className="text-xs font-medium truncate">{doc.filename}</span></div>
+                                     <div className="flex items-center gap-2 min-w-0"><FileText className="w-4 h-4 text-blue-500 shrink-0" /><span className="text-sm font-medium truncate">{doc.filename}</span></div>
                                      <Badge variant="secondary" className="text-[10px] shrink-0 ml-2">{t('docs.inReview')}</Badge>
                                  </div>
                              ))}
@@ -557,16 +557,16 @@ function GuestPortalInner() {
                         <div className="grid grid-cols-2 gap-3 text-center">
                              <div className="p-3 bg-slate-900 text-white rounded-xl">
                                 <Key className="w-5 h-5 mx-auto mb-1.5 text-yellow-400"/>
-                                <p className="text-[9px] uppercase font-bold text-slate-400">{t('info.keyboxCode')}</p>
+                                <p className="text-[10px] uppercase font-bold text-slate-400">{t('info.keyboxCode')}</p>
                                 <p className="text-xl font-mono font-bold tracking-widest mt-0.5">{prop?.keybox_code || prop?.codice_keybox || '---'}</p>
                              </div>
                              <div className="p-3 bg-blue-50 rounded-xl cursor-pointer" onClick={() => copyToClipboard(prop?.wifi_password || "")}>
                                 <Wifi className="w-5 h-5 mx-auto mb-1.5 text-blue-500"/>
-                                <p className="text-[9px] uppercase font-bold text-blue-400">{t('info.wifi')}</p>
-                                <p className="text-xs font-semibold text-blue-700 mt-0.5">{prop?.wifi_ssid || 'N/A'}</p>
+                                <p className="text-[10px] uppercase font-bold text-blue-400">{t('info.wifi')}</p>
+                                <p className="text-sm font-semibold text-blue-700 mt-0.5">{prop?.wifi_ssid || 'N/A'}</p>
                                 {prop?.wifi_password && (
-                                  <p className="text-blue-600 text-[10px] flex items-center justify-center gap-1 mt-1">
-                                    <Copy className="w-2.5 h-2.5"/> {t('button.copy')}
+                                  <p className="text-blue-600 text-xs flex items-center justify-center gap-1 mt-1">
+                                    <Copy className="w-3 h-3"/> {t('button.copy')}
                                   </p>
                                 )}
                              </div>
@@ -581,21 +581,21 @@ function GuestPortalInner() {
             <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
                 <TabsList className="w-full grid grid-cols-4 h-auto p-1">
                     {isCheckinUnlocked && (
-                      <TabsTrigger value="infoHouse" className="text-[11px] py-2 px-1 leading-tight">
+                      <TabsTrigger value="infoHouse" className="text-xs py-2.5 px-1 leading-tight">
                         <Home className="w-3.5 h-3.5 mr-1" />{t('tab.infoHouse')}
                       </TabsTrigger>
                     )}
-                    <TabsTrigger value="experiences" className="text-[11px] py-2 px-1 leading-tight">
+                    <TabsTrigger value="experiences" className="text-xs py-2.5 px-1 leading-tight">
                       {t('tab.experiences')}
                     </TabsTrigger>
-                    <TabsTrigger value="payments" className="text-[11px] py-2 px-1 leading-tight">
+                    <TabsTrigger value="payments" className="text-xs py-2.5 px-1 leading-tight">
                       {t('tab.payments')}
                     </TabsTrigger>
-                    <TabsTrigger value="support" className="text-[11px] py-2 px-1 leading-tight">
+                    <TabsTrigger value="support" className="text-xs py-2.5 px-1 leading-tight">
                       {t('tab.help')}
                     </TabsTrigger>
                     {!isCheckinUnlocked && (
-                      <TabsTrigger value="docs" className="text-[11px] py-2 px-1 leading-tight">
+                      <TabsTrigger value="docs" className="text-xs py-2.5 px-1 leading-tight">
                         {t('tab.documents')}
                       </TabsTrigger>
                     )}
@@ -605,25 +605,25 @@ function GuestPortalInner() {
                 {isCheckinUnlocked && (
                 <TabsContent value="infoHouse" className="space-y-3 mt-3">
                     {/* Navigate button */}
-                    <Button variant="outline" className="w-full h-12 justify-start gap-3 text-sm" onClick={() => window.open(mapsUrl, '_blank')}>
-                        <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                    <Button variant="outline" className="w-full h-14 justify-start gap-3 text-sm" onClick={() => window.open(mapsUrl, '_blank')}>
+                        <div className="w-9 h-9 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
                           <Navigation className="w-4 h-4 text-blue-600" />
                         </div>
                         <div className="text-left min-w-0">
-                          <p className="font-semibold text-slate-900 text-xs">{t('info.howToArrive')}</p>
-                          <p className="text-[10px] text-slate-500 truncate">{prop?.indirizzo}{prop?.citta ? `, ${prop.citta}` : ''}</p>
+                          <p className="font-semibold text-slate-900 text-sm">{t('info.howToArrive')}</p>
+                          <p className="text-xs text-slate-500 truncate">{prop?.indirizzo}{prop?.citta ? `, ${prop.citta}` : ''}</p>
                         </div>
                     </Button>
 
                     {/* Check-in video */}
                     {prop?.checkin_video_url && (
-                      <Button variant="outline" className="w-full h-12 justify-start gap-3 text-sm" onClick={() => window.open(prop.checkin_video_url, '_blank')}>
-                          <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                      <Button variant="outline" className="w-full h-14 justify-start gap-3 text-sm" onClick={() => window.open(prop.checkin_video_url, '_blank')}>
+                          <div className="w-9 h-9 rounded-full bg-red-50 flex items-center justify-center shrink-0">
                             <Youtube className="w-4 h-4 text-red-600" />
                           </div>
                           <div className="text-left">
-                            <p className="font-semibold text-slate-900 text-xs">{t('info.checkinVideo')}</p>
-                            <p className="text-[10px] text-slate-500">{t('info.watchVideo')}</p>
+                            <p className="font-semibold text-slate-900 text-sm">{t('info.checkinVideo')}</p>
+                            <p className="text-xs text-slate-500">{t('info.watchVideo')}</p>
                           </div>
                       </Button>
                     )}
@@ -632,10 +632,10 @@ function GuestPortalInner() {
                     {checkinInstructions && (
                       <Card className="border shadow-sm">
                         <CardHeader className="pb-2 pt-3 px-4">
-                          <CardTitle className="text-sm flex items-center gap-2"><BookOpen className="w-4 h-4 text-slate-500"/> {t('info.checkinInstructions')}</CardTitle>
+                          <CardTitle className="text-base flex items-center gap-2"><BookOpen className="w-4 h-4 text-slate-500"/> {t('info.checkinInstructions')}</CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-3">
-                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{checkinInstructions}</p>
+                          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{checkinInstructions}</p>
                         </CardContent>
                       </Card>
                     )}
@@ -644,10 +644,10 @@ function GuestPortalInner() {
                     {prop?.house_rules && (
                       <Card className="border shadow-sm">
                         <CardHeader className="pb-2 pt-3 px-4">
-                          <CardTitle className="text-sm flex items-center gap-2"><FileText className="w-4 h-4 text-slate-500"/> {t('info.houseRules')}</CardTitle>
+                          <CardTitle className="text-base flex items-center gap-2"><FileText className="w-4 h-4 text-slate-500"/> {t('info.houseRules')}</CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-3">
-                          <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{prop.house_rules}</p>
+                          <p className="text-sm text-slate-600 leading-relaxed whitespace-pre-line">{prop.house_rules}</p>
                         </CardContent>
                       </Card>
                     )}
@@ -655,21 +655,21 @@ function GuestPortalInner() {
                     {/* Emergency & host contacts */}
                     <Card className="border shadow-sm">
                       <CardHeader className="pb-2 pt-3 px-4">
-                        <CardTitle className="text-sm flex items-center gap-2"><Phone className="w-4 h-4 text-green-500"/> {t('info.emergency')}</CardTitle>
+                        <CardTitle className="text-base flex items-center gap-2"><Phone className="w-4 h-4 text-green-500"/> {t('info.emergency')}</CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-3 space-y-2">
                         {hostContacts.map((contact) => (
-                          <a key={contact.phone} href={`tel:${contact.phone}`} className="flex items-center gap-3 p-2.5 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
+                          <a key={contact.phone} href={`tel:${contact.phone}`} className="flex items-center gap-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
                             <Phone className="w-4 h-4 text-green-600" />
                             <div className="min-w-0">
-                              <p className="text-xs font-semibold text-slate-800">{contact.name}</p>
-                              <p className="text-[10px] text-slate-500">{contact.display}</p>
+                              <p className="text-sm font-semibold text-slate-800">{contact.name}</p>
+                              <p className="text-xs text-slate-500">{contact.display}</p>
                             </div>
                           </a>
                         ))}
-                        <a href="tel:112" className="flex items-center gap-3 p-2.5 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
+                        <a href="tel:112" className="flex items-center gap-3 p-3 bg-red-50 rounded-lg hover:bg-red-100 transition-colors">
                           <AlertTriangle className="w-4 h-4 text-red-600" />
-                          <p className="text-xs font-semibold text-red-800">{t('info.emergencyNumber')}</p>
+                          <p className="text-sm font-semibold text-red-800">{t('info.emergencyNumber')}</p>
                         </a>
                       </CardContent>
                     </Card>
@@ -678,17 +678,17 @@ function GuestPortalInner() {
                     {documents && documents.filter((d:any) => d.status !== 'in_revisione').length > 0 && (
                       <Card className="border shadow-sm">
                         <CardHeader className="pb-2 pt-3 px-4">
-                          <CardTitle className="text-sm">{t('docs.shared')}</CardTitle>
+                          <CardTitle className="text-base">{t('docs.shared')}</CardTitle>
                         </CardHeader>
                         <CardContent className="px-4 pb-3 space-y-2">
                           {documents.filter((d:any) => d.status !== 'in_revisione').map((doc: any) => (
                             <div key={doc.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded-lg border">
                               <div className="flex items-center gap-2 min-w-0">
                                 <FileText className="w-4 h-4 text-blue-500 shrink-0"/>
-                                <span className="text-xs truncate">{doc.filename}</span>
+                                <span className="text-sm truncate">{doc.filename}</span>
                               </div>
-                              <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => downloadDoc(doc.file_url)}>
-                                <Download className="w-3.5 h-3.5"/>
+                              <Button size="sm" variant="ghost" className="h-9 w-9 sm:h-7 sm:w-7 p-0" onClick={() => downloadDoc(doc.file_url)}>
+                                <Download className="w-4 h-4 sm:w-3.5 sm:h-3.5"/>
                               </Button>
                             </div>
                           ))}
@@ -729,7 +729,7 @@ function GuestPortalInner() {
                                     <CardContent className="p-3 flex flex-col justify-between flex-1 min-w-0">
                                         <div>
                                             <h3 className="font-bold text-sm truncate leading-tight"><T text={svc.titolo} /></h3>
-                                            <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5 leading-snug"><T text={svc.descrizione} /></p>
+                                            <p className="text-xs text-slate-500 line-clamp-2 mt-0.5 leading-snug"><T text={svc.descrizione} /></p>
                                         </div>
                                         <div className="flex items-center justify-between mt-1.5">
                                             {Number(svc.prezzo) === 0 ? (
@@ -737,7 +737,7 @@ function GuestPortalInner() {
                                             ) : (
                                               <span className="font-bold text-blue-600 text-sm">€{svc.prezzo}</span>
                                             )}
-                                            <Button size="sm" variant="outline" className="h-6 text-[10px] px-2">{t('button.details')}</Button>
+                                            <Button size="sm" variant="outline" className="h-9 sm:h-7 text-xs sm:text-[11px] px-3 sm:px-2">{t('button.details')}</Button>
                                         </div>
                                     </CardContent>
                                 </div>
@@ -752,7 +752,7 @@ function GuestPortalInner() {
                     {/* Summary bar */}
                     {payments && payments.length > 0 && (
                         <div className="bg-white rounded-lg p-3 border shadow-sm">
-                            <div className="flex justify-between text-xs">
+                            <div className="flex justify-between text-sm">
                                 <span className="text-slate-600">{t('payments.total') || 'Totale'}: <strong>€{payments.reduce((acc: number, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
                                 <span className="text-green-600">{t('badge.paid')}: <strong>€{payments.filter((p: any) => ['pagato', 'pre_autorizzato', 'rilasciato'].includes(p.stato)).reduce((acc: number, p: any) => acc + Number(p.importo), 0).toFixed(2)}</strong></span>
                             </div>
@@ -776,10 +776,10 @@ function GuestPortalInner() {
                                     </div>
                                     <div className="min-w-0">
                                         <p className="font-bold capitalize text-sm leading-tight"><T text={(pay.payment_type || pay.tipo || 'Rata').replace('_', ' ')} /></p>
-                                        <p className="text-[10px] text-gray-500 mt-0.5">{t('payment.dueDate') || 'Scad'}: {format(parseISO(pay.data_scadenza), 'dd MMM yyyy')}</p>
-                                        {isDeposit && <p className="text-[10px] text-purple-600 mt-0.5">{t('payments.depositExplain')}</p>}
-                                        {isTax && <p className="text-[10px] text-amber-600 mt-0.5">{t('payments.taxExplain')}</p>}
-                                        {pay.is_preauth && !isDeposit && <p className="text-[10px] text-blue-600 mt-0.5">{t('payment.preauthNote')}</p>}
+                                        <p className="text-xs text-gray-500 mt-0.5">{t('payment.dueDate') || 'Scad'}: {format(parseISO(pay.data_scadenza), 'dd MMM yyyy')}</p>
+                                        {isDeposit && <p className="text-xs text-purple-600 mt-0.5">{t('payments.depositExplain')}</p>}
+                                        {isTax && <p className="text-xs text-amber-600 mt-0.5">{t('payments.taxExplain')}</p>}
+                                        {pay.is_preauth && !isDeposit && <p className="text-xs text-blue-600 mt-0.5">{t('payment.preauthNote')}</p>}
                                     </div>
                                 </div>
                                 <p className="font-bold text-base shrink-0">€{pay.importo}</p>
@@ -788,61 +788,61 @@ function GuestPortalInner() {
                                 {pay.stato === 'pagato' ? (
                                     <div className="space-y-2">
                                         <div className="flex gap-2">
-                                            <Badge className="bg-green-100 text-green-800 flex-1 justify-center py-1 text-[11px]">{t('badge.paid')}</Badge>
+                                            <Badge className="bg-green-100 text-green-800 flex-1 justify-center py-1.5 text-xs">{t('badge.paid')}</Badge>
                                             {pay.receipt_url && (
-                                                <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => window.open(pay.receipt_url, '_blank')}>
+                                                <Button size="sm" variant="outline" className="h-9 sm:h-7 text-xs sm:text-[11px]" onClick={() => window.open(pay.receipt_url, '_blank')}>
                                                     <Download className="w-3 h-3 mr-1" /> {t('payment.receipt') || 'Ricevuta'}
                                                 </Button>
                                             )}
                                         </div>
                                         {pay.is_preauth && pay.preauth_captured_amount && Number(pay.preauth_captured_amount) < Number(pay.importo) && (
-                                            <div className="text-xs rounded-lg overflow-hidden border border-gray-200">
+                                            <div className="text-sm rounded-lg overflow-hidden border border-gray-200">
                                                 <div className="flex">
-                                                    <div className="flex-1 bg-red-50 p-2 border-r border-gray-200">
+                                                    <div className="flex-1 bg-red-50 p-2.5 border-r border-gray-200">
                                                         <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.withheld')}</p>
                                                         <p className="text-red-700 font-semibold">€{Number(pay.preauth_captured_amount).toFixed(2)}</p>
                                                     </div>
-                                                    <div className="flex-1 bg-green-50 p-2">
+                                                    <div className="flex-1 bg-green-50 p-2.5">
                                                         <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.refunded')}</p>
                                                         <p className="text-green-700 font-semibold">€{(Number(pay.importo) - Number(pay.preauth_captured_amount)).toFixed(2)}</p>
                                                     </div>
                                                 </div>
                                                 {pay.preauth_reason && (
-                                                    <div className="bg-gray-50 px-2 py-1.5 border-t border-gray-200">
+                                                    <div className="bg-gray-50 px-2.5 py-2 border-t border-gray-200">
                                                         <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.reasonLabel')}</p>
-                                                        <p className="text-gray-700 text-xs"><T text={pay.preauth_reason} /></p>
+                                                        <p className="text-gray-700 text-sm"><T text={pay.preauth_reason} /></p>
                                                     </div>
                                                 )}
                                             </div>
                                         )}
                                         {pay.is_preauth && pay.preauth_captured_amount && Number(pay.preauth_captured_amount) >= Number(pay.importo) && (
-                                            <div className="text-xs rounded-lg overflow-hidden border border-red-200">
-                                                <div className="bg-red-50 p-2">
+                                            <div className="text-sm rounded-lg overflow-hidden border border-red-200">
+                                                <div className="bg-red-50 p-2.5">
                                                     <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.withheldFull')}</p>
                                                     <p className="text-red-700 font-semibold">€{Number(pay.importo).toFixed(2)}</p>
                                                 </div>
                                                 {pay.preauth_reason && (
-                                                    <div className="bg-gray-50 px-2 py-1.5 border-t border-red-200">
+                                                    <div className="bg-gray-50 px-2.5 py-2 border-t border-red-200">
                                                         <p className="text-gray-500 text-[10px] uppercase tracking-wide mb-0.5">{t('payment.reasonLabel')}</p>
-                                                        <p className="text-gray-700 text-xs"><T text={pay.preauth_reason} /></p>
+                                                        <p className="text-gray-700 text-sm"><T text={pay.preauth_reason} /></p>
                                                     </div>
                                                 )}
                                             </div>
                                         )}
                                     </div>
                                 ) : pay.stato === 'pre_autorizzato' ? (
-                                    <Badge className="bg-blue-100 text-blue-800 w-full justify-center py-1 text-[11px]">
+                                    <Badge className="bg-blue-100 text-blue-800 w-full justify-center py-1.5 text-xs">
                                         <ShieldCheck className="w-3 h-3 mr-1" />
                                         {t('badge.preAuthorized') || 'Pre-autorizzato'}
                                     </Badge>
                                 ) : pay.stato === 'rilasciato' ? (
-                                    <div className="w-full text-xs rounded-lg overflow-hidden border border-green-200 bg-green-50 p-2 text-center">
+                                    <div className="w-full text-sm rounded-lg overflow-hidden border border-green-200 bg-green-50 p-2.5 text-center">
                                         <div className="flex items-center justify-center gap-1.5 text-green-700 font-medium">
                                             <CheckCircle className="w-3.5 h-3.5" />
                                             {t('payment.depositReleased')}
                                         </div>
                                         {pay.preauth_reason && (
-                                            <p className="text-gray-500 mt-1"><T text={pay.preauth_reason} /></p>
+                                            <p className="text-gray-500 mt-1 text-xs"><T text={pay.preauth_reason} /></p>
                                         )}
                                     </div>
                                 ) : pay.stato === 'da_pagare' ? (
@@ -859,7 +859,7 @@ function GuestPortalInner() {
                                         {pay.is_preauth ? (t('payment.authorize') || 'Autorizza') : (t('payment.payNow') || 'Paga Ora')}
                                     </Button>
                                 ) : (
-                                    <Button size="sm" variant="outline" className="w-full h-8 text-xs border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>
+                                    <Button size="sm" variant="outline" className="w-full h-10 text-sm border-orange-300 text-orange-600 hover:bg-orange-50" onClick={() => setPaymentTicketOpen(pay)}>
                                         {t('button.notify')}
                                     </Button>
                                 )}
@@ -874,20 +874,20 @@ function GuestPortalInner() {
                 {!isCheckinUnlocked && (
                 <TabsContent value="docs" className="space-y-3 mt-3">
                       <Card>
-                        <CardHeader className="pb-2 pt-3 px-4"><CardTitle className="text-sm">{t('docs.shared')}</CardTitle><CardDescription className="text-xs">{t('docs.sharedDesc')}</CardDescription></CardHeader>
+                        <CardHeader className="pb-2 pt-3 px-4"><CardTitle className="text-base">{t('docs.shared')}</CardTitle><CardDescription className="text-sm">{t('docs.sharedDesc')}</CardDescription></CardHeader>
                         <CardContent className="px-4 pb-3 space-y-2">
                              {documents?.filter((d:any) => d.status !== 'in_revisione').map((doc: any) => (
                                  <div key={doc.id} className="flex justify-between items-center p-2.5 bg-slate-50 rounded border">
                                      <div className="flex items-center gap-2 min-w-0">
                                          <FileText className="w-4 h-4 text-blue-500 shrink-0"/>
-                                         <span className="text-xs truncate">{doc.filename}</span>
+                                         <span className="text-sm truncate">{doc.filename}</span>
                                      </div>
-                                     <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => downloadDoc(doc.file_url)}>
-                                         <Download className="w-3.5 h-3.5"/>
+                                     <Button size="sm" variant="ghost" className="h-9 w-9 sm:h-7 sm:w-7 p-0" onClick={() => downloadDoc(doc.file_url)}>
+                                         <Download className="w-4 h-4 sm:w-3.5 sm:h-3.5"/>
                                      </Button>
                                  </div>
                              ))}
-                             {documents?.length === 0 && <p className="text-center text-gray-400 py-4 text-xs">{t('empty.docs')}</p>}
+                             {documents?.length === 0 && <p className="text-center text-gray-400 py-4 text-sm">{t('empty.docs')}</p>}
                         </CardContent>
                       </Card>
                 </TabsContent>
@@ -907,14 +907,14 @@ function GuestPortalInner() {
                       </div>
                       <div>
                         <p className="font-bold text-sm text-green-900">{t('faq.whatsappHost')}</p>
-                        <p className="text-[10px] text-green-700">Kristian Rinaldi — 391 792 4372</p>
+                        <p className="text-xs text-green-700">Kristian Rinaldi — 391 792 4372</p>
                       </div>
                     </a>
 
                     {/* FAQ Accordion */}
                     <Card className="border shadow-sm">
                       <CardHeader className="pb-2 pt-3 px-4">
-                        <CardTitle className="text-sm">{t('faq.title')}</CardTitle>
+                        <CardTitle className="text-base">{t('faq.title')}</CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-3 space-y-2">
                         <FaqItem question={t('faq.checkinTime')} answer={t('faq.checkinTimeAnswer')} />
@@ -926,24 +926,24 @@ function GuestPortalInner() {
                     {/* Useful numbers */}
                     <Card className="border shadow-sm">
                       <CardHeader className="pb-2 pt-3 px-4">
-                        <CardTitle className="text-sm">{t('faq.usefulNumbers')}</CardTitle>
+                        <CardTitle className="text-base">{t('faq.usefulNumbers')}</CardTitle>
                       </CardHeader>
                       <CardContent className="px-4 pb-3 space-y-1.5">
                         {hostContacts.map((contact) => (
-                          <a key={contact.phone} href={`tel:${contact.phone}`} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
+                          <a key={contact.phone} href={`tel:${contact.phone}`} className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50">
                             <div className="flex items-center gap-2">
-                              <Phone className="w-3.5 h-3.5 text-green-600" />
-                              <span className="text-xs font-medium">{contact.name}</span>
+                              <Phone className="w-4 h-4 text-green-600" />
+                              <span className="text-sm font-medium">{contact.name}</span>
                             </div>
-                            <span className="text-xs text-slate-500">{contact.display}</span>
+                            <span className="text-sm text-slate-500">{contact.display}</span>
                           </a>
                         ))}
-                        <a href="tel:112" className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50">
+                        <a href="tel:112" className="flex items-center justify-between p-2.5 rounded-lg hover:bg-slate-50">
                           <div className="flex items-center gap-2">
-                            <AlertTriangle className="w-3.5 h-3.5 text-red-500" />
-                            <span className="text-xs font-medium">{t('faq.emergencies')}</span>
+                            <AlertTriangle className="w-4 h-4 text-red-500" />
+                            <span className="text-sm font-medium">{t('faq.emergencies')}</span>
                           </div>
-                          <span className="text-xs text-slate-500">112</span>
+                          <span className="text-sm text-slate-500">112</span>
                         </a>
                       </CardContent>
                     </Card>
@@ -951,13 +951,13 @@ function GuestPortalInner() {
                     {/* Ticket form (fallback) */}
                     <Card className="border shadow-sm">
                         <CardHeader className="pb-2 pt-3 px-4">
-                          <CardTitle className="text-sm">{t('faq.writeTicket')}</CardTitle>
-                          <CardDescription className="text-xs">{t('support.needHelp')}</CardDescription>
+                          <CardTitle className="text-base">{t('faq.writeTicket')}</CardTitle>
+                          <CardDescription className="text-sm">{t('support.needHelp')}</CardDescription>
                         </CardHeader>
                         <CardContent className="px-4 pb-3 space-y-3">
                             <Input placeholder={t('placeholder.subject')} value={ticketForm.titolo} onChange={e => setTicketForm({...ticketForm, titolo: e.target.value})} className="text-sm" />
                             <Textarea placeholder={t('placeholder.writeHere')} value={ticketForm.descrizione} onChange={e => setTicketForm({...ticketForm, descrizione: e.target.value})} className="text-sm" rows={3} />
-                            <Button className="w-full h-9 text-sm" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-3.5 h-3.5 mr-2" /> {t('button.sendMessage')}</Button>
+                            <Button className="w-full h-11 text-sm" onClick={() => createTicket.mutate()} disabled={!ticketForm.titolo}><Send className="w-4 h-4 mr-2" /> {t('button.sendMessage')}</Button>
                         </CardContent>
                     </Card>
 
@@ -970,11 +970,11 @@ function GuestPortalInner() {
                                   <p className="font-medium text-sm truncate mr-2"><T text={tk.titolo} /></p>
                                   <Badge variant={tk.stato === 'risolto' ? 'default' : 'secondary'} className="text-[10px] shrink-0">{tk.stato}</Badge>
                                 </div>
-                                <p className="text-xs text-gray-600 mb-1.5 line-clamp-2"><T text={tk.descrizione} /></p>
+                                <p className="text-sm text-gray-600 mb-1.5 line-clamp-2"><T text={tk.descrizione} /></p>
                                 {tk.admin_notes && (
                                   <div className="mt-2 p-2.5 bg-blue-50 border border-blue-100 rounded-md">
-                                    <p className="text-[10px] font-bold text-blue-700 mb-0.5 flex items-center"><UserCog className="w-3 h-3 mr-1" /> {t('label.hostReply')}</p>
-                                    <p className="text-xs text-blue-900"><T text={tk.admin_notes} /></p>
+                                    <p className="text-xs font-bold text-blue-700 mb-1 flex items-center"><UserCog className="w-3.5 h-3.5 mr-1" /> {t('label.hostReply')}</p>
+                                    <p className="text-sm text-blue-900"><T text={tk.admin_notes} /></p>
                                   </div>
                                 )}
                             </div>
@@ -990,11 +990,11 @@ function GuestPortalInner() {
             <DialogContent className="max-w-[92vw] sm:max-w-sm rounded-xl">
                 <DialogHeader><DialogTitle className="text-base">{t('dialog.notifyPayment')}</DialogTitle></DialogHeader>
                 <div className="space-y-3 py-1">
-                    <p className="text-xs text-gray-500">{t('dialog.paymentDesc')} <strong>€{paymentTicketOpen?.importo}</strong> per <T text={paymentTicketOpen?.tipo} />.</p>
-                    <div className="space-y-1.5"><Label className="text-xs">{t('label.expectedDate')}</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
-                    <div className="space-y-1.5"><Label className="text-xs">{t('label.method')}</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder={t('placeholder.select')}/></SelectTrigger><SelectContent><SelectItem value="bonifico">{t('method.transfer')}</SelectItem><SelectItem value="contanti">{t('method.cash')}</SelectItem><SelectItem value="altro">{t('method.other')}</SelectItem></SelectContent></Select></div>
+                    <p className="text-sm text-gray-500">{t('dialog.paymentDesc')} <strong>€{paymentTicketOpen?.importo}</strong> per <T text={paymentTicketOpen?.tipo} />.</p>
+                    <div className="space-y-1.5"><Label className="text-sm">{t('label.expectedDate')}</Label><Input type="date" value={payPromise.date} onChange={e => setPayPromise({...payPromise, date: e.target.value})} /></div>
+                    <div className="space-y-1.5"><Label className="text-sm">{t('label.method')}</Label><Select onValueChange={(v) => setPayPromise({...payPromise, method: v})}><SelectTrigger><SelectValue placeholder={t('placeholder.select')}/></SelectTrigger><SelectContent><SelectItem value="bonifico">{t('method.transfer')}</SelectItem><SelectItem value="contanti">{t('method.cash')}</SelectItem><SelectItem value="altro">{t('method.other')}</SelectItem></SelectContent></Select></div>
                 </div>
-                <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full h-10">{t('button.sendNotice')}</Button></DialogFooter>
+                <DialogFooter><Button onClick={() => sendPaymentNotice.mutate()} disabled={!payPromise.date || !payPromise.method} className="w-full h-11">{t('button.sendNotice')}</Button></DialogFooter>
             </DialogContent>
         </Dialog>
 
@@ -1013,30 +1013,30 @@ function GuestPortalInner() {
                           <span className="font-bold text-lg text-blue-600 shrink-0 ml-3">€{serviceDetailOpen?.prezzo}</span>
                         )}
                     </div>
-                    <p className="text-xs text-slate-600 leading-relaxed"><T text={serviceDetailOpen?.descrizione} /></p>
+                    <p className="text-sm text-slate-600 leading-relaxed"><T text={serviceDetailOpen?.descrizione} /></p>
 
                     {serviceDetailOpen?.indirizzo && (
                         <div className="flex items-center gap-2 p-2.5 bg-slate-50 rounded-lg">
                             <MapPin className="w-4 h-4 text-slate-400 shrink-0" />
-                            <span className="text-xs text-slate-700 flex-1">{serviceDetailOpen.indirizzo}</span>
-                            <Button size="sm" variant="ghost" className="h-7 text-[10px] text-blue-600 shrink-0" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(serviceDetailOpen.indirizzo)}`, '_blank')}>
-                                <MapPin className="w-3 h-3 mr-1" />{t('button.navigate')}
+                            <span className="text-sm text-slate-700 flex-1">{serviceDetailOpen.indirizzo}</span>
+                            <Button size="sm" variant="ghost" className="h-9 sm:h-7 text-xs sm:text-[11px] text-blue-600 shrink-0" onClick={() => window.open(`https://maps.google.com/?q=${encodeURIComponent(serviceDetailOpen.indirizzo)}`, '_blank')}>
+                                <MapPin className="w-3.5 h-3.5 mr-1" />{t('button.navigate')}
                             </Button>
                         </div>
                     )}
 
                     <div className="flex flex-col gap-2">
                         {serviceDetailOpen?.link_prenotazione && (
-                            <Button variant="outline" className="w-full text-sm" onClick={() => window.open(serviceDetailOpen.link_prenotazione, '_blank')}>
+                            <Button variant="outline" className="w-full text-sm h-11" onClick={() => window.open(serviceDetailOpen.link_prenotazione, '_blank')}>
                                 <ExternalLink className="w-4 h-4 mr-2" />{t('button.viewOffer')}
                             </Button>
                         )}
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button variant="outline" className="text-xs" onClick={() => generateVoucher(serviceDetailOpen)}>
-                                <Ticket className="w-3.5 h-3.5 mr-1.5" />{t('button.downloadVoucher')}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <Button variant="outline" className="text-sm h-11 sm:h-10" onClick={() => generateVoucher(serviceDetailOpen)}>
+                                <Ticket className="w-4 h-4 mr-1.5" />{t('button.downloadVoucher')}
                             </Button>
-                            <Button className="bg-slate-900 hover:bg-slate-800 text-xs" onClick={() => { setShowContactForm(!showContactForm); if (!serviceMessage) setServiceMessage(t('booking.wantToBook')); }}>
-                                <MessageCircle className="w-3.5 h-3.5 mr-1.5" />{t('button.contactStructure')}
+                            <Button className="bg-slate-900 hover:bg-slate-800 text-sm h-11 sm:h-10" onClick={() => { setShowContactForm(!showContactForm); if (!serviceMessage) setServiceMessage(t('booking.wantToBook')); }}>
+                                <MessageCircle className="w-4 h-4 mr-1.5" />{t('button.contactStructure')}
                             </Button>
                         </div>
                     </div>
@@ -1044,8 +1044,8 @@ function GuestPortalInner() {
                     {showContactForm && (
                         <div className="space-y-2 pt-2 border-t">
                             <Textarea placeholder={t('placeholder.yourMessage')} value={serviceMessage} onChange={e => setServiceMessage(e.target.value)} rows={3} className="text-sm" />
-                            <Button onClick={() => sendServiceContact.mutate()} disabled={!serviceMessage} className="w-full h-9 text-sm">
-                                <Send className="w-3.5 h-3.5 mr-2" />{t('button.sendMessage')}
+                            <Button onClick={() => sendServiceContact.mutate()} disabled={!serviceMessage} className="w-full h-11 text-sm">
+                                <Send className="w-4 h-4 mr-2" />{t('button.sendMessage')}
                             </Button>
                         </div>
                     )}
