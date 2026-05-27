@@ -40,6 +40,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const [editDateInizio, setEditDateInizio] = useState<Date | undefined>();
   const [editDateFine, setEditDateFine] = useState<Date | undefined>();
   const [editingBooking, setEditingBooking] = useState<any>(null);
+  const [editingDataInizio, setEditingDataInizio] = useState<Date | undefined>();
+  const [editingDataFine, setEditingDataFine] = useState<Date | undefined>();
   const [managingTicket, setManagingTicket] = useState<any>(null);
 
   // FIX: Stato per upload documento host
@@ -152,6 +154,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const updateBooking = useMutation({
     mutationFn: async (updatedData: any) => {
       const { error } = await supabase.from('bookings').update({
+          nome_ospite: updatedData.nome_ospite,
           data_inizio: format(updatedData.data_inizio, 'yyyy-MM-dd'),
           data_fine: format(updatedData.data_fine, 'yyyy-MM-dd'),
           email_ospite: updatedData.email_ospite,
@@ -163,6 +166,8 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
       setEditingBooking(null);
+      setEditingDataInizio(undefined);
+      setEditingDataFine(undefined);
       toast({ title: 'Aggiornato' });
     }
   });
@@ -237,11 +242,21 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
 
   const getDocUrl = (path: string) => supabase.storage.from('documents').getPublicUrl(path).data.publicUrl;
 
-  const getOccupiedDates = (propertyId: string, excludeBookingId?: string) => {
+  // For check-in date selection: a new check-in cannot land on an existing booking's occupied nights [data_inizio, data_fine - 1]
+  const getCheckinOccupiedDates = (propertyId: string, excludeBookingId?: string) => {
     if (!bookings || !propertyId) return [];
     return bookings
       .filter(b => b.property_id === propertyId && b.id !== excludeBookingId)
       .map(b => ({ from: new Date(b.data_inizio), to: subDays(new Date(b.data_fine), 1) }));
+  };
+
+  // For check-out date selection: a new check-out cannot land on existing nights either, but CAN land on existing data_inizio.
+  // So disabled range is [data_inizio + 1, data_fine].
+  const getCheckoutOccupiedDates = (propertyId: string, excludeBookingId?: string) => {
+    if (!bookings || !propertyId) return [];
+    return bookings
+      .filter(b => b.property_id === propertyId && b.id !== excludeBookingId)
+      .map(b => ({ from: addDays(new Date(b.data_inizio), 1), to: new Date(b.data_fine) }));
   };
 
   return (
@@ -284,7 +299,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         <Popover>
                             <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal">{formData.data_inizio ? format(formData.data_inizio, "dd/MM/yyyy") : "Seleziona data"}</Button></PopoverTrigger>
                             <PopoverContent className="p-0" align="start">
-                                <Calendar mode="single" selected={formData.data_inizio} onSelect={(d) => setFormData({...formData, data_inizio: d})} disabled={getOccupiedDates(formData.property_id)} />
+                                <Calendar mode="single" selected={formData.data_inizio} onSelect={(d) => setFormData({...formData, data_inizio: d})} disabled={getCheckinOccupiedDates(formData.property_id)} />
                             </PopoverContent>
                         </Popover>
                     </div>
@@ -293,7 +308,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         <Popover>
                             <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal">{formData.data_fine ? format(formData.data_fine, "dd/MM/yyyy") : "Seleziona data"}</Button></PopoverTrigger>
                             <PopoverContent className="p-0" align="start">
-                                <Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} disabled={formData.data_inizio ? [...getOccupiedDates(formData.property_id), { before: addDays(formData.data_inizio, 1) }] : getOccupiedDates(formData.property_id)} />
+                                <Calendar mode="single" selected={formData.data_fine} onSelect={(d) => setFormData({...formData, data_fine: d})} disabled={formData.data_inizio ? [...getCheckoutOccupiedDates(formData.property_id), { before: addDays(formData.data_inizio, 1) }] : getCheckoutOccupiedDates(formData.property_id)} />
                             </PopoverContent>
                         </Popover>
                     </div>
@@ -609,6 +624,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                     selected={editDateInizio}
                     defaultMonth={editDateInizio}
                     onSelect={(d) => { setEditDateInizio(d); if (editDateFine && d && editDateFine <= d) setEditDateFine(undefined); }}
+                    disabled={getCheckinOccupiedDates(customerSheetOpen?.property_id, customerSheetOpen?.id)}
                     className="w-full"
                   />
                 </div>
@@ -621,7 +637,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                     selected={editDateFine}
                     defaultMonth={editDateFine}
                     onSelect={setEditDateFine}
-                    disabled={editDateInizio ? { before: addDays(editDateInizio, 1) } : undefined}
+                    disabled={editDateInizio ? [...getCheckoutOccupiedDates(customerSheetOpen?.property_id, customerSheetOpen?.id), { before: addDays(editDateInizio, 1) }] : getCheckoutOccupiedDates(customerSheetOpen?.property_id, customerSheetOpen?.id)}
                     className="w-full"
                   />
                 </div>
@@ -672,13 +688,34 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       )}
 
       {editingBooking && (
-        <Dialog open={!!editingBooking} onOpenChange={(open) => !open && setEditingBooking(null)}>
+        <Dialog open={!!editingBooking} onOpenChange={(open) => { if (!open) { setEditingBooking(null); setEditingDataInizio(undefined); setEditingDataFine(undefined); } }}>
             <DialogContent className="sm:max-w-[400px] w-[95vw]">
-                <DialogHeader><DialogTitle>Modifica Contatto</DialogTitle></DialogHeader>
+                <DialogHeader><DialogTitle>Modifica Prenotazione</DialogTitle></DialogHeader>
                 <div className="space-y-4 py-4">
+                     <div className="grid gap-2"><Label>Nome ospite</Label><Input value={editingBooking.nome_ospite || ''} onChange={e => setEditingBooking({...editingBooking, nome_ospite: e.target.value})} /></div>
+                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="grid gap-2">
+                            <Label>Check-in</Label>
+                            <Popover>
+                                <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal">{editingDataInizio ? format(editingDataInizio, "dd/MM/yyyy") : "Seleziona data"}</Button></PopoverTrigger>
+                                <PopoverContent className="p-0" align="start">
+                                    <Calendar mode="single" selected={editingDataInizio} defaultMonth={editingDataInizio} onSelect={(d) => { setEditingDataInizio(d); if (editingDataFine && d && editingDataFine <= d) setEditingDataFine(undefined); }} disabled={getCheckinOccupiedDates(editingBooking.property_id, editingBooking.id)} />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Check-out</Label>
+                            <Popover>
+                                <PopoverTrigger asChild><Button variant={"outline"} className="w-full justify-start text-left font-normal">{editingDataFine ? format(editingDataFine, "dd/MM/yyyy") : "Seleziona data"}</Button></PopoverTrigger>
+                                <PopoverContent className="p-0" align="start">
+                                    <Calendar mode="single" selected={editingDataFine} defaultMonth={editingDataFine} onSelect={setEditingDataFine} disabled={editingDataInizio ? [...getCheckoutOccupiedDates(editingBooking.property_id, editingBooking.id), { before: addDays(editingDataInizio, 1) }] : getCheckoutOccupiedDates(editingBooking.property_id, editingBooking.id)} />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                     </div>
                      <div className="grid gap-2"><Label>Email</Label><Input value={editingBooking.email_ospite || ''} onChange={e => setEditingBooking({...editingBooking, email_ospite: e.target.value})} /></div>
                      <div className="grid gap-2"><Label>Telefono</Label><Input value={editingBooking.telefono_ospite || ''} onChange={e => setEditingBooking({...editingBooking, telefono_ospite: e.target.value})} /></div>
-                     <Button onClick={() => updateBooking.mutate(editingBooking)} className="w-full">Salva Modifiche</Button>
+                     <Button onClick={() => updateBooking.mutate({ ...editingBooking, data_inizio: editingDataInizio, data_fine: editingDataFine })} className="w-full" disabled={!editingDataInizio || !editingDataFine || updateBooking.isPending}>Salva Modifiche</Button>
                 </div>
             </DialogContent>
         </Dialog>
@@ -718,7 +755,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                         </div>
 
                         <div className="flex justify-end gap-2 border-t pt-3 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                            <Button variant="ghost" size="sm" className="h-9 w-9 sm:h-8 sm:w-auto text-gray-400 hover:text-blue-600" onClick={() => setEditingBooking(booking)}><Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" /></Button>
+                            <Button variant="ghost" size="sm" className="h-9 w-9 sm:h-8 sm:w-auto text-gray-400 hover:text-blue-600" onClick={() => { setEditingBooking(booking); setEditingDataInizio(new Date(booking.data_inizio)); setEditingDataFine(new Date(booking.data_fine)); }}><Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" /></Button>
                             <Button variant="ghost" size="sm" className="h-9 w-9 sm:h-8 sm:w-auto text-gray-400 hover:text-red-600" onClick={() => { if(confirm("Eliminare?")) deleteBooking.mutate(booking.id) }}><Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" /></Button>
                         </div>
                     </div>
