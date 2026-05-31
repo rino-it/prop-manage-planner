@@ -108,7 +108,7 @@ export default function Sidebar({ activeTab, setActiveTab, onCloseMobile }: Side
     <div className="flex h-full w-full flex-col bg-white border-r border-border pb-safe">
       <div className="px-5 py-4 flex items-center gap-2.5 border-b border-border">
         <img
-          src="/prop-manager-logo.svg"
+          src="/logo_property.png"
           alt="PropManager"
           className="h-8 w-8"
           onError={(e) => {

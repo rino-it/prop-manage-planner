@@ -94,7 +94,7 @@ const Index = () => {
                 <Sidebar activeTab={activeTab} setActiveTab={(tab) => { navigate(tab === 'dashboard' ? '/' : `/${tab}`); setIsMobileOpen(false); }} onCloseMobile={() => setIsMobileOpen(false)} />
               </SheetContent>
             </Sheet>
-            <img src="/prop-manager-logo.svg" alt="PropManager" className="h-7 w-7" />
+            <img src="/logo_property.png" alt="PropManager" className="h-7 w-7" />
             <span className="font-bold text-sm text-foreground">PropManager</span>
           </div>
           <AdminNotificationBell />

@@ -79,7 +79,7 @@ export default function Auth() {
       <Card className="w-full max-w-md shadow-lg">
         <CardHeader className="space-y-1">
           <div className="flex justify-center mb-4">
-            <img src="/prop-manager-logo.png" alt="Logo" className="h-12 w-auto" onError={(e) => e.currentTarget.style.display = 'none'} />
+            <img src="/logo_property.png" alt="Logo" className="h-12 w-auto" onError={(e) => e.currentTarget.style.display = 'none'} />
           </div>
           <CardTitle className="text-2xl font-bold text-center">Benvenuto</CardTitle>
           <CardDescription className="text-center">

@@ -415,7 +415,7 @@ function GuestPortalInner() {
       {/* ─── HEADER ─── */}
       <div className="bg-white border-b sticky top-0 z-10 shadow-sm px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-             <img src="/prop-manager-logo.svg" alt="Logo" className="h-7 w-auto object-contain" />
+             <img src="/logo_property.png" alt="Logo" className="h-7 w-auto object-contain" />
           </div>
           <div className="flex items-center gap-2">
              <LanguagePicker />
