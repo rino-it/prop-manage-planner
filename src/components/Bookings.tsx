@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Badge } from '@/components/ui/badge';
 import { Switch } from '@/components/ui/switch';
-import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck, Upload, Loader2 } from 'lucide-react';
+import { Calendar as CalendarIcon, Plus, Copy, Eye, Check, X, FileText, User, Pencil, Trash2, AlertCircle, Wrench, CreditCard, MessageSquare, UserCog, ShieldCheck, Upload, Loader2, Search } from 'lucide-react';
 import { format, isBefore, addDays, subDays } from 'date-fns';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -34,6 +34,7 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
   const queryClient = useQueryClient();
   const { data: properties } = usePropertiesReal();
   
+  const [searchQuery, setSearchQuery] = useState('');
   const [newBookingOpen, setNewBookingOpen] = useState(false);
   const [customerSheetOpen, setCustomerSheetOpen] = useState<any | null>(null);
   const [editDatesOpen, setEditDatesOpen] = useState(false);
@@ -259,6 +260,14 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
       .map(b => ({ from: addDays(new Date(b.data_inizio), 1), to: new Date(b.data_fine) }));
   };
 
+  const normalizedQuery = searchQuery.trim().toLowerCase();
+  const filteredBookings = normalizedQuery
+    ? bookings?.filter((b) =>
+        [b.nome_ospite, b.properties_real?.nome, b.email_ospite, b.telefono_ospite]
+          .some((field) => field?.toLowerCase().includes(normalizedQuery))
+      )
+    : bookings;
+
   return (
     <div className="space-y-6 pb-20">
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
@@ -266,6 +275,26 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         <Button className="bg-blue-600 hover:bg-blue-700 w-full md:w-auto" onClick={() => setNewBookingOpen(true)}>
             <Plus className="w-4 h-4 mr-2" /> Nuova
         </Button>
+      </div>
+
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
+        <Input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Cerca per ospite, immobile, email o telefono..."
+          className="pl-9 pr-9 bg-white"
+        />
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            aria-label="Cancella ricerca"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       <Dialog open={newBookingOpen} onOpenChange={setNewBookingOpen}>
@@ -721,8 +750,15 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
         </Dialog>
       )}
 
+      {normalizedQuery && filteredBookings?.length === 0 && (
+        <div className="text-center text-gray-400 py-12 bg-slate-50 rounded-lg border border-dashed">
+          <Search className="w-10 h-10 mx-auto mb-3 opacity-20" />
+          <p>Nessuna prenotazione trovata per "{searchQuery}".</p>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {bookings?.map((booking) => {
+        {filteredBookings?.map((booking) => {
             const isShort = booking.tipo_affitto === 'breve';
             return (
             <Card key={booking.id} className={`border-l-4 shadow-sm group hover:shadow-md transition-all ${isShort ? 'border-l-orange-400' : 'border-l-purple-500'}`}>

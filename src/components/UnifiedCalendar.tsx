@@ -112,10 +112,15 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
     return { bookings: dayBookings, blocks: dayBlocks };
   }, [filteredBookings, filteredBlocked]);
 
+  const openBookingSheet = (bookingId: string) => {
+    setSelectedItem(null);
+    navigate('/bookings', { state: { openBookingId: bookingId } });
+  };
+
   const handleDayClick = (date: Date) => {
     const info = getDayInfo(date);
     if (info.bookings.length > 0) {
-      setSelectedItem({ type: 'booking', data: info.bookings[0] });
+      openBookingSheet(info.bookings[0].id);
     } else if (info.blocks.length > 0) {
       setSelectedItem({ type: 'blocked', data: info.blocks[0] });
     }
@@ -377,7 +382,7 @@ export default function UnifiedCalendar({ embedded = false }: UnifiedCalendarPro
                     <div
                       key={b.id}
                       className={`flex items-center gap-2 sm:gap-3 p-2 sm:p-2.5 rounded-lg border ${sc.border} ${sc.bg} cursor-pointer active:brightness-[0.93] sm:hover:brightness-[0.97] transition-all`}
-                      onClick={() => setSelectedItem({ type: 'booking', data: b })}
+                      onClick={() => openBookingSheet(b.id)}
                     >
                       <div className={`w-1 h-6 sm:h-8 rounded-full ${sc.dot} shrink-0`} />
                       <div className="flex-1 min-w-0">
