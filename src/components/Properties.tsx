@@ -275,7 +275,7 @@ const Properties = () => {
                       importo_originale: parseFloat(smartData.amount),
                       descrizione: smartData.description || `Spesa da Doc: ${smartFile.name}`,
                       scadenza: smartData.date,
-                      stato: 'pagato',
+                      stato: 'da_pagare',
                       ricorrenza_tipo: 'nessuna'
                   }).select().single();
 

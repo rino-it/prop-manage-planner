@@ -286,6 +286,12 @@ export default function Expenses() {
         is_advance: form.is_advance,
         debtor_name: form.is_advance ? (form.debtor_name?.trim() || null) : null,
       };
+      // Se la spesa viene salvata come pagata senza passare dal flusso "Paga",
+      // fissiamo la data pagamento a oggi: evita voci pagate con data_pagamento null
+      // che nello Storico verrebbero datate sulla scadenza (date incoerenti).
+      if (form.stato === 'pagato') {
+        payload.data_pagamento = format(new Date(), 'yyyy-MM-dd');
+      }
       if (editingId) {
         const { error } = await supabase.from('payments').update(payload).eq('id', editingId);
         if (error) throw error;
