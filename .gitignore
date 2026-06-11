@@ -36,3 +36,5 @@ prop-manage-planner-main/
 # Supabase dump
 supabase_dump.sql
 .env.*
+
+.superpowers/
