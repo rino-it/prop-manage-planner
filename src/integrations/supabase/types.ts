@@ -182,6 +182,41 @@ export type Database = {
           },
         ]
       }
+      booking_notes: {
+        Row: {
+          booking_id: string
+          content: string
+          created_at: string | null
+          id: string
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          booking_id: string
+          content: string
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          booking_id?: string
+          content?: string
+          created_at?: string | null
+          id?: string
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "booking_notes_booking_id_fkey"
+            columns: ["booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bookings: {
         Row: {
           checkin_email_sent: boolean | null
@@ -282,6 +317,50 @@ export type Database = {
             columns: ["property_id"]
             isOneToOne: false
             referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conti: {
+        Row: {
+          archived: boolean
+          created_at: string | null
+          data_apertura: string
+          gestione_id: string
+          id: string
+          nome: string
+          saldo_iniziale: number
+          tipo: string
+          user_id: string | null
+        }
+        Insert: {
+          archived?: boolean
+          created_at?: string | null
+          data_apertura?: string
+          gestione_id: string
+          id?: string
+          nome: string
+          saldo_iniziale?: number
+          tipo?: string
+          user_id?: string | null
+        }
+        Update: {
+          archived?: boolean
+          created_at?: string | null
+          data_apertura?: string
+          gestione_id?: string
+          id?: string
+          nome?: string
+          saldo_iniziale?: number
+          tipo?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conti_gestione_id_fkey"
+            columns: ["gestione_id"]
+            isOneToOne: false
+            referencedRelation: "gestioni"
             referencedColumns: ["id"]
           },
         ]
@@ -409,6 +488,75 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gestioni: {
+        Row: {
+          colore: string | null
+          created_at: string | null
+          id: string
+          nome: string
+        }
+        Insert: {
+          colore?: string | null
+          created_at?: string | null
+          id?: string
+          nome: string
+        }
+        Update: {
+          colore?: string | null
+          created_at?: string | null
+          id?: string
+          nome?: string
+        }
+        Relationships: []
+      }
+      giroconti: {
+        Row: {
+          conto_from: string
+          conto_to: string
+          created_at: string | null
+          data: string
+          descrizione: string | null
+          id: string
+          importo: number
+          user_id: string | null
+        }
+        Insert: {
+          conto_from: string
+          conto_to: string
+          created_at?: string | null
+          data?: string
+          descrizione?: string | null
+          id?: string
+          importo: number
+          user_id?: string | null
+        }
+        Update: {
+          conto_from?: string
+          conto_to?: string
+          created_at?: string | null
+          data?: string
+          descrizione?: string | null
+          id?: string
+          importo?: number
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "giroconti_conto_from_fkey"
+            columns: ["conto_from"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "giroconti_conto_to_fkey"
+            columns: ["conto_to"]
+            isOneToOne: false
+            referencedRelation: "conti"
             referencedColumns: ["id"]
           },
         ]
@@ -739,6 +887,7 @@ export type Database = {
           allegato_url: string | null
           categoria: string | null
           competence: string | null
+          conto_id: string | null
           created_at: string
           data_pagamento: string | null
           debtor_name: string | null
@@ -761,14 +910,17 @@ export type Database = {
           ricorrenza_tipo: string
           scadenza: string
           stato: string | null
+          tenant_booking_id: string | null
           ticket_id: string | null
           updated_at: string
           user_id: string
+          visible_tenant: boolean | null
         }
         Insert: {
           allegato_url?: string | null
           categoria?: string | null
           competence?: string | null
+          conto_id?: string | null
           created_at?: string
           data_pagamento?: string | null
           debtor_name?: string | null
@@ -791,14 +943,17 @@ export type Database = {
           ricorrenza_tipo?: string
           scadenza: string
           stato?: string | null
+          tenant_booking_id?: string | null
           ticket_id?: string | null
           updated_at?: string
           user_id: string
+          visible_tenant?: boolean | null
         }
         Update: {
           allegato_url?: string | null
           categoria?: string | null
           competence?: string | null
+          conto_id?: string | null
           created_at?: string
           data_pagamento?: string | null
           debtor_name?: string | null
@@ -821,11 +976,20 @@ export type Database = {
           ricorrenza_tipo?: string
           scadenza?: string
           stato?: string | null
+          tenant_booking_id?: string | null
           ticket_id?: string | null
           updated_at?: string
           user_id?: string
+          visible_tenant?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_property_mobile_id_fkey"
             columns: ["property_mobile_id"]
@@ -838,6 +1002,13 @@ export type Database = {
             columns: ["property_real_id"]
             isOneToOne: false
             referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_tenant_booking_id_fkey"
+            columns: ["tenant_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
           {
@@ -1000,6 +1171,7 @@ export type Database = {
           created_at: string | null
           data_revisione: string | null
           description: string | null
+          gestione_id: string | null
           id: string
           insurance_url: string | null
           km: number | null
@@ -1031,6 +1203,7 @@ export type Database = {
           created_at?: string | null
           data_revisione?: string | null
           description?: string | null
+          gestione_id?: string | null
           id?: string
           insurance_url?: string | null
           km?: number | null
@@ -1062,6 +1235,7 @@ export type Database = {
           created_at?: string | null
           data_revisione?: string | null
           description?: string | null
+          gestione_id?: string | null
           id?: string
           insurance_url?: string | null
           km?: number | null
@@ -1085,17 +1259,30 @@ export type Database = {
           valore_attuale?: number | null
           veicolo?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "properties_mobile_gestione_id_fkey"
+            columns: ["gestione_id"]
+            isOneToOne: false
+            referencedRelation: "gestioni"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       properties_real: {
         Row: {
           ascensore: boolean | null
           cap: string | null
           checkin_guide: string | null
+          checkin_instructions: string | null
           checkin_video_url: string | null
           citta: string | null
           codice_keybox: string | null
+          contatti_utili: string | null
           created_at: string | null
+          differenziata_info: string | null
+          gestione_id: string | null
+          house_rules: string | null
           ical_url: string | null
           id: string
           indirizzo: string | null
@@ -1103,6 +1290,7 @@ export type Database = {
           keybox_code: string | null
           latitude: number | null
           longitude: number | null
+          maps_url: string | null
           mq: number | null
           nome: string
           piano: string | null
@@ -1125,10 +1313,15 @@ export type Database = {
           ascensore?: boolean | null
           cap?: string | null
           checkin_guide?: string | null
+          checkin_instructions?: string | null
           checkin_video_url?: string | null
           citta?: string | null
           codice_keybox?: string | null
+          contatti_utili?: string | null
           created_at?: string | null
+          differenziata_info?: string | null
+          gestione_id?: string | null
+          house_rules?: string | null
           ical_url?: string | null
           id?: string
           indirizzo?: string | null
@@ -1136,6 +1329,7 @@ export type Database = {
           keybox_code?: string | null
           latitude?: number | null
           longitude?: number | null
+          maps_url?: string | null
           mq?: number | null
           nome: string
           piano?: string | null
@@ -1158,10 +1352,15 @@ export type Database = {
           ascensore?: boolean | null
           cap?: string | null
           checkin_guide?: string | null
+          checkin_instructions?: string | null
           checkin_video_url?: string | null
           citta?: string | null
           codice_keybox?: string | null
+          contatti_utili?: string | null
           created_at?: string | null
+          differenziata_info?: string | null
+          gestione_id?: string | null
+          house_rules?: string | null
           ical_url?: string | null
           id?: string
           indirizzo?: string | null
@@ -1169,6 +1368,7 @@ export type Database = {
           keybox_code?: string | null
           latitude?: number | null
           longitude?: number | null
+          maps_url?: string | null
           mq?: number | null
           nome?: string
           piano?: string | null
@@ -1187,7 +1387,15 @@ export type Database = {
           wifi_password?: string | null
           wifi_ssid?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "properties_real_gestione_id_fkey"
+            columns: ["gestione_id"]
+            isOneToOne: false
+            referencedRelation: "gestioni"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       property_blocked_dates: {
         Row: {
@@ -1536,6 +1744,7 @@ export type Database = {
           booking_id: string | null
           category: Database["public"]["Enums"]["payment_category"] | null
           consumo_kw_mc: number | null
+          conto_id: string | null
           created_at: string | null
           data_pagamento: string | null
           data_scadenza: string
@@ -1568,6 +1777,7 @@ export type Database = {
           booking_id?: string | null
           category?: Database["public"]["Enums"]["payment_category"] | null
           consumo_kw_mc?: number | null
+          conto_id?: string | null
           created_at?: string | null
           data_pagamento?: string | null
           data_scadenza: string
@@ -1600,6 +1810,7 @@ export type Database = {
           booking_id?: string | null
           category?: Database["public"]["Enums"]["payment_category"] | null
           consumo_kw_mc?: number | null
+          conto_id?: string | null
           created_at?: string | null
           data_pagamento?: string | null
           data_scadenza?: string
@@ -1634,6 +1845,13 @@ export type Database = {
             columns: ["booking_id"]
             isOneToOne: false
             referencedRelation: "bookings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_payments_conto_id_fkey"
+            columns: ["conto_id"]
+            isOneToOne: false
+            referencedRelation: "conti"
             referencedColumns: ["id"]
           },
         ]
@@ -1706,6 +1924,8 @@ export type Database = {
           quote_status: string | null
           quote_url: string | null
           related_payment_id: string | null
+          reminder_day_before_sent: boolean | null
+          reminder_day_of_sent: boolean | null
           resolution_photo_url: string | null
           ricevuta_url: string | null
           scadenza: string | null
@@ -1746,6 +1966,8 @@ export type Database = {
           quote_status?: string | null
           quote_url?: string | null
           related_payment_id?: string | null
+          reminder_day_before_sent?: boolean | null
+          reminder_day_of_sent?: boolean | null
           resolution_photo_url?: string | null
           ricevuta_url?: string | null
           scadenza?: string | null
@@ -1786,6 +2008,8 @@ export type Database = {
           quote_status?: string | null
           quote_url?: string | null
           related_payment_id?: string | null
+          reminder_day_before_sent?: boolean | null
+          reminder_day_of_sent?: boolean | null
           resolution_photo_url?: string | null
           ricevuta_url?: string | null
           scadenza?: string | null
