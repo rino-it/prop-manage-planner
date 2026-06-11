@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { bucketByScadenza } from '@/utils/scadenze';
 import { useRevenue } from '@/hooks/useRevenue';
 import { usePropertiesReal } from '@/hooks/useProperties';
 import { useQuery } from '@tanstack/react-query';
@@ -186,6 +187,7 @@ export default function Revenue() {
   const [confirmMethod, setConfirmMethod] = useState('bonifico');
   const [filterProp, setFilterProp] = useState('all');
   const [filterCat, setFilterCat] = useState('all');
+  const [search, setSearch] = useState('');
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
   // ── create form ──
@@ -221,27 +223,32 @@ export default function Revenue() {
         if (r.bookings?.properties_real?.nome !== properties?.find(p => p.id === filterProp)?.nome) return false;
       }
       if (filterCat !== 'all' && r.category !== filterCat) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const hay = [
+          r.bookings?.nome_ospite, r.bookings?.properties_real?.nome,
+          r.description, r.notes, String(r.importo),
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [revenues, filterProp, filterCat, properties]);
+  }, [revenues, filterProp, filterCat, properties, search]);
 
   // ── sections ──
-  const today = new Date();
-  const in30 = addDays(today, 30);
-
-  const overdue    = filtered.filter(r => r.stato === 'da_pagare' && isPast(parseISO(r.data_scadenza)) && !isToday(parseISO(r.data_scadenza)));
-  const upcoming   = filtered.filter(r => r.stato === 'da_pagare' && !isPast(parseISO(r.data_scadenza)));
-  const paid       = filtered.filter(r => r.stato === 'pagato');
-
-  const thisWeek   = upcoming.filter(r => isBefore(parseISO(r.data_scadenza), addDays(today, 7)));
-  const thisMonth  = upcoming.filter(r => !isBefore(parseISO(r.data_scadenza), addDays(today, 7)) && isBefore(parseISO(r.data_scadenza), in30));
-  const later      = upcoming.filter(r => !isBefore(parseISO(r.data_scadenza), in30));
+  const buckets   = bucketByScadenza(filtered, new Date(), (r: any) => r.data_scadenza);
+  const overdue   = buckets.overdue;
+  const thisWeek  = buckets.thisWeek;   // DayGroup[]
+  const thisMonth = buckets.thisMonth;
+  const later     = buckets.later;
+  const paid      = buckets.paid;
+  const upcoming  = [...thisWeek.flatMap(g => g.items), ...thisMonth, ...later];
 
   // ── KPI ──
   const totalPaid     = paid.reduce((s, r) => s + Number(r.importo), 0);
   const totalPending  = upcoming.reduce((s, r) => s + Number(r.importo), 0);
   const totalOverdue  = overdue.reduce((s, r) => s + Number(r.importo), 0);
-  const totalNext30   = [...thisWeek, ...thisMonth].reduce((s, r) => s + Number(r.importo), 0);
+  const totalNext30   = [...thisWeek.flatMap(g => g.items), ...thisMonth].reduce((s, r) => s + Number(r.importo), 0);
 
   // ── grouped paid ──
   const groupedPaid = useMemo(() => groupByMonth(paid), [paid]);
@@ -328,6 +335,9 @@ export default function Revenue() {
       <PageHeader title="Incassi & Piani" count={filtered.filter(r => r.stato === 'da_pagare').length}>
         <div className="flex items-center gap-2 flex-wrap">
 
+          <Input placeholder="Cerca incassi…" value={search} onChange={e => setSearch(e.target.value)}
+            className="h-9 sm:h-8 text-xs w-[150px] sm:w-[180px] bg-white" />
+
           {/* Filtro proprietà */}
           <Select value={filterProp} onValueChange={setFilterProp}>
             <SelectTrigger className="h-9 sm:h-8 text-xs w-[150px] sm:w-[160px] bg-white">
@@ -365,7 +375,7 @@ export default function Revenue() {
           color="border-amber-200 bg-amber-50" icon={<Clock className="w-6 h-6 text-amber-600" />} />
         <KpiCard label="Scaduto" value={fmt(totalOverdue)} sub={overdue.length > 0 ? `${overdue.length} rate in ritardo` : 'Tutto in regola ✓'}
           color={totalOverdue > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200'} icon={<AlertTriangle className={`w-6 h-6 ${totalOverdue > 0 ? 'text-red-600' : 'text-slate-400'}`} />} />
-        <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.length + thisMonth.length} scadenze`}
+        <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.flatMap(g => g.items).length + thisMonth.length} scadenze`}
           color="border-blue-200 bg-blue-50" icon={<TrendingUp className="w-6 h-6 text-blue-600" />} />
       </div>
 
@@ -419,12 +429,14 @@ export default function Revenue() {
             </div>
           ) : (
             <>
-              {thisWeek.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">⚡ Questa settimana</p>
+              {thisWeek.length > 0 && thisWeek.map(group => (
+                <div key={group.date}>
+                  <p className="text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">
+                    {group.isToday ? '⚡ ' : '📌 '}{group.label}
+                  </p>
                   <Card>
                     <CardContent className="p-0 divide-y">
-                      {thisWeek.map(r => (
+                      {group.items.map(r => (
                         <RevenueRow key={r.id} rev={r}
                           onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
                           onEdit={() => handleEdit(r)}
@@ -435,7 +447,7 @@ export default function Revenue() {
                     </CardContent>
                   </Card>
                 </div>
-              )}
+              ))}
 
               {thisMonth.length > 0 && (
                 <div>
