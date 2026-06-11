@@ -23,10 +23,10 @@ import {
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
-  format, isPast, isToday, addDays, parseISO,
-  isBefore,
+  format, isPast, isToday, parseISO,
 } from 'date-fns';
 import { it } from 'date-fns/locale';
+import { bucketByScadenza } from '@/utils/scadenze';
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const CATEGORY_LABELS: Record<string, string> = {
@@ -224,6 +224,7 @@ export default function Expenses() {
   const [filterCat, setFilterCat]       = useState('all');
   const [filterType, setFilterType]     = useState('all'); // all | real | mobile
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
+  const [search, setSearch] = useState('');
 
   // form
   const [form, setForm] = useState({ ...DEFAULT_FORM });
@@ -378,35 +379,41 @@ export default function Expenses() {
         if (!match || ex.properties_real?.nome !== match.nome) return false;
       }
       if (filterCat !== 'all' && ex.categoria !== filterCat) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const hay = [
+          ex.descrizione, ex.fornitore, ex.note, ex.debtor_name,
+          ex.properties_real?.nome, ex.properties_mobile?.veicolo,
+          String(ex.importo),
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [expenses, filterType, filterProp, filterCat, realProperties]);
+  }, [expenses, filterType, filterProp, filterCat, realProperties, search]);
 
   // sections
-  const today = new Date();
-  const in30  = addDays(today, 30);
-
   // gli anticipi vivono nella loro tab dedicata e non concorrono ai KPI/bucket delle spese ordinarie
   const ordinary = filtered.filter(ex => !ex.is_advance);
   const advancesAll = filtered.filter(ex => ex.is_advance);
 
-  const overdue  = ordinary.filter(ex => ex.stato === 'da_pagare' && isPast(parseISO(ex.scadenza)) && !isToday(parseISO(ex.scadenza)));
-  const upcoming = ordinary.filter(ex => ex.stato === 'da_pagare' && !isPast(parseISO(ex.scadenza)));
-  const paid     = ordinary.filter(ex => ex.stato === 'pagato');
+  const ordinaryBuckets = bucketByScadenza(ordinary, new Date(), (e: any) => e.scadenza);
+  const overdue   = ordinaryBuckets.overdue;
+  const thisWeek  = ordinaryBuckets.thisWeek;   // DayGroup[]
+  const thisMonth = ordinaryBuckets.thisMonth;
+  const later     = ordinaryBuckets.later;
+  const paid      = ordinaryBuckets.paid;
+  const upcoming  = [...thisWeek.flatMap(g => g.items), ...thisMonth, ...later];
 
   const advancesPending  = advancesAll.filter(ex => ex.stato !== 'pagato');
   const advancesRefunded = advancesAll.filter(ex => ex.stato === 'pagato');
   const totalAdvancesPending = advancesPending.reduce((s, ex) => s + Number(ex.importo), 0);
 
-  const thisWeek  = upcoming.filter(ex => isBefore(parseISO(ex.scadenza), addDays(today, 7)));
-  const thisMonth = upcoming.filter(ex => !isBefore(parseISO(ex.scadenza), addDays(today, 7)) && isBefore(parseISO(ex.scadenza), in30));
-  const later     = upcoming.filter(ex => !isBefore(parseISO(ex.scadenza), in30));
-
   // KPI
   const totalPaid    = paid.reduce((s, ex) => s + Number(ex.importo), 0);
   const totalPending = upcoming.reduce((s, ex) => s + Number(ex.importo), 0);
   const totalOverdue = overdue.reduce((s, ex) => s + Number(ex.importo), 0);
-  const totalNext30  = [...thisWeek, ...thisMonth].reduce((s, ex) => s + Number(ex.importo), 0);
+  const totalNext30  = [...thisWeek.flatMap(g => g.items), ...thisMonth].reduce((s, ex) => s + Number(ex.importo), 0);
 
   const groupedPaid = useMemo(() => groupByMonth(paid), [paid]);
 
@@ -416,6 +423,10 @@ export default function Expenses() {
       {/* ── Header ── */}
       <PageHeader title="Spese" count={ordinary.filter(ex => ex.stato === 'da_pagare').length}>
         <div className="flex items-center gap-2 flex-wrap">
+
+          {/* Ricerca */}
+          <Input placeholder="Cerca spese…" value={search} onChange={e => setSearch(e.target.value)}
+            className="h-9 sm:h-8 text-xs w-full sm:w-[180px] bg-white" />
 
           {/* Tipo toggle */}
           <div className="flex bg-white p-0.5 rounded-md border h-9 sm:h-8">
@@ -461,7 +472,7 @@ export default function Expenses() {
           color="border-amber-200 bg-amber-50" icon={<Clock className="w-6 h-6 text-amber-600" />} />
         <KpiCard label="Scadute" value={fmt(totalOverdue)} sub={overdue.length > 0 ? `${overdue.length} in ritardo` : 'Tutto in regola ✓'}
           color={totalOverdue > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200'} icon={<AlertTriangle className={`w-6 h-6 ${totalOverdue > 0 ? 'text-red-600' : 'text-slate-400'}`} />} />
-        <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.length + thisMonth.length} scadenze`}
+        <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.flatMap(g => g.items).length + thisMonth.length} scadenze`}
           color="border-blue-200 bg-blue-50" icon={<TrendingDown className="w-6 h-6 text-blue-600" />} />
       </div>
 
@@ -529,12 +540,14 @@ export default function Expenses() {
             </div>
           ) : (
             <>
-              {thisWeek.length > 0 && (
-                <div>
-                  <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">⚡ Questa settimana</p>
+              {thisWeek.length > 0 && thisWeek.map(group => (
+                <div key={group.date}>
+                  <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">
+                    {group.isToday ? '⚡ ' : '📌 '}{group.label}
+                  </p>
                   <Card>
                     <CardContent className="p-0 divide-y">
-                      {thisWeek.map(ex => (
+                      {group.items.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
                           onEdit={() => openEdit(ex)}
@@ -544,7 +557,7 @@ export default function Expenses() {
                     </CardContent>
                   </Card>
                 </div>
-              )}
+              ))}
               {thisMonth.length > 0 && (
                 <div>
                   <p className="text-sm sm:text-xs font-bold uppercase tracking-wider text-amber-600 mb-2 px-1">📅 Prossimi 30 giorni</p>
