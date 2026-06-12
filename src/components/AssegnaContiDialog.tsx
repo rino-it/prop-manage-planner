@@ -63,14 +63,14 @@ export function AssegnaContiDialog({ open, onOpenChange }: { open: boolean; onOp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85svh] overflow-y-auto">
+      <DialogContent className="sm:max-w-2xl w-[calc(100%-1rem)] max-h-[85svh] overflow-y-auto overflow-x-hidden">
         <DialogHeader>
           <DialogTitle>Assegna movimenti a un conto</DialogTitle>
           <DialogDescription>Scegli la gestione e il conto, poi assegna i movimenti realizzati rimasti senza conto.</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="grid gap-1.5">
               <Label>Gestione</Label>
               <Select value={gestioneId} onValueChange={setGestioneId}>
@@ -103,16 +103,26 @@ export function AssegnaContiDialog({ open, onOpenChange }: { open: boolean; onOp
               <div className="border rounded-lg divide-y max-h-[40vh] overflow-y-auto">
                 {visibili.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">Nessun movimento da assegnare per questa gestione.</p>}
                 {visibili.map(m => (
-                  <div key={key(m)} className="flex items-center gap-3 px-3 py-2 text-sm flex-wrap">
-                    <Checkbox checked={!!checked[key(m)]} onCheckedChange={v => setChecked(s => ({ ...s, [key(m)]: !!v }))} />
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full ${m.tipo === 'incasso' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                      {m.tipo === 'incasso' ? 'Incasso' : 'Spesa'}
-                    </span>
-                    <span className="text-slate-400 tabular-nums">{fmtDate(m.data)}</span>
-                    <span className="flex-1 min-w-[120px] truncate">{m.descrizione}{m.proprieta ? ` · ${m.proprieta}` : ''}</span>
-                    <span className="font-semibold tabular-nums">{fmt(m.importo)}</span>
+                  <div key={key(m)} className="flex items-center gap-2.5 px-3 py-2.5">
+                    <Checkbox
+                      className="shrink-0"
+                      checked={!!checked[key(m)]}
+                      onCheckedChange={v => setChecked(s => ({ ...s, [key(m)]: !!v }))}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${m.tipo === 'incasso' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
+                          {m.tipo === 'incasso' ? 'Incasso' : 'Spesa'}
+                        </span>
+                        <span className="truncate text-sm font-medium text-slate-800">{m.descrizione}</span>
+                        <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums">{fmt(m.importo)}</span>
+                      </div>
+                      <div className="truncate text-xs text-slate-400 mt-0.5">
+                        {fmtDate(m.data)}{m.proprieta ? ` · ${m.proprieta}` : ''}
+                      </div>
+                    </div>
                     <Select value={perRow[key(m)] || ''} onValueChange={v => setPerRow(s => ({ ...s, [key(m)]: v }))}>
-                      <SelectTrigger className="h-8 w-[130px] text-xs"><SelectValue placeholder="Conto…" /></SelectTrigger>
+                      <SelectTrigger className="h-9 w-[104px] shrink-0 text-xs"><SelectValue placeholder="Conto…" /></SelectTrigger>
                       <SelectContent>
                         {contiGestione.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                       </SelectContent>
