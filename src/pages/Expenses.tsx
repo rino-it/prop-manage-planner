@@ -15,6 +15,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PageHeader } from '@/components/ui/page-header';
 import { useToast } from '@/hooks/use-toast';
 import { usePropertiesReal } from '@/hooks/useProperties';
+import { useGestioni } from '@/hooks/useGestioni';
+import { useConti } from '@/hooks/useConti';
 import {
   CheckCircle, Clock, AlertTriangle, TrendingDown,
   Pencil, Plus, Trash2,
@@ -205,6 +207,7 @@ const DEFAULT_FORM = {
   tenant_booking_id: '',
   is_advance: false,
   debtor_name: '',
+  conto_id: '',
 };
 
 // ─── main component ───────────────────────────────────────────────────────────
@@ -212,6 +215,8 @@ export default function Expenses() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: realProperties = [] } = usePropertiesReal();
+  const { data: gestioni = [] } = useGestioni();
+  const { data: conti = [] } = useConti();
 
   // UI state
   const [sheetOpen, setSheetOpen]       = useState(false);
@@ -220,9 +225,11 @@ export default function Expenses() {
   const [confirmDate, setConfirmDate]   = useState(format(new Date(), 'yyyy-MM-dd'));
   const [confirmMethod, setConfirmMethod] = useState('bonifico');
   const [confirmNote, setConfirmNote]   = useState('');
+  const [confirmConto, setConfirmConto] = useState('');
   const [filterProp, setFilterProp]     = useState('all');
   const [filterCat, setFilterCat]       = useState('all');
   const [filterType, setFilterType]     = useState('all'); // all | real | mobile
+  const [filterGestione, setFilterGestione] = useState('all');
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
 
@@ -233,7 +240,7 @@ export default function Expenses() {
   const { data: mobileProperties = [] } = useQuery({
     queryKey: ['mobile-properties'],
     queryFn: async () => {
-      const { data } = await supabase.from('properties_mobile').select('id, veicolo, targa').eq('status', 'active');
+      const { data } = await supabase.from('properties_mobile').select('id, veicolo, targa, gestione_id').eq('status', 'active');
       return data || [];
     },
   });
@@ -286,6 +293,7 @@ export default function Expenses() {
         tenant_booking_id: form.is_advance ? null : (form.visible_tenant && form.tenant_booking_id ? form.tenant_booking_id : null),
         is_advance: form.is_advance,
         debtor_name: form.is_advance ? (form.debtor_name?.trim() || null) : null,
+        conto_id: form.conto_id || null,
       };
       // Se la spesa viene salvata come pagata senza passare dal flusso "Paga",
       // fissiamo la data pagamento a oggi: evita voci pagate con data_pagamento null
@@ -313,8 +321,8 @@ export default function Expenses() {
 
   // mutation: confirm payment / reimbursement
   const confirmPayment = useMutation({
-    mutationFn: async ({ id, date, method, note, isAdvance }: { id: string; date: string; method: string; note?: string; isAdvance?: boolean }) => {
-      const update: any = { stato: 'pagato', data_pagamento: date, payment_method: method };
+    mutationFn: async ({ id, date, method, note, isAdvance, contoId }: { id: string; date: string; method: string; note?: string; isAdvance?: boolean; contoId?: string }) => {
+      const update: any = { stato: 'pagato', data_pagamento: date, payment_method: method, conto_id: contoId || null };
       if (isAdvance) update.reimbursement_note = note?.trim() || null;
       const { error } = await supabase.from('payments').update(update).eq('id', id);
       if (error) throw error;
@@ -323,6 +331,7 @@ export default function Expenses() {
       queryClient.invalidateQueries({ queryKey: ['unified-expenses'] });
       setConfirmTarget(null);
       setConfirmNote('');
+      setConfirmConto('');
       toast({ title: vars.isAdvance ? 'Rimborso registrato' : 'Pagamento confermato' });
     },
     onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
@@ -363,6 +372,7 @@ export default function Expenses() {
       tenant_booking_id: exp.tenant_booking_id || '',
       is_advance: !!exp.is_advance,
       debtor_name: exp.debtor_name || '',
+      conto_id: exp.conto_id || '',
     });
     setSheetOpen(true);
   };
@@ -379,6 +389,12 @@ export default function Expenses() {
         if (!match || ex.properties_real?.nome !== match.nome) return false;
       }
       if (filterCat !== 'all' && ex.categoria !== filterCat) return false;
+      if (filterGestione !== 'all') {
+        const realIds = new Set((realProperties || []).filter((p: any) => p.gestione_id === filterGestione).map((p: any) => p.id));
+        const mobIds  = new Set((mobileProperties as any[] || []).filter((m: any) => m.gestione_id === filterGestione).map((m: any) => m.id));
+        if (!(ex.property_real_id && realIds.has(ex.property_real_id)) &&
+            !(ex.property_mobile_id && mobIds.has(ex.property_mobile_id))) return false;
+      }
       if (search.trim()) {
         const q = search.toLowerCase();
         const hay = [
@@ -390,7 +406,7 @@ export default function Expenses() {
       }
       return true;
     });
-  }, [expenses, filterType, filterProp, filterCat, realProperties, search]);
+  }, [expenses, filterType, filterProp, filterCat, realProperties, search, filterGestione, mobileProperties]);
 
   // sections
   // gli anticipi vivono nella loro tab dedicata e non concorrono ai KPI/bucket delle spese ordinarie
@@ -434,6 +450,17 @@ export default function Expenses() {
             <Button variant={filterType === 'real'   ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')}   className="h-8 sm:h-7 px-3 sm:px-2 text-xs"><Home className="w-3 h-3" /></Button>
             <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="h-8 sm:h-7 px-3 sm:px-2 text-xs"><Car className="w-3 h-3" /></Button>
           </div>
+
+          {/* Filtro gestione */}
+          <Select value={filterGestione} onValueChange={setFilterGestione}>
+            <SelectTrigger className="h-9 sm:h-8 text-xs w-full sm:w-[150px] bg-white">
+              <SelectValue placeholder="Gestione" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutte le gestioni</SelectItem>
+              {gestioni.map((g: any) => <SelectItem key={g.id} value={g.id}>{g.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
           {/* Filtro proprietà */}
           <Select value={filterProp} onValueChange={setFilterProp}>
@@ -520,7 +547,7 @@ export default function Expenses() {
               <CardContent className="p-0 divide-y">
                 {overdue.map(ex => (
                   <ExpenseRow key={ex.id} exp={ex}
-                    onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
+                    onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                     onEdit={() => openEdit(ex)}
                     onDelete={() => { if (confirm('Eliminare questa spesa?')) deleteExpense.mutate(ex.id); }}
                   />
@@ -549,7 +576,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {group.items.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
-                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -565,7 +592,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
-                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -581,7 +608,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {later.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
-                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -631,7 +658,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {advancesPending.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
-                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); }}
+                          onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare questo anticipo?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -848,6 +875,19 @@ export default function Expenses() {
               )}
             </div>
 
+            {/* Conto — solo quando la spesa è già pagata */}
+            {form.stato === 'pagato' && (
+              <div className="grid gap-1.5">
+                <Label className="text-sm sm:text-xs">Conto</Label>
+                <Select value={form.conto_id} onValueChange={v => setForm(f => ({ ...f, conto_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Da quale conto è uscita…" /></SelectTrigger>
+                  <SelectContent>
+                    {conti.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Inoltra all'inquilino — solo se ci sono inquilini lungo termine attivi e non è un anticipo */}
             {longTermTenants.length > 0 && !form.is_advance && (
               <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 space-y-3">
@@ -931,6 +971,15 @@ export default function Expenses() {
                 ))}
               </div>
             </div>
+            <div className="grid gap-2">
+              <Label>Conto</Label>
+              <Select value={confirmConto} onValueChange={setConfirmConto}>
+                <SelectTrigger><SelectValue placeholder="Da quale conto è uscita…" /></SelectTrigger>
+                <SelectContent>
+                  {conti.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
             {confirmTarget?.is_advance && (
               <div className="grid gap-2">
                 <Label>Nota (opzionale)</Label>
@@ -948,6 +997,7 @@ export default function Expenses() {
                   method: confirmMethod,
                   note: confirmNote,
                   isAdvance: !!confirmTarget.is_advance,
+                  contoId: confirmConto || undefined,
                 })}
                 disabled={confirmPayment.isPending}
               >
