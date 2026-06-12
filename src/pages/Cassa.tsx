@@ -19,8 +19,10 @@ import {
 import { PageHeader } from '@/components/ui/page-header';
 import { ContoDialog } from '@/components/ContoDialog';
 import { GirocontoDialog } from '@/components/GirocontoDialog';
+import { AssegnaContiDialog } from '@/components/AssegnaContiDialog';
+import { useMovimentiSenzaConto } from '@/hooks/useMovimentiSenzaConto';
 import { downloadEstrattoConto, type EstrattoRow } from '@/components/EstrattoContoPDF';
-import { Plus, Pencil, ArrowLeftRight, Download, Wallet, PiggyBank } from 'lucide-react';
+import { Plus, Pencil, ArrowLeftRight, Download, Wallet, PiggyBank, AlertTriangle } from 'lucide-react';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
@@ -414,6 +416,9 @@ export default function Cassa() {
   const { data: gestioni = [] } = useGestioni();
   const { data: conti = [] } = useCassa();
 
+  const { data: senzaConto = [] } = useMovimentiSenzaConto();
+  const [assegnaOpen, setAssegnaOpen] = useState(false);
+
   const [filterGestione, setFilterGestione] = useState('all');
   const [contoDialog, setContoDialog] = useState<{ open: boolean; gestioneId: string; editing?: any }>({
     open: false, gestioneId: '',
@@ -474,6 +479,21 @@ export default function Cassa() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Banner movimenti senza conto */}
+      {senzaConto.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-sm text-amber-800">
+                Hai <strong>{senzaConto.length}</strong> moviment{senzaConto.length === 1 ? 'o' : 'i'} realizzat{senzaConto.length === 1 ? 'o' : 'i'} senza conto assegnato.
+              </p>
+            </div>
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={() => setAssegnaOpen(true)}>Assegna</Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Gestioni */}
       {(gestioniView as any[]).map((g: any) => (
@@ -553,6 +573,7 @@ export default function Cassa() {
         contiByGestione={contiByGestione}
         conti={conti}
       />
+      <AssegnaContiDialog open={assegnaOpen} onOpenChange={setAssegnaOpen} />
     </div>
   );
 }
