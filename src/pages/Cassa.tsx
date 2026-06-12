@@ -1,8 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { format, parseISO } from 'date-fns';
 import { useGestioni } from '@/hooks/useGestioni';
 import { useCassa } from '@/hooks/useCassa';
+import { usePropertiesReal } from '@/hooks/useProperties';
+import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { buildRowsProprieta, type MovProprieta } from '@/utils/estrattoProprieta';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,8 +19,10 @@ import {
 import { PageHeader } from '@/components/ui/page-header';
 import { ContoDialog } from '@/components/ContoDialog';
 import { GirocontoDialog } from '@/components/GirocontoDialog';
+import { AssegnaContiDialog } from '@/components/AssegnaContiDialog';
+import { useMovimentiSenzaConto } from '@/hooks/useMovimentiSenzaConto';
 import { downloadEstrattoConto, type EstrattoRow } from '@/components/EstrattoContoPDF';
-import { Plus, Pencil, ArrowLeftRight, Download, Wallet, PiggyBank } from 'lucide-react';
+import { Plus, Pencil, ArrowLeftRight, Download, Wallet, PiggyBank, AlertTriangle } from 'lucide-react';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
@@ -230,44 +235,96 @@ async function buildEstrattoGestione(
   return { rows: allRows, totEntrate, totUscite, saldoFinale };
 }
 
+// ─── property estratto builder ────────────────────────────────────────────────
+async function buildEstrattoProprieta(
+  target: { id: string; nome: string; isMobile?: boolean },
+  contoNome: (id: string | null) => string,
+  preset: string,
+  from: string,
+  to: string,
+): Promise<{ rows: EstrattoRow[]; totEntrate: number; totUscite: number; saldoFinale: number }> {
+  const SENTINEL = '1900-01-01';
+  const movs: MovProprieta[] = [];
+
+  const { data: spese } = await supabase
+    .from('payments')
+    .select('importo, data_pagamento, descrizione, conto_id, stato')
+    .eq('stato', 'pagato')
+    .eq(target.isMobile ? 'property_mobile_id' : 'property_real_id', target.id);
+  for (const sp of spese || []) {
+    const dateStr: string = sp.data_pagamento || '';
+    if (!inPeriod(dateStr, preset, from, to, SENTINEL)) continue;
+    movs.push({ data: dateStr, descrizione: sp.descrizione || 'Spesa', conto_id: sp.conto_id ?? null, entrata: 0, uscita: Number(sp.importo) });
+  }
+
+  if (!target.isMobile) {
+    const { data: incassi } = await supabase
+      .from('tenant_payments')
+      .select('importo, payment_date, description, notes, conto_id, stato, bookings(property_id)')
+      .eq('stato', 'pagato');
+    for (const inc of incassi || []) {
+      const booking = inc.bookings as any;
+      if (booking?.property_id !== target.id) continue;
+      const dateStr: string = inc.payment_date || '';
+      if (!inPeriod(dateStr, preset, from, to, SENTINEL)) continue;
+      movs.push({ data: dateStr, descrizione: inc.description || inc.notes || 'Incasso', conto_id: inc.conto_id ?? null, entrata: Number(inc.importo), uscita: 0 });
+    }
+  }
+
+  return buildRowsProprieta(movs, target.nome, contoNome);
+}
+
 // ─── EstrattoDialog ───────────────────────────────────────────────────────────
-interface EstrattoTarget { level: 'gestione'; id: string; nome: string }
+interface EstrattoTarget { level: 'gestione' | 'proprieta'; id: string; nome: string; isMobile?: boolean }
 
 function EstrattoDialog({
-  target,
-  onClose,
-  contiByGestione,
-  totaleGestione,
+  target, onClose, gestioni, properties, contiByGestione, conti,
 }: {
   target: EstrattoTarget | null;
   onClose: () => void;
+  gestioni: any[];
+  properties: Array<{ id: string; nome: string; isMobile: boolean }>;
   contiByGestione: (gid: string) => any[];
-  totaleGestione: (gid: string) => number;
+  conti: any[];
 }) {
+  const [level, setLevel] = useState<'gestione' | 'proprieta'>('gestione');
+  const [gestioneId, setGestioneId] = useState('');
+  const [propertyId, setPropertyId] = useState('');
   const [preset, setPreset] = useState<'tutto' | 'anno' | 'mese' | 'custom'>('tutto');
   const today = format(new Date(), 'yyyy-MM-dd');
   const [from, setFrom] = useState(format(new Date(), 'yyyy-01-01'));
   const [to, setTo] = useState(today);
   const [loading, setLoading] = useState(false);
 
-  const handleDownload = async () => {
+  useEffect(() => {
     if (!target) return;
+    setLevel(target.level);
+    if (target.level === 'gestione') { setGestioneId(target.id); setPropertyId(''); }
+    else { setPropertyId(target.id); setGestioneId(''); }
+  }, [target]);
+
+  const contoNome = (id: string | null) =>
+    id ? (conti.find((c: any) => c.id === id)?.nome || '—') : '—';
+
+  const handleDownload = async () => {
     setLoading(true);
     try {
-      const conti = contiByGestione(target.id);
-      const { rows, totEntrate, totUscite, saldoFinale } = await buildEstrattoGestione(conti, preset, from, to);
-      const periodo = periodLabel(preset, from, to);
-      await downloadEstrattoConto(
-        {
-          titolo: 'Estratto conto — ' + target.nome,
-          periodo,
-          rows,
-          totEntrate,
-          totUscite,
-          saldoFinale,
-        },
-        'estratto-' + target.nome.replace(/\s+/g, '-') + '.pdf',
-      );
+      let result;
+      let titolo: string;
+      let filename: string;
+      if (level === 'gestione') {
+        const g = gestioni.find((x: any) => x.id === gestioneId);
+        result = await buildEstrattoGestione(contiByGestione(gestioneId), preset, from, to);
+        titolo = 'Estratto conto — ' + (g?.nome || '');
+        filename = 'estratto-' + (g?.nome || 'gestione').replace(/\s+/g, '-') + '.pdf';
+      } else {
+        const p = properties.find(x => x.id === propertyId);
+        if (!p) { setLoading(false); return; }
+        result = await buildEstrattoProprieta(p, contoNome, preset, from, to);
+        titolo = 'Estratto conto — ' + p.nome;
+        filename = 'estratto-' + p.nome.replace(/\s+/g, '-') + '.pdf';
+      }
+      await downloadEstrattoConto({ titolo, periodo: periodLabel(preset, from, to), ...result }, filename);
       onClose();
     } catch (err) {
       console.error('Estratto conto error:', err);
@@ -276,14 +333,51 @@ function EstrattoDialog({
     }
   };
 
+  const canDownload = level === 'gestione' ? !!gestioneId : !!propertyId;
+
   return (
     <Dialog open={!!target} onOpenChange={o => !o && onClose()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Estratto conto</DialogTitle>
-          <DialogDescription>{target?.nome}</DialogDescription>
+          <DialogDescription>Scegli cosa esportare e il periodo.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4 mt-1">
+          <div className="flex items-center p-1 bg-slate-100 rounded-lg gap-1">
+            <button
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${level === 'gestione' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+              onClick={() => setLevel('gestione')}
+            >Per gestione</button>
+            <button
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${level === 'proprieta' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+              onClick={() => setLevel('proprieta')}
+            >Per proprietà</button>
+          </div>
+
+          {level === 'gestione' ? (
+            <div className="grid gap-1.5">
+              <Label>Gestione</Label>
+              <Select value={gestioneId} onValueChange={setGestioneId}>
+                <SelectTrigger><SelectValue placeholder="Seleziona gestione…" /></SelectTrigger>
+                <SelectContent>
+                  {gestioni.map((g: any) => <SelectItem key={g.id} value={g.id}>{g.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : (
+            <div className="grid gap-1.5">
+              <Label>Proprietà</Label>
+              <Select value={propertyId} onValueChange={setPropertyId}>
+                <SelectTrigger><SelectValue placeholder="Seleziona proprietà…" /></SelectTrigger>
+                <SelectContent>
+                  {properties.map(p => (
+                    <SelectItem key={p.id} value={p.id}>{p.isMobile ? '🚗 ' : '🏠 '}{p.nome}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid gap-1.5">
             <Label>Periodo</Label>
             <Select value={preset} onValueChange={v => setPreset(v as any)}>
@@ -298,20 +392,16 @@ function EstrattoDialog({
           </div>
           {preset === 'custom' && (
             <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label>Dal</Label>
-                <Input type="date" value={from} onChange={e => setFrom(e.target.value)} />
-              </div>
-              <div className="grid gap-1.5">
-                <Label>Al</Label>
-                <Input type="date" value={to} onChange={e => setTo(e.target.value)} />
-              </div>
+              <div className="grid gap-1.5"><Label>Dal</Label>
+                <Input type="date" value={from} onChange={e => setFrom(e.target.value)} /></div>
+              <div className="grid gap-1.5"><Label>Al</Label>
+                <Input type="date" value={to} onChange={e => setTo(e.target.value)} /></div>
             </div>
           )}
         </div>
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={onClose}>Annulla</Button>
-          <Button onClick={handleDownload} disabled={loading} className="gap-1.5">
+          <Button onClick={handleDownload} disabled={loading || !canDownload} className="gap-1.5">
             <Download className="w-4 h-4" />
             {loading ? 'Generazione...' : 'Scarica PDF'}
           </Button>
@@ -325,6 +415,9 @@ function EstrattoDialog({
 export default function Cassa() {
   const { data: gestioni = [] } = useGestioni();
   const { data: conti = [] } = useCassa();
+
+  const { data: senzaConto = [] } = useMovimentiSenzaConto();
+  const [assegnaOpen, setAssegnaOpen] = useState(false);
 
   const [filterGestione, setFilterGestione] = useState('all');
   const [contoDialog, setContoDialog] = useState<{ open: boolean; gestioneId: string; editing?: any }>({
@@ -341,7 +434,20 @@ export default function Cassa() {
     contiByGestione(gid).reduce((s: number, c: any) => s + (c.saldo || 0), 0);
   const totale = conti.reduce((s: number, c: any) => s + (c.saldo || 0), 0);
 
-  const openEstratto = (level: 'gestione', id: string, nome: string) => {
+  const { data: realProps = [] } = usePropertiesReal();
+  const { data: mobileProps = [] } = useQuery({
+    queryKey: ['cassa-mobile-properties'],
+    queryFn: async () => {
+      const { data } = await supabase.from('properties_mobile').select('id, veicolo').eq('status', 'active');
+      return data || [];
+    },
+  });
+  const properties = [
+    ...(realProps as any[]).map(p => ({ id: p.id, nome: p.nome, isMobile: false })),
+    ...(mobileProps as any[]).map(m => ({ id: m.id, nome: m.veicolo || 'Veicolo', isMobile: true })),
+  ];
+
+  const openEstratto = (level: 'gestione' | 'proprieta', id: string, nome: string) => {
     setEstratto({ level, id, nome });
   };
 
@@ -373,6 +479,21 @@ export default function Cassa() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Banner movimenti senza conto */}
+      {senzaConto.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="p-4 flex items-center justify-between gap-3 flex-wrap">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
+              <p className="text-sm text-amber-800">
+                Hai <strong>{senzaConto.length}</strong> moviment{senzaConto.length === 1 ? 'o' : 'i'} realizzat{senzaConto.length === 1 ? 'o' : 'i'} senza conto assegnato.
+              </p>
+            </div>
+            <Button size="sm" className="bg-amber-600 hover:bg-amber-700" onClick={() => setAssegnaOpen(true)}>Assegna</Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Gestioni */}
       {(gestioniView as any[]).map((g: any) => (
@@ -447,9 +568,12 @@ export default function Cassa() {
       <EstrattoDialog
         target={estratto}
         onClose={() => setEstratto(null)}
+        gestioni={gestioni}
+        properties={properties}
         contiByGestione={contiByGestione}
-        totaleGestione={totaleGestione}
+        conti={conti}
       />
+      <AssegnaContiDialog open={assegnaOpen} onOpenChange={setAssegnaOpen} />
     </div>
   );
 }
