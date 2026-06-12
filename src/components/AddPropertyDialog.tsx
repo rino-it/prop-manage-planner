@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { useGestioni } from '@/hooks/useGestioni';
 import { Home, Car, FileText, Loader2 } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AddressAutocomplete } from '@/components/AddressAutocomplete';
@@ -22,6 +23,7 @@ interface AddPropertyDialogProps {
 export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToEdit }: AddPropertyDialogProps) {
   const { toast } = useToast();
   const queryClient = useQueryClient(); // <--- 3. HOOK AGGIUNTO
+  const { data: gestioni = [] } = useGestioni();
   const [loading, setLoading] = useState(false);
   const [type, setType] = useState<'real' | 'mobile'>('real');
   
@@ -37,6 +39,7 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
     scadenza_revisione: '',
     latitude: null as number | null,
     longitude: null as number | null,
+    gestione_id: '',
   });
 
   // GESTIONE FILE
@@ -57,9 +60,10 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
         scadenza_revisione: propertyToEdit.scadenza_revisione || '',
         latitude: propertyToEdit.latitude ?? null,
         longitude: propertyToEdit.longitude ?? null,
+        gestione_id: propertyToEdit.gestione_id || '',
       });
     } else {
-      setFormData({ nome: '', indirizzo: '', veicolo: '', targa: '', proprietario: '', scadenza_bollo: '', scadenza_assicurazione: '', scadenza_revisione: '', latitude: null, longitude: null });
+      setFormData({ nome: '', indirizzo: '', veicolo: '', targa: '', proprietario: '', scadenza_bollo: '', scadenza_assicurazione: '', scadenza_revisione: '', latitude: null, longitude: null, gestione_id: '' });
       setLibrettoFile(null);
       setInsuranceFile(null);
     }
@@ -93,6 +97,7 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
           nome: formData.nome,
           indirizzo: formData.indirizzo,
           stato: 'uso_personale',
+          gestione_id: formData.gestione_id || null,
         };
         if (formData.latitude !== null) payload.latitude = formData.latitude;
         if (formData.longitude !== null) payload.longitude = formData.longitude;
@@ -115,7 +120,8 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
           scadenza_revisione: formData.scadenza_revisione || null,
           libretto_url: librettoPath,
           insurance_url: insurancePath,
-          status: 'active'
+          status: 'active',
+          gestione_id: formData.gestione_id || null,
         };
 
         if (propertyToEdit) {
@@ -190,6 +196,15 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
                   })}
                 />
               </div>
+              <div className="space-y-2">
+                <Label>Gestione</Label>
+                <Select value={formData.gestione_id} onValueChange={v => setFormData(f => ({ ...f, gestione_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleziona gestione…" /></SelectTrigger>
+                  <SelectContent>
+                    {gestioni.map((g: any) => <SelectItem key={g.id} value={g.id}>{g.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </>
           ) : (
             <>
@@ -207,6 +222,16 @@ export function AddPropertyDialog({ isOpen, onOpenChange, onSuccess, propertyToE
               <div className="space-y-2">
                 <Label>Intestatario (Proprietario)</Label>
                 <Input placeholder="Nome Cognome o Azienda" value={formData.proprietario} onChange={e => setFormData({...formData, proprietario: e.target.value})} />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Gestione</Label>
+                <Select value={formData.gestione_id} onValueChange={v => setFormData(f => ({ ...f, gestione_id: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleziona gestione…" /></SelectTrigger>
+                  <SelectContent>
+                    {gestioni.map((g: any) => <SelectItem key={g.id} value={g.id}>{g.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </div>
 
               {/* SEZIONE SCADENZE */}

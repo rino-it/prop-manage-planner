@@ -1,6 +1,9 @@
 import React, { useState, useMemo } from 'react';
+import { bucketByScadenza } from '@/utils/scadenze';
 import { useRevenue } from '@/hooks/useRevenue';
 import { usePropertiesReal } from '@/hooks/useProperties';
+import { useGestioni } from '@/hooks/useGestioni';
+import { useConti } from '@/hooks/useConti';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -176,6 +179,8 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
 export default function Revenue() {
   const { revenues, createPaymentPlan, confirmPayment, updatePayment, deletePayment, isLoading } = useRevenue();
   const { data: properties } = usePropertiesReal();
+  const { data: gestioni = [] } = useGestioni();
+  const { data: conti = [] } = useConti();
   const { toast } = useToast();
 
   // ── UI state ──
@@ -184,8 +189,11 @@ export default function Revenue() {
   const [confirmTarget, setConfirmTarget] = useState<any>(null);
   const [confirmDate, setConfirmDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [confirmMethod, setConfirmMethod] = useState('bonifico');
+  const [filterGestione, setFilterGestione] = useState('all');
   const [filterProp, setFilterProp] = useState('all');
   const [filterCat, setFilterCat] = useState('all');
+  const [confirmConto, setConfirmConto] = useState('');
+  const [search, setSearch] = useState('');
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
   // ── create form ──
@@ -215,33 +223,42 @@ export default function Revenue() {
   const filtered = useMemo(() => {
     if (!revenues) return [];
     return revenues.filter(r => {
+      if (filterGestione !== 'all') {
+        const gid = (r as any).bookings?.properties_real?.gestione_id;
+        if (gid !== filterGestione) return false;
+      }
       if (filterProp !== 'all') {
         const propId = r.bookings?.property_id || (r as any).property_real_id;
         // match by property name since we don't have direct property_id on row easily
         if (r.bookings?.properties_real?.nome !== properties?.find(p => p.id === filterProp)?.nome) return false;
       }
       if (filterCat !== 'all' && r.category !== filterCat) return false;
+      if (search.trim()) {
+        const q = search.toLowerCase();
+        const hay = [
+          r.bookings?.nome_ospite, r.bookings?.properties_real?.nome,
+          r.description, r.notes, String(r.importo),
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(q)) return false;
+      }
       return true;
     });
-  }, [revenues, filterProp, filterCat, properties]);
+  }, [revenues, filterGestione, filterProp, filterCat, properties, search]);
 
   // ── sections ──
-  const today = new Date();
-  const in30 = addDays(today, 30);
-
-  const overdue    = filtered.filter(r => r.stato === 'da_pagare' && isPast(parseISO(r.data_scadenza)) && !isToday(parseISO(r.data_scadenza)));
-  const upcoming   = filtered.filter(r => r.stato === 'da_pagare' && !isPast(parseISO(r.data_scadenza)));
-  const paid       = filtered.filter(r => r.stato === 'pagato');
-
-  const thisWeek   = upcoming.filter(r => isBefore(parseISO(r.data_scadenza), addDays(today, 7)));
-  const thisMonth  = upcoming.filter(r => !isBefore(parseISO(r.data_scadenza), addDays(today, 7)) && isBefore(parseISO(r.data_scadenza), in30));
-  const later      = upcoming.filter(r => !isBefore(parseISO(r.data_scadenza), in30));
+  const buckets   = bucketByScadenza(filtered, new Date(), (r: any) => r.data_scadenza);
+  const overdue   = buckets.overdue;
+  const thisWeek  = buckets.thisWeek;   // DayGroup[]
+  const thisMonth = buckets.thisMonth;
+  const later     = buckets.later;
+  const paid      = buckets.paid;
+  const upcoming  = [...thisWeek.flatMap(g => g.items), ...thisMonth, ...later];
 
   // ── KPI ──
   const totalPaid     = paid.reduce((s, r) => s + Number(r.importo), 0);
   const totalPending  = upcoming.reduce((s, r) => s + Number(r.importo), 0);
   const totalOverdue  = overdue.reduce((s, r) => s + Number(r.importo), 0);
-  const totalNext30   = [...thisWeek, ...thisMonth].reduce((s, r) => s + Number(r.importo), 0);
+  const totalNext30   = [...thisWeek.flatMap(g => g.items), ...thisMonth].reduce((s, r) => s + Number(r.importo), 0);
 
   // ── grouped paid ──
   const groupedPaid = useMemo(() => groupByMonth(paid), [paid]);
@@ -296,8 +313,10 @@ export default function Revenue() {
       id: confirmTarget.id,
       paymentDate: confirmDate,
       paymentType: confirmMethod,
+      contoId: confirmConto || undefined,
     });
     setConfirmTarget(null);
+    setConfirmConto('');
   };
 
   const downloadIcs = (rev: any) => {
@@ -327,6 +346,20 @@ export default function Revenue() {
       {/* ── Header ── */}
       <PageHeader title="Incassi & Piani" count={filtered.filter(r => r.stato === 'da_pagare').length}>
         <div className="flex items-center gap-2 flex-wrap">
+
+          <Input placeholder="Cerca incassi…" value={search} onChange={e => setSearch(e.target.value)}
+            className="h-9 sm:h-8 text-xs w-[150px] sm:w-[180px] bg-white" />
+
+          {/* Filtro gestione */}
+          <Select value={filterGestione} onValueChange={setFilterGestione}>
+            <SelectTrigger className="h-9 sm:h-8 text-xs w-[150px] sm:w-[160px] bg-white">
+              <SelectValue placeholder="Gestione" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutte le gestioni</SelectItem>
+              {(gestioni as any[]).map((g: any) => <SelectItem key={g.id} value={g.id}>{g.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
           {/* Filtro proprietà */}
           <Select value={filterProp} onValueChange={setFilterProp}>
@@ -365,7 +398,7 @@ export default function Revenue() {
           color="border-amber-200 bg-amber-50" icon={<Clock className="w-6 h-6 text-amber-600" />} />
         <KpiCard label="Scaduto" value={fmt(totalOverdue)} sub={overdue.length > 0 ? `${overdue.length} rate in ritardo` : 'Tutto in regola ✓'}
           color={totalOverdue > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200'} icon={<AlertTriangle className={`w-6 h-6 ${totalOverdue > 0 ? 'text-red-600' : 'text-slate-400'}`} />} />
-        <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.length + thisMonth.length} scadenze`}
+        <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.flatMap(g => g.items).length + thisMonth.length} scadenze`}
           color="border-blue-200 bg-blue-50" icon={<TrendingUp className="w-6 h-6 text-blue-600" />} />
       </div>
 
@@ -400,7 +433,7 @@ export default function Revenue() {
               <CardContent className="p-0 divide-y">
                 {overdue.map(r => (
                   <RevenueRow key={r.id} rev={r}
-                    onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                    onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                     onEdit={() => handleEdit(r)}
                     onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                   />
@@ -419,14 +452,16 @@ export default function Revenue() {
             </div>
           ) : (
             <>
-              {thisWeek.length > 0 && (
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">⚡ Questa settimana</p>
+              {thisWeek.length > 0 && thisWeek.map(group => (
+                <div key={group.date}>
+                  <p className="text-xs font-bold uppercase tracking-wider text-red-600 mb-2 px-1">
+                    {group.isToday ? '⚡ ' : '📌 '}{group.label}
+                  </p>
                   <Card>
                     <CardContent className="p-0 divide-y">
-                      {thisWeek.map(r => (
+                      {group.items.map(r => (
                         <RevenueRow key={r.id} rev={r}
-                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                           onCalendar={() => downloadIcs(r)}
@@ -435,7 +470,7 @@ export default function Revenue() {
                     </CardContent>
                   </Card>
                 </div>
-              )}
+              ))}
 
               {thisMonth.length > 0 && (
                 <div>
@@ -444,7 +479,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(r => (
                         <RevenueRow key={r.id} rev={r}
-                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                           onCalendar={() => downloadIcs(r)}
@@ -462,7 +497,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {later.map(r => (
                         <RevenueRow key={r.id} rev={r}
-                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                           onCalendar={() => downloadIcs(r)}
@@ -711,6 +746,15 @@ export default function Revenue() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Conto</Label>
+              <Select value={confirmConto} onValueChange={setConfirmConto}>
+                <SelectTrigger><SelectValue placeholder="Su quale conto è entrato…" /></SelectTrigger>
+                <SelectContent>
+                  {(conti as any[]).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmTarget(null)}>Annulla</Button>

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard, CalendarDays, CalendarRange, Wallet, Banknote, Wrench,
   LogOut, FileText, UserPlus, Home, Users, Truck, Ticket,
-  Search, ChevronRight, MessageCircle, DoorOpen, BarChart3, Globe, Store, Tag
+  Search, ChevronRight, MessageCircle, DoorOpen, BarChart3, Globe, Store, Tag, PiggyBank
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -53,6 +53,7 @@ const menuSections: MenuSection[] = [
   {
     label: 'Finanziario',
     items: [
+      { id: 'cassa', label: 'Cassa', icon: PiggyBank, path: '/cassa' },
       { id: 'revenue', label: 'Incassi', icon: Wallet, path: '/revenue' },
       { id: 'expenses', label: 'Spese', icon: Banknote, path: '/expenses' },
       { id: 'statistiche', label: 'Statistiche', icon: BarChart3, path: '/statistiche' },
