@@ -13,6 +13,10 @@ import { useToast } from '@/hooks/use-toast';
 const fmtDate = (iso: string) => { try { return format(parseISO(iso), 'dd/MM/yyyy'); } catch { return iso; } };
 const fmt = (n: number) => '€' + (Number(n) || 0).toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+/* Hallmark · component: assign-rows modal · genre: modern-minimal · theme: shadcn tokens (project)
+ * states: default · hover · selected · focus-visible · disabled · loading
+ * layout: 3-zone row (checkbox · truncating middle · fixed conto select), no horizontal scroll (mobile gate 34)
+ */
 export function AssegnaContiDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const { data: gestioni = [] } = useGestioni();
   const { data: conti = [] } = useConti();
@@ -63,15 +67,15 @@ export function AssegnaContiDialog({ open, onOpenChange }: { open: boolean; onOp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl w-[calc(100%-1rem)] max-h-[85svh] overflow-y-auto overflow-x-hidden">
+      <DialogContent className="sm:max-w-2xl w-[calc(100%-1rem)] max-h-[85svh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Assegna movimenti a un conto</DialogTitle>
           <DialogDescription>Scegli la gestione e il conto, poi assegna i movimenti realizzati rimasti senza conto.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 min-w-0">
               <Label>Gestione</Label>
               <Select value={gestioneId} onValueChange={setGestioneId}>
                 <SelectTrigger><SelectValue placeholder="Seleziona…" /></SelectTrigger>
@@ -80,7 +84,7 @@ export function AssegnaContiDialog({ open, onOpenChange }: { open: boolean; onOp
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid gap-1.5">
+            <div className="grid gap-1.5 min-w-0">
               <Label>Conto di default</Label>
               <Select value={contoDefault} onValueChange={setContoDefault} disabled={!gestioneId}>
                 <SelectTrigger><SelectValue placeholder="Seleziona conto…" /></SelectTrigger>
@@ -102,33 +106,43 @@ export function AssegnaContiDialog({ open, onOpenChange }: { open: boolean; onOp
 
               <div className="border rounded-lg divide-y max-h-[40vh] overflow-y-auto">
                 {visibili.length === 0 && <p className="px-4 py-4 text-sm text-slate-400">Nessun movimento da assegnare per questa gestione.</p>}
-                {visibili.map(m => (
-                  <div key={key(m)} className="flex items-center gap-2.5 px-3 py-2.5">
-                    <Checkbox
-                      className="shrink-0"
-                      checked={!!checked[key(m)]}
-                      onCheckedChange={v => setChecked(s => ({ ...s, [key(m)]: !!v }))}
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className={`shrink-0 text-[10px] px-1.5 py-0.5 rounded-full ${m.tipo === 'incasso' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-                          {m.tipo === 'incasso' ? 'Incasso' : 'Spesa'}
+                {visibili.map(m => {
+                  const k = key(m);
+                  const isChecked = !!checked[k];
+                  return (
+                    <div
+                      key={k}
+                      className={`flex items-center gap-2 px-3 py-2.5 transition-colors ${isChecked ? 'bg-blue-50/70' : 'hover:bg-slate-50'}`}
+                    >
+                      <button
+                        type="button"
+                        aria-pressed={isChecked}
+                        onClick={() => setChecked(s => ({ ...s, [k]: !isChecked }))}
+                        className="flex items-center gap-2.5 flex-1 min-w-0 text-left rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Checkbox className="shrink-0 pointer-events-none" checked={isChecked} tabIndex={-1} />
+                        <span className="flex-1 min-w-0">
+                          <span className="flex items-center gap-2">
+                            <span className={`shrink-0 text-[11px] px-1.5 py-0.5 rounded-full ${m.tipo === 'incasso' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {m.tipo === 'incasso' ? 'Incasso' : 'Spesa'}
+                            </span>
+                            <span className="truncate text-sm font-medium text-slate-800">{m.descrizione}</span>
+                            <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums text-slate-700">{fmt(m.importo)}</span>
+                          </span>
+                          <span className="block truncate text-xs text-slate-400 mt-0.5">
+                            {fmtDate(m.data)}{m.proprieta ? ` · ${m.proprieta}` : ''}
+                          </span>
                         </span>
-                        <span className="truncate text-sm font-medium text-slate-800">{m.descrizione}</span>
-                        <span className="ml-auto shrink-0 text-sm font-semibold tabular-nums">{fmt(m.importo)}</span>
-                      </div>
-                      <div className="truncate text-xs text-slate-400 mt-0.5">
-                        {fmtDate(m.data)}{m.proprieta ? ` · ${m.proprieta}` : ''}
-                      </div>
+                      </button>
+                      <Select value={perRow[k] || ''} onValueChange={v => setPerRow(s => ({ ...s, [k]: v }))}>
+                        <SelectTrigger className="h-9 w-[104px] shrink-0 text-xs"><SelectValue placeholder="Conto…" /></SelectTrigger>
+                        <SelectContent>
+                          {contiGestione.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
-                    <Select value={perRow[key(m)] || ''} onValueChange={v => setPerRow(s => ({ ...s, [key(m)]: v }))}>
-                      <SelectTrigger className="h-9 w-[104px] shrink-0 text-xs"><SelectValue placeholder="Conto…" /></SelectTrigger>
-                      <SelectContent>
-                        {contiGestione.map(c => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}
