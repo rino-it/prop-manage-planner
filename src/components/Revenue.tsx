@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { bucketByScadenza } from '@/utils/scadenze';
 import { useRevenue } from '@/hooks/useRevenue';
 import { usePropertiesReal } from '@/hooks/useProperties';
+import { useGestioni } from '@/hooks/useGestioni';
+import { useConti } from '@/hooks/useConti';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -177,6 +179,8 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
 export default function Revenue() {
   const { revenues, createPaymentPlan, confirmPayment, updatePayment, deletePayment, isLoading } = useRevenue();
   const { data: properties } = usePropertiesReal();
+  const { data: gestioni = [] } = useGestioni();
+  const { data: conti = [] } = useConti();
   const { toast } = useToast();
 
   // ── UI state ──
@@ -185,8 +189,10 @@ export default function Revenue() {
   const [confirmTarget, setConfirmTarget] = useState<any>(null);
   const [confirmDate, setConfirmDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [confirmMethod, setConfirmMethod] = useState('bonifico');
+  const [filterGestione, setFilterGestione] = useState('all');
   const [filterProp, setFilterProp] = useState('all');
   const [filterCat, setFilterCat] = useState('all');
+  const [confirmConto, setConfirmConto] = useState('');
   const [search, setSearch] = useState('');
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
@@ -217,6 +223,10 @@ export default function Revenue() {
   const filtered = useMemo(() => {
     if (!revenues) return [];
     return revenues.filter(r => {
+      if (filterGestione !== 'all') {
+        const gid = (r as any).bookings?.properties_real?.gestione_id;
+        if (gid !== filterGestione) return false;
+      }
       if (filterProp !== 'all') {
         const propId = r.bookings?.property_id || (r as any).property_real_id;
         // match by property name since we don't have direct property_id on row easily
@@ -233,7 +243,7 @@ export default function Revenue() {
       }
       return true;
     });
-  }, [revenues, filterProp, filterCat, properties, search]);
+  }, [revenues, filterGestione, filterProp, filterCat, properties, search]);
 
   // ── sections ──
   const buckets   = bucketByScadenza(filtered, new Date(), (r: any) => r.data_scadenza);
@@ -303,8 +313,10 @@ export default function Revenue() {
       id: confirmTarget.id,
       paymentDate: confirmDate,
       paymentType: confirmMethod,
+      contoId: confirmConto || undefined,
     });
     setConfirmTarget(null);
+    setConfirmConto('');
   };
 
   const downloadIcs = (rev: any) => {
@@ -337,6 +349,17 @@ export default function Revenue() {
 
           <Input placeholder="Cerca incassi…" value={search} onChange={e => setSearch(e.target.value)}
             className="h-9 sm:h-8 text-xs w-[150px] sm:w-[180px] bg-white" />
+
+          {/* Filtro gestione */}
+          <Select value={filterGestione} onValueChange={setFilterGestione}>
+            <SelectTrigger className="h-9 sm:h-8 text-xs w-[150px] sm:w-[160px] bg-white">
+              <SelectValue placeholder="Gestione" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutte le gestioni</SelectItem>
+              {(gestioni as any[]).map((g: any) => <SelectItem key={g.id} value={g.id}>{g.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
 
           {/* Filtro proprietà */}
           <Select value={filterProp} onValueChange={setFilterProp}>
@@ -410,7 +433,7 @@ export default function Revenue() {
               <CardContent className="p-0 divide-y">
                 {overdue.map(r => (
                   <RevenueRow key={r.id} rev={r}
-                    onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                    onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                     onEdit={() => handleEdit(r)}
                     onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                   />
@@ -438,7 +461,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {group.items.map(r => (
                         <RevenueRow key={r.id} rev={r}
-                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                           onCalendar={() => downloadIcs(r)}
@@ -456,7 +479,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(r => (
                         <RevenueRow key={r.id} rev={r}
-                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                           onCalendar={() => downloadIcs(r)}
@@ -474,7 +497,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {later.map(r => (
                         <RevenueRow key={r.id} rev={r}
-                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); }}
+                          onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                           onCalendar={() => downloadIcs(r)}
@@ -723,6 +746,15 @@ export default function Revenue() {
                   </button>
                 ))}
               </div>
+            </div>
+            <div className="grid gap-2">
+              <Label>Conto</Label>
+              <Select value={confirmConto} onValueChange={setConfirmConto}>
+                <SelectTrigger><SelectValue placeholder="Su quale conto è entrato…" /></SelectTrigger>
+                <SelectContent>
+                  {(conti as any[]).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmTarget(null)}>Annulla</Button>

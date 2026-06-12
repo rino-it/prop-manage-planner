@@ -36,7 +36,8 @@ export const useRevenue = () => {
           *,
           bookings (
             nome_ospite,
-            properties_real (nome)
+            property_id,
+            properties_real (nome, gestione_id)
           )
         `)
         .order('data_scadenza', { ascending: true });
@@ -132,13 +133,14 @@ export const useRevenue = () => {
 
   // 5. CONFERMA INCASSO (con data e metodo pagamento)
   const confirmPayment = useMutation({
-    mutationFn: async ({ id, paymentDate, paymentType }: { id: string; paymentDate: string; paymentType: string }) => {
+    mutationFn: async ({ id, paymentDate, paymentType, contoId }: { id: string; paymentDate: string; paymentType: string; contoId?: string }) => {
       const { error } = await supabase
         .from('tenant_payments')
         .update({
           stato: 'pagato',
           payment_date: new Date(paymentDate).toISOString(),
           payment_type: paymentType,
+          conto_id: contoId || null,
         })
         .eq('id', id);
       if (error) throw error;
