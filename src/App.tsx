@@ -14,6 +14,7 @@ import Dashboard from "./components/Dashboard";
 import Properties from "./components/Properties";
 import Tenants from "./components/TenantManager";
 import Expenses from "./pages/Expenses";
+import Cassa from "./pages/Cassa";
 import MobileProperties from "./pages/MobileProperties";
 import Tickets from "./pages/Tickets"; 
 
@@ -85,6 +86,7 @@ const App = () => (
               <Route path="tickets" element={<Tickets />} />
               <Route path="tenants" element={<Tenants />} />
               <Route path="expenses" element={<Expenses />} />
+              <Route path="cassa" element={<Cassa />} />
               <Route path="revenue" element={<Revenue />} />
               <Route path="bookings" element={<BookingsWrapper />} />
               <Route path="activities" element={<Activities />} />
