@@ -58,7 +58,14 @@ Le date in colonna restano formattate `dd/MM/yyyy`; confronti periodo sui primi 
 
 ## Nota di design (Hallmark)
 
-I nuovi elementi UI (toggle nell'`EstrattoDialog`, banner di avviso, `AssegnaContiDialog`) vanno rifiniti in fase di implementazione con la skill **Hallmark** (anti-AI-slop) per evitare un look generico, **mantenendo coerenza con il design system esistente** (shadcn, stile attuale di `Cassa.tsx`). Caveat: Hallmark è stata installata oggi e potrebbe richiedere una nuova sessione di Claude Code per essere invocabile; se non disponibile al momento dell'implementazione, seguire lo stile esistente e applicare Hallmark in un passaggio successivo.
+I nuovi elementi UI (toggle nell'`EstrattoDialog`, banner di avviso, `AssegnaContiDialog`) sono **component-scope** (modal + banner), non una pagina nuova: in fase di implementazione si applica il **flusso "Component-scope" di Hallmark**, non il Design flow da landing page. Concretamente:
+
+- **Pre-flight**: adottare token/font/componenti esistenti (shadcn/Tailwind, stile attuale di `Cassa.tsx`) — niente nuovo linguaggio visivo, niente nuovi token.
+- **8 stati** su ogni elemento interattivo (default · hover · `:focus-visible` · active · disabled · loading · error · success), in particolare i bottoni "Assegna" e i `Select`.
+- **Gate anti-slop applicabili**: nessuna chrome finta, copy onesto (niente numeri inventati nel banner — il conteggio N è reale), nessun heading in corsivo, responsive verificato a 320/375/414/768px, colori/font sempre via token nominati.
+- **Si salta**: macrostruttura, hero, nav/footer, enrichment (roba page-scope).
+
+Il contenuto di `SKILL.md` di Hallmark è già stato caricato in contesto in questa sessione, quindi la guida è applicabile anche senza invocazione "ufficiale" del tool `Skill`. Obiettivo: rifinitura coerente con l'app, **non** un restyle.
 
 ## Testing
 
