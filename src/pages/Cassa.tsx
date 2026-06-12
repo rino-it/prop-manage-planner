@@ -39,18 +39,19 @@ function periodLabel(preset: string, from: string, to: string): string {
 // ─── date filtering ────────────────────────────────────────────────────────────
 function inPeriod(dateStr: string | null | undefined, preset: string, from: string, to: string, apertura: string): boolean {
   if (!dateStr) return false;
-  if (dateStr < apertura) return false;
+  const d = dateStr.slice(0, 10);
+  if (d < apertura.slice(0, 10)) return false;
   if (preset === 'tutto') return true;
   if (preset === 'anno') {
     const y = new Date().getFullYear().toString();
-    return dateStr.startsWith(y);
+    return d.startsWith(y);
   }
   if (preset === 'mese') {
     const ym = format(new Date(), 'yyyy-MM');
-    return dateStr.startsWith(ym);
+    return d.startsWith(ym);
   }
   // custom
-  return dateStr >= from && dateStr <= to;
+  return d >= from && d <= to;
 }
 
 // ─── estratto builder ─────────────────────────────────────────────────────────
@@ -222,8 +223,8 @@ async function buildEstrattoGestione(
       totUscite += ev.row.uscita;
     }
 
-    // The final saldo for this conto (= conto.saldo for "tutto" preset)
-    saldoFinale += conto.saldo;
+    // The final saldo for this conto at the end of the selected period
+    saldoFinale += running;
   }
 
   return { rows: allRows, totEntrate, totUscite, saldoFinale };
