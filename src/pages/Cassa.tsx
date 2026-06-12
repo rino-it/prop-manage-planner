@@ -299,8 +299,8 @@ function EstrattoDialog({
   useEffect(() => {
     if (!target) return;
     setLevel(target.level);
-    if (target.level === 'gestione') setGestioneId(target.id);
-    else setPropertyId(target.id);
+    if (target.level === 'gestione') { setGestioneId(target.id); setPropertyId(''); }
+    else { setPropertyId(target.id); setGestioneId(''); }
   }, [target]);
 
   const contoNome = (id: string | null) =>
