@@ -29,5 +29,24 @@ export function useConti() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['conti'] }),
   });
 
-  return { ...list, createConto, updateConto };
+  const deleteConto = useMutation({
+    mutationFn: async (id: string) => {
+      // Sgancia i movimenti assegnati: tornano "senza conto" anziché perdersi.
+      const { error: e1 } = await supabase.from('payments').update({ conto_id: null }).eq('conto_id', id);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from('tenant_payments').update({ conto_id: null }).eq('conto_id', id);
+      if (e2) throw e2;
+      // I giroconti collegati vengono rimossi via ON DELETE CASCADE.
+      const { error: e3 } = await supabase.from('conti').delete().eq('id', id);
+      if (e3) throw e3;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['conti'] });
+      qc.invalidateQueries({ queryKey: ['cassa'] });
+      qc.invalidateQueries({ queryKey: ['movimenti-senza-conto'] });
+      qc.invalidateQueries({ queryKey: ['unified-expenses'] });
+    },
+  });
+
+  return { ...list, createConto, updateConto, deleteConto };
 }
