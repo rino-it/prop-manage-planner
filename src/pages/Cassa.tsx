@@ -71,8 +71,20 @@ async function buildEstrattoGestione(
   let totUscite = 0;
   let saldoFinale = 0;
 
+  // Periodo selezionato → data di inizio (inclusa). null = dall'origine ("tutto").
+  const periodFrom: string | null = preset === 'tutto'
+    ? null
+    : preset === 'anno'
+      ? `${new Date().getFullYear()}-01-01`
+      : preset === 'mese'
+        ? format(new Date(), 'yyyy-MM') + '-01'
+        : from;
+  // Sentinella: disabilita il filtro per data_apertura dentro inPeriod, così
+  // anche i movimenti antecedenti l'apertura del conto entrano nello storico.
+  const NO_APERTURA = '0000-00-00';
+
   for (const conto of conti) {
-    const apertura: string = conto.data_apertura || '0000-00-00';
+    const apertura: string = (conto.data_apertura || '0000-00-00').slice(0, 10);
 
     // Fetch all data in parallel
     const [{ data: incassi }, { data: spese }, { data: giroconti }] = await Promise.all([
@@ -92,143 +104,113 @@ async function buildEstrattoGestione(
         .or(`conto_from.eq.${conto.id},conto_to.eq.${conto.id}`),
     ]);
 
-    // Build movement list for this conto
-    const events: Array<{ dateStr: string; row: EstrattoRow }> = [];
+    // Tutti i movimenti del conto (senza alcun filtro per data) normalizzati con
+    // delta con segno + riga dell'estratto. La data è troncata a yyyy-MM-dd per
+    // confronti e ordinamento coerenti (payments.data_pagamento è un timestamp).
+    const movs: Array<{ dateStr: string; signed: number; row: EstrattoRow }> = [];
 
     for (const inc of incassi || []) {
-      const dateStr: string = inc.payment_date || '';
-      if (!inPeriod(dateStr, preset, from, to, apertura)) continue;
+      const dateStr = (inc.payment_date || '').slice(0, 10);
+      if (!dateStr) continue;
       const booking = inc.bookings as any;
       const propNome = booking?.properties_real?.nome || '';
-      events.push({
+      const importo = Number(inc.importo);
+      movs.push({
         dateStr,
+        signed: importo,
         row: {
           data: fmtDate(dateStr),
           descrizione: inc.description || inc.notes || 'Incasso',
           proprieta: propNome,
           conto: conto.nome,
-          entrata: Number(inc.importo),
+          entrata: importo,
           uscita: 0,
-          saldo: 0, // will be filled in running balance pass
+          saldo: 0, // riempito nel passaggio del saldo progressivo
         },
       });
     }
 
     for (const sp of spese || []) {
-      const dateStr: string = sp.data_pagamento || '';
-      if (!inPeriod(dateStr, preset, from, to, apertura)) continue;
+      const dateStr = (sp.data_pagamento || '').slice(0, 10);
+      if (!dateStr) continue;
       const propNome = (sp.properties_real as any)?.nome || (sp.properties_mobile as any)?.veicolo || '';
-      events.push({
+      const importo = Number(sp.importo);
+      movs.push({
         dateStr,
+        signed: -importo,
         row: {
           data: fmtDate(dateStr),
           descrizione: sp.descrizione || 'Spesa',
           proprieta: propNome,
           conto: conto.nome,
           entrata: 0,
-          uscita: Number(sp.importo),
+          uscita: importo,
           saldo: 0,
         },
       });
     }
 
     for (const giro of giroconti || []) {
-      const dateStr: string = giro.data || '';
-      if (!dateStr || dateStr < apertura) continue;
-      // For period filter: giroconti always included if after apertura — still filter by period
-      if (!inPeriod(dateStr, preset, from, to, apertura)) continue;
-
+      const dateStr = (giro.data || '').slice(0, 10);
+      if (!dateStr) continue;
+      const importo = Number(giro.importo);
       if (giro.conto_to === conto.id) {
-        events.push({
+        movs.push({
           dateStr,
+          signed: importo,
           row: {
             data: fmtDate(dateStr),
             descrizione: giro.descrizione || 'Giroconto in entrata',
             proprieta: '',
             conto: conto.nome,
-            entrata: Number(giro.importo),
+            entrata: importo,
             uscita: 0,
             saldo: 0,
           },
         });
       } else if (giro.conto_from === conto.id) {
-        events.push({
+        movs.push({
           dateStr,
+          signed: -importo,
           row: {
             data: fmtDate(dateStr),
             descrizione: giro.descrizione || 'Giroconto in uscita',
             proprieta: '',
             conto: conto.nome,
             entrata: 0,
-            uscita: Number(giro.importo),
+            uscita: importo,
             saldo: 0,
           },
         });
       }
     }
 
-    // Sort chronologically
-    events.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+    // saldo_iniziale è il saldo del conto ALLA data_apertura (lo stato attuale
+    // inserito alla creazione). I movimenti antecedenti l'apertura sono storia
+    // pregressa: si ricostruisce il saldo di partenza sottraendoli a ritroso,
+    // così il saldo all'apertura resta = saldo_iniziale (può andare in negativo).
+    let opening = Number(conto.saldo_iniziale) || 0;
+    for (const m of movs) if (m.dateStr < apertura) opening -= m.signed;
 
-    // Running balance — starts at saldo_iniziale (matching saldoConto logic).
-    // Note: saldo_iniziale represents the opening balance at data_apertura;
-    // movements before the selected period already affected the "real" opening balance.
-    // We recompute the opening balance for the period as:
-    //   saldo_iniziale + all paid movements that are >= apertura but BEFORE the period start.
-    // This ensures the final running saldo of the last row equals conto.saldo (for "tutto").
-    let runningStart = Number(conto.saldo_iniziale) || 0;
+    // Saldo progressivo all'inizio del periodo selezionato.
+    let runningStart = opening;
+    if (periodFrom) for (const m of movs) if (m.dateStr < periodFrom) runningStart += m.signed;
 
-    if (preset !== 'tutto') {
-      // Compute saldo at start of period from all movements before the period
-      const periodFrom = preset === 'anno'
-        ? `${new Date().getFullYear()}-01-01`
-        : preset === 'mese'
-          ? format(new Date(), 'yyyy-MM') + '-01'
-          : from;
-
-      // Incassi before period
-      const { data: incBefore } = await supabase
-        .from('tenant_payments')
-        .select('importo, payment_date, stato')
-        .eq('conto_id', conto.id)
-        .eq('stato', 'pagato')
-        .lt('payment_date', periodFrom)
-        .gte('payment_date', apertura);
-      for (const i of incBefore || []) runningStart += Number(i.importo);
-
-      // Spese before period
-      const { data: spBefore } = await supabase
-        .from('payments')
-        .select('importo, data_pagamento, stato')
-        .eq('conto_id', conto.id)
-        .eq('stato', 'pagato')
-        .lt('data_pagamento', periodFrom)
-        .gte('data_pagamento', apertura);
-      for (const s of spBefore || []) runningStart -= Number(s.importo);
-
-      // Giroconti before period
-      const { data: giroBefore } = await supabase
-        .from('giroconti')
-        .select('conto_from, conto_to, importo, data')
-        .or(`conto_from.eq.${conto.id},conto_to.eq.${conto.id}`)
-        .lt('data', periodFrom)
-        .gte('data', apertura);
-      for (const g of giroBefore || []) {
-        if (g.conto_to === conto.id) runningStart += Number(g.importo);
-        if (g.conto_from === conto.id) runningStart -= Number(g.importo);
-      }
-    }
+    // Movimenti visibili nel periodo (nessun filtro per apertura → sentinella).
+    const events = movs
+      .filter(m => inPeriod(m.dateStr, preset, from, to, NO_APERTURA))
+      .sort((a, b) => a.dateStr.localeCompare(b.dateStr));
 
     let running = runningStart;
     for (const ev of events) {
-      running += ev.row.entrata - ev.row.uscita;
+      running += ev.signed;
       ev.row.saldo = running;
       allRows.push(ev.row);
       totEntrate += ev.row.entrata;
       totUscite += ev.row.uscita;
     }
 
-    // The final saldo for this conto at the end of the selected period
+    // Saldo finale del conto al termine del periodo selezionato.
     saldoFinale += running;
   }
 
