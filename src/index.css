@@ -8,37 +8,37 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Sfondo leggermente più caldo, non bianco puro */
-    --background: 210 40% 98%;
-    --foreground: 222.2 84% 4.9%;
+    /* Paper: off-white neutro leggermente caldo (non bianco puro) */
+    --background: 40 18% 98%;
+    --foreground: 240 12% 12%;
 
-    /* Card più definite */
+    /* Card: bianco pieno per stacco netto sul paper */
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 240 12% 12%;
 
     /* Popover */
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 240 12% 12%;
 
-    /* Colore Primario: Un Blu Reale più deciso invece del nero/grigio scuro */
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
+    /* Accent primario: Iris / Indaco profondo */
+    --primary: 245 55% 52%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 40 16% 95%;
+    --secondary-foreground: 240 12% 18%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 40 14% 95.5%;
+    --muted-foreground: 240 6% 44%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 40 16% 94%;
+    --accent-foreground: 240 12% 18%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%; /* Ring segue il colore primario */
+    --border: 40 13% 89%;
+    --input: 40 13% 89%;
+    --ring: 245 55% 52%; /* Ring = primario indaco */
 
     /* Status Colors */
     --success: 142 76% 36%;
@@ -47,8 +47,8 @@ All colors MUST be HSL.
     --warning-foreground: 48 96% 12%;
     --danger: 0 84% 60%;
     --danger-foreground: 0 0% 98%;
-    --info: 221 83% 53%;
-    --info-foreground: 0 0% 98%;
+    --info: 245 55% 52%;
+    --info-foreground: 0 0% 100%;
 
     /* Status Variants */
     --success-subtle: 143 85% 96%;
@@ -57,11 +57,11 @@ All colors MUST be HSL.
     --warning-muted: 38 92% 50%;
     --danger-subtle: 0 93% 94%;
     --danger-muted: 0 84% 60%;
-    --info-subtle: 214 95% 93%;
-    --info-muted: 221 83% 53%;
+    --info-subtle: 245 60% 96%;
+    --info-muted: 245 55% 52%;
 
-    /* Bordi più arrotondati (più amichevoli) */
-    --radius: 0.75rem;
+    /* Raggio bordi: leggermente più crisp (fintech) */
+    --radius: 0.625rem;
 
     --sidebar-background: 0 0% 98%;
     --sidebar-foreground: 240 5.3% 26.1%;
@@ -83,8 +83,8 @@ All colors MUST be HSL.
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 250 72% 67%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -100,7 +100,7 @@ All colors MUST be HSL.
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 250 72% 67%;
 
     /* Status Colors - Dark Mode */
     --success: 142 71% 45%;
@@ -145,6 +145,14 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Titoli in display (Space Grotesk), tracking leggermente stretto */
+  h1, h2, h3, h4 {
+    font-family: theme('fontFamily.display');
+    letter-spacing: -0.012em;
   }
 
   /* Mobile readability: bump root font slightly so all rem-based Tailwind sizes

@@ -1,0 +1,34 @@
+/* Hallmark · design-system: design.md · designed-as-app
+ * genre: modern-minimal · theme: Iris/Indaco · format: HSL (shadcn)
+ * Token portabili del sistema PropManager. La fonte viva è src/index.css.
+ */
+:root {
+  /* Colore (HSL triplets, da usare come hsl(var(--token))) */
+  --color-paper:        40 18% 98%;    /* background */
+  --color-card:         0 0% 100%;
+  --color-ink:          240 12% 12%;   /* foreground */
+  --color-ink-2:        240 6% 44%;    /* muted-foreground */
+  --color-rule:         40 13% 89%;    /* border / input */
+  --color-accent:       245 55% 52%;   /* primary — iris/indaco */
+  --color-accent-ink:   0 0% 100%;     /* primary-foreground */
+  --color-focus:        245 55% 52%;   /* ring */
+
+  /* Stati semantici (invariati) */
+  --color-success:      142 76% 36%;
+  --color-warning:      38 92% 50%;
+  --color-danger:       0 84% 60%;
+  --color-info:         245 55% 52%;
+
+  /* Tipografia */
+  --font-display: "Space Grotesk", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-body:    Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-mono:    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --display-tracking: -0.012em;
+
+  /* Forma */
+  --radius: 0.625rem;
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-short: 150ms;
+}
