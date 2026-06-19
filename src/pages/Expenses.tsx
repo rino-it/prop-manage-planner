@@ -22,6 +22,7 @@ import {
   Pencil, Plus, Trash2,
   ChevronDown, ChevronUp, CreditCard, Banknote, Building2, Smartphone,
   Filter, Home, Car, Euro, User, Eye, HandCoins, Undo2,
+  Paperclip, Loader2, X, ExternalLink,
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import {
@@ -29,6 +30,18 @@ import {
 } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { bucketByScadenza } from '@/utils/scadenze';
+import { isAllegatoTypeValid, buildAllegatoPath, displayNameFromPath, ALLEGATO_MAX_BYTES } from '@/utils/allegato';
+
+// Apre un allegato (path nel bucket documents) in una nuova scheda via signed URL.
+async function openAllegato(path: string) {
+  const { data, error } = await supabase.storage.from('documents').createSignedUrl(path, 60);
+  if (error || !data?.signedUrl) {
+    console.error('Errore apertura allegato:', error);
+    alert("Impossibile aprire l'allegato.");
+    return;
+  }
+  window.open(data.signedUrl, '_blank');
+}
 
 // ─── constants ────────────────────────────────────────────────────────────────
 const CATEGORY_LABELS: Record<string, string> = {
@@ -177,6 +190,17 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
           </Badge>
         )}
 
+        {exp.allegato_url && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50"
+            onClick={() => openAllegato(exp.allegato_url)}
+            title="Apri allegato"
+          >
+            <Paperclip className="w-3.5 h-3.5" />
+          </Button>
+        )}
         {onEdit && (
           <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
             <Pencil className="w-3.5 h-3.5" />
@@ -208,6 +232,7 @@ const DEFAULT_FORM = {
   is_advance: false,
   debtor_name: '',
   conto_id: '',
+  allegato_url: '',
 };
 
 // ─── main component ───────────────────────────────────────────────────────────
@@ -232,6 +257,7 @@ export default function Expenses() {
   const [filterGestione, setFilterGestione] = useState('all');
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
+  const [uploadingAllegato, setUploadingAllegato] = useState(false);
 
   // form
   const [form, setForm] = useState({ ...DEFAULT_FORM });
@@ -294,6 +320,7 @@ export default function Expenses() {
         is_advance: form.is_advance,
         debtor_name: form.is_advance ? (form.debtor_name?.trim() || null) : null,
         conto_id: form.conto_id || null,
+        allegato_url: form.allegato_url || null,
       };
       // Se la spesa viene salvata come pagata senza passare dal flusso "Paga",
       // fissiamo la data pagamento a oggi: evita voci pagate con data_pagamento null
@@ -373,8 +400,46 @@ export default function Expenses() {
       is_advance: !!exp.is_advance,
       debtor_name: exp.debtor_name || '',
       conto_id: exp.conto_id || '',
+      allegato_url: exp.allegato_url || '',
     });
     setSheetOpen(true);
+  };
+
+  const handleAllegatoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ''; // consente di ricaricare lo stesso file in seguito
+    if (!file) return;
+    if (!isAllegatoTypeValid(file)) {
+      toast({ title: 'Formato non supportato', description: "Carica un PDF o un'immagine.", variant: 'destructive' });
+      return;
+    }
+    if (file.size > ALLEGATO_MAX_BYTES) {
+      toast({ title: 'File troppo grande', description: 'Dimensione massima 10 MB.', variant: 'destructive' });
+      return;
+    }
+    setUploadingAllegato(true);
+    try {
+      // Sostituzione: elimina (best-effort) il file precedente prima del nuovo upload.
+      if (form.allegato_url) {
+        await supabase.storage.from('documents').remove([form.allegato_url]);
+      }
+      const path = buildAllegatoPath(file.name);
+      const { error } = await supabase.storage.from('documents').upload(path, file);
+      if (error) throw error;
+      setForm(f => ({ ...f, allegato_url: path }));
+    } catch (err: any) {
+      toast({ title: 'Errore caricamento', description: err.message, variant: 'destructive' });
+    } finally {
+      setUploadingAllegato(false);
+    }
+  };
+
+  const handleAllegatoRemove = async () => {
+    const path = form.allegato_url;
+    setForm(f => ({ ...f, allegato_url: '' }));
+    if (path) {
+      try { await supabase.storage.from('documents').remove([path]); } catch { /* best-effort */ }
+    }
   };
 
   const toggleMonth = (key: string) => setCollapsedMonths(v => ({ ...v, [key]: !v[key] }));
@@ -888,6 +953,42 @@ export default function Expenses() {
               </div>
             )}
 
+            {/* Allegato (giustificativo) */}
+            <div className="grid gap-1.5">
+              <Label className="text-sm sm:text-xs">Allegato (fattura/ricevuta)</Label>
+              {form.allegato_url ? (
+                <div className="flex items-center gap-2 border rounded-lg px-3 py-2 bg-slate-50">
+                  <Paperclip className="w-4 h-4 text-slate-400 shrink-0" />
+                  <span className="text-sm truncate flex-1">{displayNameFromPath(form.allegato_url)}</span>
+                  <Button type="button" variant="ghost" size="sm" className="h-8 gap-1" onClick={() => openAllegato(form.allegato_url)}>
+                    <ExternalLink className="w-3.5 h-3.5" />Apri
+                  </Button>
+                  <Button type="button" variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={handleAllegatoRemove}>
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              ) : (
+                <div className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors relative">
+                  <Input
+                    type="file"
+                    accept="application/pdf,image/*"
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                    onChange={handleAllegatoSelect}
+                    disabled={uploadingAllegato}
+                  />
+                  {uploadingAllegato ? (
+                    <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+                      <Loader2 className="w-4 h-4 animate-spin" />Caricamento…
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center gap-2 text-sm text-slate-500">
+                      <Paperclip className="w-4 h-4" />Carica PDF o immagine (max 10 MB)
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* Inoltra all'inquilino — solo se ci sono inquilini lungo termine attivi e non è un anticipo */}
             {longTermTenants.length > 0 && !form.is_advance && (
               <div className="border border-blue-200 bg-blue-50 rounded-lg p-3 space-y-3">
@@ -927,7 +1028,7 @@ export default function Expenses() {
               <Button
                 className="flex-1 h-11 sm:h-10 bg-red-600 hover:bg-red-700 font-bold"
                 onClick={() => saveExpense.mutate()}
-                disabled={!form.importo || saveExpense.isPending}
+                disabled={!form.importo || saveExpense.isPending || uploadingAllegato}
               >
                 {saveExpense.isPending ? 'Salvataggio...' : editingId ? 'Salva Modifiche' : 'Registra Spesa'}
               </Button>
