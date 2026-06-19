@@ -346,10 +346,12 @@ export default function Expenses() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unified-expenses'] });
+      // Segna il file appena salvato come "originale": così un'eventuale pulizia
+      // di chiusura non elimina dallo storage un file ora referenziato dal DB.
+      originalAllegatoRef.current = form.allegato_url || '';
       setSheetOpen(false);
       setForm({ ...DEFAULT_FORM });
       setEditingId(null);
-      originalAllegatoRef.current = '';
       toast({ title: editingId ? 'Spesa aggiornata' : 'Spesa registrata' });
     },
     onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
@@ -728,7 +730,7 @@ export default function Expenses() {
               </div>
             </div>
             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 gap-1.5 shrink-0 h-9 w-full sm:w-auto"
-              onClick={() => { setEditingId(null); setForm({ ...DEFAULT_FORM, is_advance: true }); setSheetOpen(true); }}>
+              onClick={() => { setEditingId(null); setForm({ ...DEFAULT_FORM, is_advance: true }); originalAllegatoRef.current = ''; setSheetOpen(true); }}>
               <Plus className="w-4 h-4" /> Nuovo Anticipo
             </Button>
           </div>
