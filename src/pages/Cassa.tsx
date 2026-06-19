@@ -20,6 +20,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ContoDialog } from '@/components/ContoDialog';
 import { GirocontoDialog } from '@/components/GirocontoDialog';
 import { AssegnaContiDialog } from '@/components/AssegnaContiDialog';
+import { ArchivioEstratti } from '@/components/ArchivioEstratti';
 import { useMovimentiSenzaConto } from '@/hooks/useMovimentiSenzaConto';
 import { downloadEstrattoConto, type EstrattoRow } from '@/components/EstrattoContoPDF';
 import { Plus, Pencil, ArrowLeftRight, Download, Wallet, PiggyBank, AlertTriangle, Copy } from 'lucide-react';
@@ -582,6 +583,9 @@ export default function Cassa() {
           </CardContent>
         </Card>
       ))}
+
+      {/* Archivio Estratti Conto (stile EdilCRM) */}
+      <ArchivioEstratti conti={(gestioniView as any[]).flatMap((g: any) => contiByGestione(g.id))} />
 
       {/* Dialogs */}
       <ContoDialog
