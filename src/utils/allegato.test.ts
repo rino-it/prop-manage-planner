@@ -33,6 +33,12 @@ describe('displayNameFromPath', () => {
   it('gestisce un path senza prefisso', () => {
     expect(displayNameFromPath('Documento.pdf')).toBe('Documento.pdf');
   });
+  it('rimuove cartella e prefisso timestamp anche con timestamp corto', () => {
+    expect(displayNameFromPath('other/1_a.pdf')).toBe('a.pdf');
+  });
+  it('non tocca cifre non seguite da underscore', () => {
+    expect(displayNameFromPath('123abc_name.pdf')).toBe('123abc_name.pdf');
+  });
 });
 
 describe('ALLEGATO_MAX_BYTES', () => {

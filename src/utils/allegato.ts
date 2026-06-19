@@ -18,6 +18,6 @@ export function buildAllegatoPath(fileName: string, nowMs: number = Date.now()):
 
 /** Deriva un nome leggibile dal path salvato (rimuove cartella e prefisso timestamp). */
 export function displayNameFromPath(path: string): string {
-  const last = path.split('/').pop() || path;
+  const last = path.split('/').pop() ?? '';
   return last.replace(/^\d+_/, '');
 }
