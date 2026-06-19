@@ -32,6 +32,8 @@ import { it } from 'date-fns/locale';
 import { bucketByScadenza } from '@/utils/scadenze';
 import { isAllegatoTypeValid, buildAllegatoPath, displayNameFromPath, ALLEGATO_MAX_BYTES } from '@/utils/allegato';
 import RientriTab from '@/components/RientriTab';
+import { PianoRientroDialog } from '@/components/PianoRientroDialog';
+import { Checkbox } from '@/components/ui/checkbox';
 
 // Apre un allegato (path nel bucket documents) in una nuova scheda via signed URL.
 async function openAllegato(path: string) {
@@ -100,12 +102,15 @@ function KpiCard({ label, value, sub, color, icon }: {
 }
 
 // ─── ExpenseRow ───────────────────────────────────────────────────────────────
-function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
+function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate, selectable, selected, onToggleSelect }: {
   exp: any;
   onPaga?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   showPaidDate?: boolean;
+  selectable?: boolean;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
   const overdueDays =
     exp.stato === 'da_pagare' &&
@@ -121,6 +126,9 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
     <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${overdueDays ? 'bg-red-50/40' : ''}`}>
       {/* Left */}
       <div className="flex items-start gap-3 flex-1 min-w-0">
+        {selectable && (
+          <Checkbox checked={!!selected} onCheckedChange={() => onToggleSelect?.()} className="mt-1 shrink-0" />
+        )}
         <div className={`w-1 self-stretch rounded-full shrink-0 mt-1 ${
           exp.stato === 'pagato' ? 'bg-green-400' :
           overdueDays ? 'bg-red-500' : 'bg-amber-400'
@@ -259,6 +267,10 @@ export default function Expenses() {
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
   const [uploadingAllegato, setUploadingAllegato] = useState(false);
+  // consolidamento spese in piano di rientro
+  const [selMode, setSelMode] = useState(false);
+  const [sel, setSel] = useState<Set<string>>(new Set());
+  const [consolidaPrefill, setConsolidaPrefill] = useState<any>(null);
   // Path dell'allegato già salvato quando il form è stato aperto (per cancellare
   // dallo storage solo al salvataggio, mai un file ancora referenziato dal DB).
   const originalAllegatoRef = useRef('');
@@ -518,6 +530,19 @@ export default function Expenses() {
   const paid      = ordinaryBuckets.paid;
   const upcoming  = [...thisWeek.flatMap(g => g.items), ...thisMonth, ...later];
 
+  // consolidamento: selezione di spese ordinarie da fondere in un piano di rientro
+  const selectableExpenses = [...overdue, ...upcoming];
+  const toggleSel = (id: string) => setSel(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const selectedItems = selectableExpenses.filter(e => sel.has(e.id));
+  const selectedTotal = selectedItems.reduce((s, e) => s + Number(e.importo), 0);
+  const apriConsolida = () => {
+    if (!selectedItems.length) return;
+    const forn = selectedItems.every(e => e.fornitore === selectedItems[0].fornitore) ? (selectedItems[0].fornitore || '') : '';
+    const gest = selectedItems.every(e => e.gestione_id === selectedItems[0].gestione_id) ? selectedItems[0].gestione_id : undefined;
+    setConsolidaPrefill({ fornitore: forn, importoTotale: selectedTotal, gestioneId: gest, consolidaIds: selectedItems.map(e => e.id) });
+  };
+  const exitSelMode = () => { setSelMode(false); setSel(new Set()); };
+
   const advancesPending  = advancesAll.filter(ex => ex.stato !== 'pagato');
   const advancesRefunded = advancesAll.filter(ex => ex.stato === 'pagato');
   const totalAdvancesPending = advancesPending.reduce((s, ex) => s + Number(ex.importo), 0);
@@ -600,6 +625,23 @@ export default function Expenses() {
           color="border-blue-200 bg-blue-50" icon={<TrendingDown className="w-6 h-6 text-blue-600" />} />
       </div>
 
+      {/* ── Barra consolidamento ── */}
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        {!selMode ? (
+          <Button variant="outline" size="sm" onClick={() => setSelMode(true)} className="gap-1">
+            <HandCoins className="w-4 h-4" /> Consolida in piano di rientro
+          </Button>
+        ) : (
+          <div className="flex items-center gap-2 flex-wrap w-full rounded-lg border bg-indigo-50/50 px-3 py-2">
+            <span className="text-sm font-medium">{selectedItems.length} selezionate · €{fmtFull(selectedTotal)}</span>
+            <div className="flex items-center gap-2 ml-auto">
+              <Button size="sm" disabled={!selectedItems.length} onClick={apriConsolida}>Crea piano di rientro</Button>
+              <Button size="sm" variant="ghost" onClick={exitSelMode}>Annulla</Button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── Tabs ── */}
       <Tabs defaultValue={overdue.length > 0 ? 'overdue' : 'upcoming'}>
         <TabsList className="grid w-full grid-cols-5">
@@ -647,6 +689,7 @@ export default function Expenses() {
               <CardContent className="p-0 divide-y">
                 {overdue.map(ex => (
                   <ExpenseRow key={ex.id} exp={ex}
+                    selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                     onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                     onEdit={() => openEdit(ex)}
                     onDelete={() => { if (confirm('Eliminare questa spesa?')) deleteExpense.mutate(ex.id); }}
@@ -676,6 +719,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {group.items.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
+                          selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
@@ -692,6 +736,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
+                          selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
@@ -708,6 +753,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {later.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
+                          selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
@@ -835,6 +881,13 @@ export default function Expenses() {
           <RientriTab />
         </TabsContent>
       </Tabs>
+
+      {/* Dialog consolidamento spese selezionate in un piano di rientro */}
+      <PianoRientroDialog
+        open={!!consolidaPrefill}
+        onOpenChange={(o) => { if (!o) { setConsolidaPrefill(null); exitSelMode(); } }}
+        prefill={consolidaPrefill || undefined}
+      />
 
       {/* ─────────────────────────────────────────────────────────
           SHEET: NUOVA / MODIFICA SPESA
