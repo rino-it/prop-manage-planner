@@ -32,6 +32,17 @@ function fmtDate(iso: string): string {
   try { return format(parseISO(iso), 'dd/MM/yyyy'); } catch { return iso; }
 }
 
+// Badge "ultimo movimento": testo relativo + tono per il pallino di stato.
+function freshnessLabel(iso: string | null): { text: string; tone: 'fresh' | 'mid' | 'stale' | 'none' } {
+  if (!iso) return { text: 'nessun movimento', tone: 'none' };
+  const d = new Date(iso + 'T00:00:00');
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const days = Math.round((today.getTime() - d.getTime()) / 86400000);
+  if (days <= 0) return { text: 'oggi', tone: 'fresh' };
+  if (days === 1) return { text: 'ieri', tone: 'fresh' };
+  return { text: `${days}g fa`, tone: days <= 7 ? 'fresh' : days <= 30 ? 'mid' : 'stale' };
+}
+
 function periodLabel(preset: string, from: string, to: string): string {
   if (preset === 'tutto') return 'Tutto';
   if (preset === 'anno') return `Anno ${new Date().getFullYear()}`;
@@ -509,26 +520,50 @@ export default function Cassa() {
               </div>
             </div>
 
-            {/* Conti */}
-            <div className="divide-y">
-              {contiByGestione(g.id).map((c: any) => (
-                <div key={c.id} className="flex items-center justify-between px-4 py-2.5">
-                  <span>{c.tipo === 'contanti' ? '💵' : '🏦'} {c.nome}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-display font-bold tabular-nums">{fmt(c.saldo)}</span>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-7 w-7"
-                      onClick={() => setContoDialog({ open: true, gestioneId: g.id, editing: c })}
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </Button>
-                  </div>
+            {/* Conti — card per conto (stile estratto bancario) */}
+            <div className="p-4">
+              {contiByGestione(g.id).length === 0 ? (
+                <p className="py-2 text-sm text-slate-400">Nessun conto. Aggiungine uno.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {contiByGestione(g.id).map((c: any) => {
+                    const fr = freshnessLabel(c.lastMovement);
+                    const neg = (c.saldo || 0) < 0;
+                    const dot = fr.tone === 'fresh' ? 'bg-green-500'
+                      : fr.tone === 'mid' ? 'bg-amber-500'
+                      : fr.tone === 'stale' ? 'bg-slate-300' : 'bg-slate-200';
+                    return (
+                      <div key={c.id} className="group rounded-lg border border-border bg-card p-4 flex flex-col gap-3 transition-shadow hover:shadow-sm">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                              <span className="shrink-0">{c.tipo === 'contanti' ? '💵' : '🏦'}</span>
+                              <span className="truncate">{c.nome}</span>
+                            </div>
+                            <div className="mt-1 flex items-center gap-2 text-[11px] text-muted-foreground">
+                              <span className="uppercase tracking-wide">{c.tipo === 'contanti' ? 'Contanti' : 'Banca'}</span>
+                              <span className="inline-flex items-center gap-1">
+                                <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+                                {fr.text}
+                              </span>
+                            </div>
+                          </div>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-7 w-7 shrink-0 text-muted-foreground"
+                            onClick={() => setContoDialog({ open: true, gestioneId: g.id, editing: c })}
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                        <div className={`font-display text-2xl font-bold tabular-nums ${neg ? 'text-red-600' : 'text-foreground'}`}>
+                          {fmt(c.saldo)}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-              {contiByGestione(g.id).length === 0 && (
-                <p className="px-4 py-4 text-sm text-slate-400">Nessun conto. Aggiungine uno.</p>
               )}
             </div>
           </CardContent>
