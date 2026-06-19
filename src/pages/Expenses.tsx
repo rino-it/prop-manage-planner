@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -258,6 +258,9 @@ export default function Expenses() {
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
   const [uploadingAllegato, setUploadingAllegato] = useState(false);
+  // Path dell'allegato già salvato quando il form è stato aperto (per cancellare
+  // dallo storage solo al salvataggio, mai un file ancora referenziato dal DB).
+  const originalAllegatoRef = useRef('');
 
   // form
   const [form, setForm] = useState({ ...DEFAULT_FORM });
@@ -335,12 +338,18 @@ export default function Expenses() {
         const { error } = await supabase.from('payments').insert(payload);
         if (error) throw error;
       }
+      // Il file salvato in precedenza non è più referenziato: rimuovilo dallo storage.
+      const original = originalAllegatoRef.current;
+      if (original && original !== (form.allegato_url || '')) {
+        try { await supabase.storage.from('documents').remove([original]); } catch { /* best-effort */ }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unified-expenses'] });
       setSheetOpen(false);
       setForm({ ...DEFAULT_FORM });
       setEditingId(null);
+      originalAllegatoRef.current = '';
       toast({ title: editingId ? 'Spesa aggiornata' : 'Spesa registrata' });
     },
     onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
@@ -380,6 +389,7 @@ export default function Expenses() {
   const openCreate = () => {
     setEditingId(null);
     setForm({ ...DEFAULT_FORM });
+    originalAllegatoRef.current = '';
     setSheetOpen(true);
   };
 
@@ -402,6 +412,7 @@ export default function Expenses() {
       conto_id: exp.conto_id || '',
       allegato_url: exp.allegato_url || '',
     });
+    originalAllegatoRef.current = exp.allegato_url || '';
     setSheetOpen(true);
   };
 
@@ -419,13 +430,15 @@ export default function Expenses() {
     }
     setUploadingAllegato(true);
     try {
-      // Sostituzione: elimina (best-effort) il file precedente prima del nuovo upload.
-      if (form.allegato_url) {
-        await supabase.storage.from('documents').remove([form.allegato_url]);
-      }
+      const prev = form.allegato_url;
       const path = buildAllegatoPath(file.name);
       const { error } = await supabase.storage.from('documents').upload(path, file);
       if (error) throw error;
+      // Se il file precedente era un upload di questa sessione (non quello salvato),
+      // eliminalo subito: non è mai stato persistito. Quello salvato si elimina solo al save.
+      if (prev && prev !== originalAllegatoRef.current) {
+        await supabase.storage.from('documents').remove([prev]);
+      }
       setForm(f => ({ ...f, allegato_url: path }));
     } catch (err: any) {
       toast({ title: 'Errore caricamento', description: err.message, variant: 'destructive' });
@@ -434,12 +447,26 @@ export default function Expenses() {
     }
   };
 
-  const handleAllegatoRemove = async () => {
+  const handleAllegatoRemove = () => {
     const path = form.allegato_url;
-    setForm(f => ({ ...f, allegato_url: '' }));
-    if (path) {
-      try { await supabase.storage.from('documents').remove([path]); } catch { /* best-effort */ }
+    // Se è un upload di questa sessione (non quello salvato), eliminalo subito:
+    // non è mai stato persistito. Quello salvato verrà eliminato al salvataggio.
+    if (path && path !== originalAllegatoRef.current) {
+      supabase.storage.from('documents').remove([path]);
     }
+    setForm(f => ({ ...f, allegato_url: '' }));
+  };
+
+  const handleSheetClose = () => {
+    // Pulisci un upload di questa sessione mai salvato (evita file orfani).
+    const path = form.allegato_url;
+    if (path && path !== originalAllegatoRef.current) {
+      supabase.storage.from('documents').remove([path]);
+    }
+    setSheetOpen(false);
+    setForm({ ...DEFAULT_FORM });
+    setEditingId(null);
+    originalAllegatoRef.current = '';
   };
 
   const toggleMonth = (key: string) => setCollapsedMonths(v => ({ ...v, [key]: !v[key] }));
@@ -799,7 +826,7 @@ export default function Expenses() {
       {/* ─────────────────────────────────────────────────────────
           SHEET: NUOVA / MODIFICA SPESA
       ───────────────────────────────────────────────────────── */}
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
+      <Sheet open={sheetOpen} onOpenChange={(o) => { if (o) setSheetOpen(true); else handleSheetClose(); }}>
         <SheetContent side="bottom" className="max-h-[85svh] overflow-y-auto overscroll-contain rounded-t-2xl">
           <SheetHeader className="pb-4 border-b">
             <SheetTitle>{editingId ? 'Modifica Spesa' : 'Nuova Spesa'}</SheetTitle>
@@ -1024,7 +1051,7 @@ export default function Expenses() {
 
             {/* Actions */}
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1 h-11 sm:h-10" onClick={() => setSheetOpen(false)}>Annulla</Button>
+              <Button variant="outline" className="flex-1 h-11 sm:h-10" onClick={handleSheetClose}>Annulla</Button>
               <Button
                 className="flex-1 h-11 sm:h-10 bg-red-600 hover:bg-red-700 font-bold"
                 onClick={() => saveExpense.mutate()}
