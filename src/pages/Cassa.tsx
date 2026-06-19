@@ -22,7 +22,8 @@ import { GirocontoDialog } from '@/components/GirocontoDialog';
 import { AssegnaContiDialog } from '@/components/AssegnaContiDialog';
 import { useMovimentiSenzaConto } from '@/hooks/useMovimentiSenzaConto';
 import { downloadEstrattoConto, type EstrattoRow } from '@/components/EstrattoContoPDF';
-import { Plus, Pencil, ArrowLeftRight, Download, Wallet, PiggyBank, AlertTriangle } from 'lucide-react';
+import { Plus, Pencil, ArrowLeftRight, Download, Wallet, PiggyBank, AlertTriangle, Copy } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const fmt = (n: number) =>
@@ -406,6 +407,7 @@ function EstrattoDialog({
 
 // ─── Cassa page ───────────────────────────────────────────────────────────────
 export default function Cassa() {
+  const { toast } = useToast();
   const { data: gestioni = [] } = useGestioni();
   const { data: conti = [] } = useCassa();
 
@@ -560,6 +562,17 @@ export default function Cassa() {
                         <div className={`font-display text-2xl font-bold tabular-nums ${neg ? 'text-red-600' : 'text-foreground'}`}>
                           {fmt(c.saldo)}
                         </div>
+                        {c.iban && (
+                          <button
+                            type="button"
+                            onClick={() => { navigator.clipboard?.writeText(c.iban); toast({ title: 'IBAN copiato' }); }}
+                            className="flex items-center gap-1.5 text-[11px] font-mono text-muted-foreground hover:text-foreground transition-colors min-w-0"
+                            title="Copia IBAN"
+                          >
+                            <Copy className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{c.iban}</span>
+                          </button>
+                        )}
                       </div>
                     );
                   })}

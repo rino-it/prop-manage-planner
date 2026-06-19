@@ -327,6 +327,7 @@ export type Database = {
           created_at: string | null
           data_apertura: string
           gestione_id: string
+          iban: string | null
           id: string
           nome: string
           saldo_iniziale: number
@@ -338,6 +339,7 @@ export type Database = {
           created_at?: string | null
           data_apertura?: string
           gestione_id: string
+          iban?: string | null
           id?: string
           nome: string
           saldo_iniziale?: number
@@ -349,6 +351,7 @@ export type Database = {
           created_at?: string | null
           data_apertura?: string
           gestione_id?: string
+          iban?: string | null
           id?: string
           nome?: string
           saldo_iniziale?: number

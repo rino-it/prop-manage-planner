@@ -13,7 +13,7 @@ export function useConti() {
   });
 
   const createConto = useMutation({
-    mutationFn: async (c: { gestione_id: string; nome: string; tipo: string; saldo_iniziale: number; data_apertura: string; }) => {
+    mutationFn: async (c: { gestione_id: string; nome: string; tipo: string; saldo_iniziale: number; data_apertura: string; iban?: string | null; }) => {
       const { data: { user } } = await supabase.auth.getUser();
       const { error } = await supabase.from('conti').insert({ ...c, user_id: user?.id });
       if (error) throw error;
@@ -22,7 +22,7 @@ export function useConti() {
   });
 
   const updateConto = useMutation({
-    mutationFn: async ({ id, ...patch }: { id: string; nome?: string; saldo_iniziale?: number; data_apertura?: string; archived?: boolean; }) => {
+    mutationFn: async ({ id, ...patch }: { id: string; nome?: string; tipo?: string; saldo_iniziale?: number; data_apertura?: string; archived?: boolean; iban?: string | null; }) => {
       const { error } = await supabase.from('conti').update(patch).eq('id', id);
       if (error) throw error;
     },

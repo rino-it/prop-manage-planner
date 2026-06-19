@@ -17,14 +17,14 @@ export function ContoDialog({ open, onOpenChange, gestioneId, editing }: {
 }) {
   const { createConto, updateConto, deleteConto } = useConti();
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [form, setForm] = useState({ nome: '', tipo: 'banca', saldo_iniziale: '', data_apertura: format(new Date(), 'yyyy-MM-dd') });
+  const [form, setForm] = useState({ nome: '', tipo: 'banca', saldo_iniziale: '', data_apertura: format(new Date(), 'yyyy-MM-dd'), iban: '' });
   useEffect(() => {
-    if (editing) setForm({ nome: editing.nome, tipo: editing.tipo, saldo_iniziale: String(editing.saldo_iniziale), data_apertura: editing.data_apertura });
-    else setForm({ nome: '', tipo: 'banca', saldo_iniziale: '', data_apertura: format(new Date(), 'yyyy-MM-dd') });
+    if (editing) setForm({ nome: editing.nome, tipo: editing.tipo, saldo_iniziale: String(editing.saldo_iniziale), data_apertura: editing.data_apertura, iban: editing.iban || '' });
+    else setForm({ nome: '', tipo: 'banca', saldo_iniziale: '', data_apertura: format(new Date(), 'yyyy-MM-dd'), iban: '' });
   }, [editing, open]);
 
   const save = async () => {
-    const payload = { gestione_id: gestioneId, nome: form.nome, tipo: form.tipo, saldo_iniziale: parseFloat(form.saldo_iniziale || '0'), data_apertura: form.data_apertura };
+    const payload = { gestione_id: gestioneId, nome: form.nome, tipo: form.tipo, saldo_iniziale: parseFloat(form.saldo_iniziale || '0'), data_apertura: form.data_apertura, iban: form.tipo === 'banca' ? (form.iban.trim() || null) : null };
     if (editing) await updateConto.mutateAsync({ id: editing.id, ...payload });
     else await createConto.mutateAsync(payload);
     onOpenChange(false);
@@ -55,6 +55,10 @@ export function ContoDialog({ open, onOpenChange, gestioneId, editing }: {
             <div className="grid gap-1.5"><Label>Data apertura</Label>
               <Input type="date" value={form.data_apertura} onChange={e => setForm(f => ({ ...f, data_apertura: e.target.value }))} /></div>
           </div>
+          {form.tipo === 'banca' && (
+            <div className="grid gap-1.5"><Label>IBAN <span className="text-gray-400 font-normal">(opzionale)</span></Label>
+              <Input value={form.iban} onChange={e => setForm(f => ({ ...f, iban: e.target.value.toUpperCase() }))} placeholder="IT60 X054 2811 1010 0000 0123 456" className="font-mono text-sm" /></div>
+          )}
         </div>
         <DialogFooter className={editing ? 'sm:justify-between' : undefined}>
           {editing && (
