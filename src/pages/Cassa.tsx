@@ -456,8 +456,8 @@ export default function Cassa() {
             <PiggyBank className="w-6 h-6 text-green-600" />
           </div>
           <div>
-            <p className="text-xs font-semibold uppercase text-slate-500">Liquidità totale</p>
-            <p className="text-2xl font-bold">{fmt(totale)}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Liquidità totale</p>
+            <p className="font-display text-[1.75rem] leading-none font-bold tabular-nums">{fmt(totale)}</p>
           </div>
         </CardContent>
       </Card>
@@ -483,7 +483,7 @@ export default function Cassa() {
           <CardContent className="p-0">
             {/* Header gestione */}
             <div className="flex items-center justify-between px-4 py-3 bg-slate-50 border-b flex-wrap gap-2">
-              <span className="font-bold">{g.nome} · {fmt(totaleGestione(g.id))}</span>
+              <span className="font-display font-bold tabular-nums">{g.nome}<span className="text-muted-foreground font-medium"> · </span>{fmt(totaleGestione(g.id))}</span>
               <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
@@ -515,7 +515,7 @@ export default function Cassa() {
                 <div key={c.id} className="flex items-center justify-between px-4 py-2.5">
                   <span>{c.tipo === 'contanti' ? '💵' : '🏦'} {c.nome}</span>
                   <div className="flex items-center gap-2">
-                    <span className="font-bold tabular-nums">{fmt(c.saldo)}</span>
+                    <span className="font-display font-bold tabular-nums">{fmt(c.saldo)}</span>
                     <Button
                       size="icon"
                       variant="ghost"

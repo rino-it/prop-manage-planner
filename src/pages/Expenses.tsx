@@ -89,9 +89,9 @@ function KpiCard({ label, value, sub, color, icon }: {
           {icon}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{label}</p>
-          <p className="text-2xl font-bold text-slate-900 truncate">{value}</p>
-          {sub && <p className="text-xs text-slate-400">{sub}</p>}
+          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</p>
+          <p className="font-display text-[1.75rem] leading-none font-bold text-slate-900 tabular-nums truncate">{value}</p>
+          {sub && <p className="text-xs text-slate-400 mt-0.5">{sub}</p>}
         </div>
       </CardContent>
     </Card>
@@ -171,7 +171,7 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate }: {
 
       {/* Right */}
       <div className="flex items-center gap-2 shrink-0">
-        <span className={`text-base font-bold tabular-nums ${
+        <span className={`font-display text-base font-bold tabular-nums ${
           exp.is_advance
             ? (exp.stato === 'pagato' ? 'text-slate-500' : 'text-emerald-600')
             : (exp.stato === 'pagato' ? 'text-slate-500' : overdueDays ? 'text-red-600' : 'text-red-500')
