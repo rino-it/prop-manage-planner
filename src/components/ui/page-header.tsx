@@ -11,8 +11,8 @@ interface PageHeaderProps {
 
 export function PageHeader({ title, count, countLabel, children, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex items-center justify-between mb-6", className)}>
-      <div className="flex items-baseline gap-3">
+    <div className={cn("flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6", className)}>
+      <div className="flex items-baseline gap-3 shrink-0">
         <h1 className="font-display text-2xl font-bold text-foreground tracking-tight">{title}</h1>
         {count !== undefined && (
           <span className="text-sm text-muted-foreground font-normal">
@@ -21,7 +21,7 @@ export function PageHeader({ title, count, countLabel, children, className }: Pa
         )}
       </div>
       {children && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {children}
         </div>
       )}

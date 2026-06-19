@@ -781,12 +781,12 @@ export default function Bookings({ initialBookingId, onConsumeId }: BookingsProp
                             <span className="text-green-600">↓{format(new Date(booking.data_inizio), 'dd MMM')}</span> <span className="text-gray-300">→</span> <span className="text-red-500">↑{format(new Date(booking.data_fine), 'dd MMM yyyy')}</span>
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button variant="outline" size="sm" onClick={() => copyLink(booking)} className="text-sm h-10 sm:h-9">
-                                <Copy className="w-4 h-4 mr-2" /> Link
+                        <div className="grid grid-cols-3 gap-2">
+                            <Button variant="outline" size="sm" onClick={() => copyLink(booking)} className="col-span-1 min-w-0 text-sm h-10 sm:h-9">
+                                <Copy className="w-4 h-4 mr-1.5 shrink-0" /> <span className="truncate">Link</span>
                             </Button>
-                            <Button size="sm" className="bg-blue-600 hover:bg-blue-700 text-sm h-10 sm:h-9 shadow-sm text-white" onClick={() => setCustomerSheetOpen(booking)}>
-                                <User className="w-4 h-4 mr-2" /> Scheda Cliente
+                            <Button size="sm" className="col-span-2 min-w-0 bg-blue-600 hover:bg-blue-700 text-sm h-10 sm:h-9 shadow-sm text-white" onClick={() => setCustomerSheetOpen(booking)}>
+                                <User className="w-4 h-4 mr-1.5 shrink-0" /> <span className="truncate">Scheda Cliente</span>
                             </Button>
                         </div>
 

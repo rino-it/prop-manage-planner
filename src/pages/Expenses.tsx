@@ -532,17 +532,17 @@ export default function Expenses() {
 
       {/* ── Header ── */}
       <PageHeader title="Spese" count={ordinary.filter(ex => ex.stato === 'da_pagare').length}>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-2 gap-2 w-full sm:flex sm:items-center sm:flex-wrap sm:w-auto">
 
           {/* Ricerca */}
           <Input placeholder="Cerca spese…" value={search} onChange={e => setSearch(e.target.value)}
-            className="h-9 sm:h-8 text-xs w-full sm:w-[180px] bg-white" />
+            className="col-span-2 h-9 sm:h-8 text-xs w-full sm:w-[180px] bg-white" />
 
           {/* Tipo toggle */}
-          <div className="flex bg-white p-0.5 rounded-md border h-9 sm:h-8">
-            <Button variant={filterType === 'all'    ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')}    className="h-8 sm:h-7 px-3 sm:px-2 text-xs">Tutti</Button>
-            <Button variant={filterType === 'real'   ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')}   className="h-8 sm:h-7 px-3 sm:px-2 text-xs"><Home className="w-3 h-3" /></Button>
-            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="h-8 sm:h-7 px-3 sm:px-2 text-xs"><Car className="w-3 h-3" /></Button>
+          <div className="col-span-2 flex bg-white p-0.5 rounded-md border h-9 sm:h-8 sm:w-auto">
+            <Button variant={filterType === 'all'    ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('all')}    className="flex-1 sm:flex-none h-8 sm:h-7 px-3 sm:px-2 text-xs">Tutti</Button>
+            <Button variant={filterType === 'real'   ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('real')}   className="flex-1 sm:flex-none h-8 sm:h-7 px-3 sm:px-2 text-xs"><Home className="w-3 h-3" /></Button>
+            <Button variant={filterType === 'mobile' ? 'secondary' : 'ghost'} size="sm" onClick={() => setFilterType('mobile')} className="flex-1 sm:flex-none h-8 sm:h-7 px-3 sm:px-2 text-xs"><Car className="w-3 h-3" /></Button>
           </div>
 
           {/* Filtro gestione */}
@@ -559,7 +559,7 @@ export default function Expenses() {
           {/* Filtro proprietà */}
           <Select value={filterProp} onValueChange={setFilterProp}>
             <SelectTrigger className="h-9 sm:h-8 text-xs w-full sm:w-[150px] bg-white">
-              <Filter className="w-3 h-3 mr-1.5 text-slate-400" />
+              <Filter className="w-3 h-3 mr-1.5 text-slate-400 shrink-0" />
               <SelectValue placeholder="Proprietà" />
             </SelectTrigger>
             <SelectContent>
@@ -570,7 +570,7 @@ export default function Expenses() {
 
           {/* Filtro categoria */}
           <Select value={filterCat} onValueChange={setFilterCat}>
-            <SelectTrigger className="h-9 sm:h-8 text-xs w-full sm:w-[140px] bg-white">
+            <SelectTrigger className="col-span-2 h-9 sm:h-8 text-xs w-full sm:w-[140px] bg-white">
               <SelectValue placeholder="Categoria" />
             </SelectTrigger>
             <SelectContent>
@@ -579,7 +579,7 @@ export default function Expenses() {
             </SelectContent>
           </Select>
 
-          <Button size="sm" onClick={openCreate} className="gap-1.5 h-9 sm:h-8">
+          <Button size="sm" onClick={openCreate} className="col-span-2 w-full sm:w-auto gap-1.5 h-9 sm:h-8">
             <Plus className="w-4 h-4" /> Nuova Spesa
           </Button>
         </div>
