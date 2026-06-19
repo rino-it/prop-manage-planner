@@ -31,6 +31,7 @@ import {
 import { it } from 'date-fns/locale';
 import { bucketByScadenza } from '@/utils/scadenze';
 import { isAllegatoTypeValid, buildAllegatoPath, displayNameFromPath, ALLEGATO_MAX_BYTES } from '@/utils/allegato';
+import RientriTab from '@/components/RientriTab';
 
 // Apre un allegato (path nel bucket documents) in una nuova scheda via signed URL.
 async function openAllegato(path: string) {
@@ -476,6 +477,8 @@ export default function Expenses() {
   // filtering
   const filtered = useMemo(() => {
     return expenses.filter((ex: any) => {
+      // le spese consolidate in un piano di rientro escono dagli scadenzari (restano sotto il piano)
+      if (ex.consolidato_in_piano_id) return false;
       if (filterType === 'real' && !ex.property_real_id) return false;
       if (filterType === 'mobile' && !ex.property_mobile_id) return false;
       if (filterProp !== 'all') {
@@ -599,7 +602,7 @@ export default function Expenses() {
 
       {/* ── Tabs ── */}
       <Tabs defaultValue={overdue.length > 0 ? 'overdue' : 'upcoming'}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overdue" className="gap-2">
             {overdue.length > 0 && (
               <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
@@ -623,6 +626,9 @@ export default function Expenses() {
           <TabsTrigger value="paid">
             ✅ Storico
             {paid.length > 0 && <span className="ml-1.5 text-[10px] text-slate-400">{paid.length}</span>}
+          </TabsTrigger>
+          <TabsTrigger value="rientri">
+            🔁 Rientri
           </TabsTrigger>
         </TabsList>
 
@@ -822,6 +828,11 @@ export default function Expenses() {
               );
             })
           )}
+        </TabsContent>
+
+        {/* ── RIENTRI ── */}
+        <TabsContent value="rientri" className="mt-4">
+          <RientriTab />
         </TabsContent>
       </Tabs>
 
