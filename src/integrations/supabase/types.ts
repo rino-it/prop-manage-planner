@@ -891,6 +891,7 @@ export type Database = {
           categoria: string | null
           competence: string | null
           conto_id: string | null
+          consolidato_in_piano_id: string | null
           created_at: string
           data_pagamento: string | null
           debtor_name: string | null
@@ -907,8 +908,10 @@ export type Database = {
           note: string | null
           payment_method: string | null
           payment_status: string | null
+          piano_rientro_id: string | null
           property_mobile_id: string | null
           property_real_id: string | null
+          rata_numero: number | null
           reimbursement_note: string | null
           ricorrenza_tipo: string
           scadenza: string
@@ -924,6 +927,7 @@ export type Database = {
           categoria?: string | null
           competence?: string | null
           conto_id?: string | null
+          consolidato_in_piano_id?: string | null
           created_at?: string
           data_pagamento?: string | null
           debtor_name?: string | null
@@ -940,8 +944,10 @@ export type Database = {
           note?: string | null
           payment_method?: string | null
           payment_status?: string | null
+          piano_rientro_id?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
+          rata_numero?: number | null
           reimbursement_note?: string | null
           ricorrenza_tipo?: string
           scadenza: string
@@ -957,6 +963,7 @@ export type Database = {
           categoria?: string | null
           competence?: string | null
           conto_id?: string | null
+          consolidato_in_piano_id?: string | null
           created_at?: string
           data_pagamento?: string | null
           debtor_name?: string | null
@@ -973,8 +980,10 @@ export type Database = {
           note?: string | null
           payment_method?: string | null
           payment_status?: string | null
+          piano_rientro_id?: string | null
           property_mobile_id?: string | null
           property_real_id?: string | null
+          rata_numero?: number | null
           reimbursement_note?: string | null
           ricorrenza_tipo?: string
           scadenza?: string
@@ -1019,6 +1028,62 @@ export type Database = {
             columns: ["ticket_id"]
             isOneToOne: false
             referencedRelation: "tickets"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      piani_rientro: {
+        Row: {
+          created_at: string
+          data_prima_rata: string
+          direzione: string
+          fornitore: string
+          frequenza: string
+          gestione_id: string
+          id: string
+          importo_totale: number
+          note: string | null
+          numero_rate: number
+          stato: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          data_prima_rata: string
+          direzione?: string
+          fornitore: string
+          frequenza: string
+          gestione_id: string
+          id?: string
+          importo_totale: number
+          note?: string | null
+          numero_rate: number
+          stato?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          data_prima_rata?: string
+          direzione?: string
+          fornitore?: string
+          frequenza?: string
+          gestione_id?: string
+          id?: string
+          importo_totale?: number
+          note?: string | null
+          numero_rate?: number
+          stato?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "piani_rientro_gestione_id_fkey"
+            columns: ["gestione_id"]
+            isOneToOne: false
+            referencedRelation: "gestioni"
             referencedColumns: ["id"]
           },
         ]
