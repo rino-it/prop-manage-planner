@@ -201,6 +201,7 @@ export default function Revenue() {
   const [form, setForm] = useState({
     booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'),
     category: 'canone_locazione', description: '', is_recurring: false, months: '12',
+    already_paid: false, payment_method: 'bonifico', conto_id: '',
   });
 
   // ── edit form ──
@@ -277,11 +278,14 @@ export default function Revenue() {
       date_start: new Date(form.date_start),
       category: form.category,
       description: form.description || 'Rata canone',
-      is_recurring: form.is_recurring,
+      is_recurring: form.already_paid ? false : form.is_recurring,
       months: parseInt(form.months),
+      already_paid: form.already_paid,
+      payment_method: form.payment_method,
+      conto_id: form.conto_id,
     });
     setCreateOpen(false);
-    setForm({ booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'), category: 'canone_locazione', description: '', is_recurring: false, months: '12' });
+    setForm({ booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'), category: 'canone_locazione', description: '', is_recurring: false, months: '12', already_paid: false, payment_method: 'bonifico', conto_id: '' });
     setSelectedProp('');
   };
 
@@ -610,13 +614,29 @@ export default function Revenue() {
               <>
                 <div className="grid gap-2">
                   <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">3. Dettagli</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { v: false, label: 'Da incassare' },
+                      { v: true,  label: 'Già incassato' },
+                    ].map(opt => (
+                      <button
+                        key={String(opt.v)}
+                        type="button"
+                        onClick={() => setForm(f => ({ ...f, already_paid: opt.v, is_recurring: opt.v ? false : f.is_recurring }))}
+                        className={`p-2.5 rounded-lg border text-sm font-medium transition-all
+                          ${form.already_paid === opt.v ? 'border-green-500 bg-green-50 text-green-700 ring-1 ring-green-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div className="grid gap-1.5">
                       <Label className="text-xs">Importo (€) *</Label>
                       <Input type="number" placeholder="0.00" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: e.target.value }))} />
                     </div>
                     <div className="grid gap-1.5">
-                      <Label className="text-xs">Prima scadenza *</Label>
+                      <Label className="text-xs">{form.already_paid ? 'Data ricevuto *' : 'Prima scadenza *'}</Label>
                       <Input type="date" value={form.date_start} onChange={e => setForm(f => ({ ...f, date_start: e.target.value }))} />
                     </div>
                   </div>
@@ -635,26 +655,56 @@ export default function Revenue() {
                   </div>
                 </div>
 
-                {/* Step 4: Ricorrenza */}
-                <div className="bg-slate-50 border rounded-lg p-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <Label className="flex items-center gap-2 cursor-pointer text-sm">
-                      <RefreshCw className="w-4 h-4 text-blue-500" /> Piano rateale mensile
-                    </Label>
-                    <Switch checked={form.is_recurring} onCheckedChange={c => setForm(f => ({ ...f, is_recurring: c }))} />
-                  </div>
-                  {form.is_recurring && (
+                {/* Step 4: Pagamento (già incassato) oppure Ricorrenza */}
+                {form.already_paid ? (
+                  <div className="bg-slate-50 border rounded-lg p-3 space-y-3">
                     <div className="grid gap-1.5">
-                      <Label className="text-xs">Numero di rate mensili</Label>
-                      <Input type="number" min="2" max="60" value={form.months} onChange={e => setForm(f => ({ ...f, months: e.target.value }))} className="bg-white" />
+                      <Label className="text-xs">Metodo di pagamento</Label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {METHOD_OPTIONS.map(m => (
+                          <button
+                            key={m.value}
+                            type="button"
+                            onClick={() => setForm(f => ({ ...f, payment_method: m.value }))}
+                            className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm font-medium transition-all
+                              ${form.payment_method === m.value ? 'border-green-500 bg-green-50 text-green-700 ring-1 ring-green-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                          >
+                            {m.icon} {m.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  )}
-                  {recurringTotal && (
-                    <div className="text-xs bg-blue-50 border border-blue-100 rounded p-2 text-blue-700">
-                      📊 Genererà <strong>{form.months} rate</strong> da <strong>€{parseFloat(form.amount || '0').toLocaleString('it-IT')}</strong> / mese → totale <strong>{fmt(recurringTotal)}</strong>
+                    <div className="grid gap-1.5">
+                      <Label className="text-xs">Conto <span className="text-slate-400 font-normal">(opzionale)</span></Label>
+                      <Select value={form.conto_id} onValueChange={v => setForm(f => ({ ...f, conto_id: v }))}>
+                        <SelectTrigger><SelectValue placeholder="Su quale conto è entrato…" /></SelectTrigger>
+                        <SelectContent>
+                          {(conti as any[]).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
-                  )}
-                </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border rounded-lg p-3 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <Label className="flex items-center gap-2 cursor-pointer text-sm">
+                        <RefreshCw className="w-4 h-4 text-blue-500" /> Piano rateale mensile
+                      </Label>
+                      <Switch checked={form.is_recurring} onCheckedChange={c => setForm(f => ({ ...f, is_recurring: c }))} />
+                    </div>
+                    {form.is_recurring && (
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs">Numero di rate mensili</Label>
+                        <Input type="number" min="2" max="60" value={form.months} onChange={e => setForm(f => ({ ...f, months: e.target.value }))} className="bg-white" />
+                      </div>
+                    )}
+                    {recurringTotal && (
+                      <div className="text-xs bg-blue-50 border border-blue-100 rounded p-2 text-blue-700">
+                        📊 Genererà <strong>{form.months} rate</strong> da <strong>€{parseFloat(form.amount || '0').toLocaleString('it-IT')}</strong> / mese → totale <strong>{fmt(recurringTotal)}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
 
@@ -665,7 +715,7 @@ export default function Revenue() {
                 onClick={handleCreate}
                 disabled={!form.booking_id || !form.amount || createPaymentPlan.isPending}
               >
-                {createPaymentPlan.isPending ? 'Registrazione...' : form.is_recurring ? `Genera ${form.months} rate` : 'Registra'}
+                {createPaymentPlan.isPending ? 'Registrazione...' : form.already_paid ? 'Registra incasso' : form.is_recurring ? `Genera ${form.months} rate` : 'Registra'}
               </Button>
             </DialogFooter>
           </div>
