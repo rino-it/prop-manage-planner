@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
-import { addMonths, format } from 'date-fns';
+import { buildPaymentRows } from '@/utils/incassi';
 
 export interface PaymentEntry {
   id: string;
@@ -49,54 +49,45 @@ export const useRevenue = () => {
 
   // 2. CREA PIANO RATEALE (Con Fix User ID)
   const createPaymentPlan = useMutation({
-    mutationFn: async (params: { 
-        booking_id: string, 
-        amount: number, 
-        date_start: Date, 
-        months: number, 
-        category: string, 
-        description: string, 
-        is_recurring: boolean 
+    mutationFn: async (params: {
+        booking_id: string,
+        amount: number,
+        date_start: Date,
+        months: number,
+        category: string,
+        description: string,
+        is_recurring: boolean,
+        already_paid?: boolean,
+        payment_method?: string,
+        conto_id?: string,
     }) => {
-      const { booking_id, amount, date_start, months, category, description, is_recurring } = params;
-      
+      const { booking_id, amount, date_start, months, category, description,
+              is_recurring, already_paid, payment_method, conto_id } = params;
+
       // RECUPERO UTENTE SICURO
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error("Utente non loggato. Ricarica la pagina.");
       }
-      
-      const paymentsToInsert = [];
+
       const groupId = is_recurring ? crypto.randomUUID() : null;
+      const rows = buildPaymentRows(
+        { booking_id, amount, date_start, months, category, description,
+          is_recurring, already_paid, payment_method, conto_id },
+        user.id,
+        groupId,
+      );
 
-      const iterations = is_recurring ? months : 1;
-
-      for (let i = 0; i < iterations; i++) {
-        const dueDate = addMonths(date_start, i);
-        
-        const noteText = is_recurring 
-            ? `${description} (Rata ${i+1}/${months})` 
-            : description;
-
-        paymentsToInsert.push({
-            booking_id,
-            importo: amount,
-            data_scadenza: format(dueDate, 'yyyy-MM-dd'),
-            category,
-            notes: noteText,
-            stato: 'da_pagare',
-            is_recurring,
-            recurrence_group_id: groupId,
-            user_id: user.id // <--- QUESTO È IL PUNTO CRITICO CHE MANCAVA O ERA NULL
-        });
-      }
-
-      const { error } = await supabase.from('tenant_payments').insert(paymentsToInsert);
+      const { error } = await supabase.from('tenant_payments').insert(rows);
       if (error) throw error;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
-      toast({ title: "Piano Registrato", description: "Le scadenze sono state generate." });
+      const paid = variables.already_paid && !variables.is_recurring;
+      toast({
+        title: paid ? 'Incasso registrato' : 'Piano Registrato',
+        description: paid ? 'Registrato in cassa.' : 'Le scadenze sono state generate.',
+      });
     },
     onError: (error: any) => toast({ title: "Errore", description: error.message, variant: "destructive" })
   });
