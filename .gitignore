@@ -38,3 +38,4 @@ supabase_dump.sql
 .env.*
 
 .superpowers/
+*.tsbuildinfo
