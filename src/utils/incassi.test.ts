@@ -37,6 +37,28 @@ describe('buildPaymentRows', () => {
     expect(rows[0]).toMatchObject({ stato: 'pagato', conto_id: null, payment_type: 'bonifico' });
   });
 
+  it('incasso libero: booking_id null e property_id sulla riga', () => {
+    const rows = buildPaymentRows(
+      { ...base, booking_id: '', property_id: 'p7' }, 'u1', null,
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ booking_id: null, property_id: 'p7', stato: 'da_pagare' });
+  });
+
+  it('incasso con inquilino: property_id non viene inviato', () => {
+    const rows = buildPaymentRows({ ...base, property_id: 'p7' }, 'u1', null);
+    expect(rows[0].booking_id).toBe('b1');
+    expect(rows[0]).not.toHaveProperty('property_id');
+  });
+
+  it('incasso libero ricorrente: ogni rata porta property_id e booking null', () => {
+    const rows = buildPaymentRows(
+      { ...base, booking_id: '', property_id: 'p7', is_recurring: true }, 'u1', 'g1',
+    );
+    expect(rows).toHaveLength(3);
+    for (const r of rows) expect(r).toMatchObject({ booking_id: null, property_id: 'p7' });
+  });
+
   it('ricorrente: genera months righe da_pagare ignorando already_paid', () => {
     const rows = buildPaymentRows(
       { ...base, is_recurring: true, already_paid: true }, 'u1', 'g1',

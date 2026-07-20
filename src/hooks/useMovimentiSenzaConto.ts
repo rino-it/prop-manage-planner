@@ -16,7 +16,7 @@ export function useMovimentiSenzaConto() {
           .eq('stato', 'pagato'),
         supabase
           .from('tenant_payments')
-          .select('id, importo, payment_date, data_scadenza, description, notes, bookings(properties_real(nome, gestione_id))')
+          .select('id, importo, payment_date, data_scadenza, description, notes, properties_real(nome, gestione_id), bookings(properties_real(nome, gestione_id))')
           .is('conto_id', null)
           .eq('stato', 'pagato'),
       ]);

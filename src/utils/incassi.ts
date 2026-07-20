@@ -2,6 +2,7 @@ import { addMonths, format } from 'date-fns';
 
 export interface BuildPaymentRowsParams {
   booking_id: string;
+  property_id?: string;   // incasso libero: legato alla sola proprietà, senza booking
   amount: number;
   date_start: Date;
   months: number;
@@ -19,13 +20,19 @@ export function buildPaymentRows(
   groupId: string | null,
 ): Record<string, unknown>[] {
   const {
-    booking_id, amount, date_start, months, category, description,
+    booking_id, property_id, amount, date_start, months, category, description,
     is_recurring, already_paid, payment_method, conto_id,
   } = params;
 
+  // Con un booking la proprietà si ricava dal booking stesso; property_id
+  // viaggia sulla riga solo per gli incassi liberi.
+  const target: Record<string, unknown> = booking_id
+    ? { booking_id }
+    : { booking_id: null, property_id: property_id || null };
+
   if (is_recurring) {
     return Array.from({ length: months }, (_, i) => ({
-      booking_id,
+      ...target,
       importo: amount,
       data_scadenza: format(addMonths(date_start, i), 'yyyy-MM-dd'),
       category,
@@ -38,7 +45,7 @@ export function buildPaymentRows(
   }
 
   const base: Record<string, unknown> = {
-    booking_id,
+    ...target,
     importo: amount,
     data_scadenza: format(date_start, 'yyyy-MM-dd'),
     category,

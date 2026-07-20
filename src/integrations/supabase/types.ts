@@ -1832,6 +1832,7 @@ export type Database = {
           preauth_captured_amount: number | null
           preauth_reason: string | null
           preauth_released: boolean | null
+          property_id: string | null
           receipt_url: string | null
           recurrence_group_id: string | null
           stato: string | null
@@ -1865,6 +1866,7 @@ export type Database = {
           preauth_captured_amount?: number | null
           preauth_reason?: string | null
           preauth_released?: boolean | null
+          property_id?: string | null
           receipt_url?: string | null
           recurrence_group_id?: string | null
           stato?: string | null
@@ -1898,6 +1900,7 @@ export type Database = {
           preauth_captured_amount?: number | null
           preauth_reason?: string | null
           preauth_released?: boolean | null
+          property_id?: string | null
           receipt_url?: string | null
           recurrence_group_id?: string | null
           stato?: string | null
@@ -1920,6 +1923,13 @@ export type Database = {
             columns: ["conto_id"]
             isOneToOne: false
             referencedRelation: "conti"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tenant_payments_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
             referencedColumns: ["id"]
           },
         ]

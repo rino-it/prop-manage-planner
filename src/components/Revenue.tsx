@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { bucketByScadenza } from '@/utils/scadenze';
 import { useRevenue } from '@/hooks/useRevenue';
 import { usePropertiesReal } from '@/hooks/useProperties';
@@ -63,11 +63,16 @@ function groupByMonth(items: any[]) {
 
 // ─── sub-components ───────────────────────────────────────────────────────────
 
-function KpiCard({ label, value, sub, color, icon }: {
+function KpiCard({ label, value, sub, color, icon, onClick, active }: {
   label: string; value: string; sub?: string; color: string; icon: React.ReactNode;
+  onClick?: () => void; active?: boolean;
 }) {
   return (
-    <Card className={`border ${color}`}>
+    <Card
+      className={`border ${color} ${onClick ? 'cursor-pointer transition-shadow hover:shadow-md' : ''} ${active ? 'ring-2 ring-offset-1 ring-slate-400' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+    >
       <CardContent className="p-3 sm:p-5 flex items-center gap-3 sm:gap-4">
         <div className={`p-2 sm:p-3 rounded-full ${color.replace('border-', 'bg-').replace('-200', '-100')} shrink-0`}>
           {icon}
@@ -95,6 +100,7 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
   const overdueDays = rev.stato === 'da_pagare' && isPast(parseISO(rev.data_scadenza)) && !isToday(parseISO(rev.data_scadenza))
     ? daysDiff(rev.data_scadenza)
     : null;
+  const propNome = rev.bookings?.properties_real?.nome || rev.properties_real?.nome;
 
   return (
     <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${overdueDays ? 'bg-red-50/40' : ''}`}>
@@ -107,11 +113,11 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2 mb-0.5">
             <span className="font-semibold text-sm text-slate-800 truncate">
-              {rev.bookings?.nome_ospite || '—'}
+              {rev.bookings?.nome_ospite || (rev.property_id ? 'Incasso libero' : '—')}
             </span>
-            {rev.bookings?.properties_real?.nome && (
+            {propNome && (
               <span className="text-xs bg-orange-50 border border-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
-                {rev.bookings.properties_real.nome}
+                {propNome}
               </span>
             )}
             <span className="text-[11px] sm:text-xs text-slate-400">
@@ -210,15 +216,27 @@ export default function Revenue() {
   const [filterCat, setFilterCat] = useState('all');
   const [confirmConto, setConfirmConto] = useState('');
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('upcoming');
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
 
   // ── create form ──
   const [selectedProp, setSelectedProp] = useState('');
   const [form, setForm] = useState({
-    booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'),
+    booking_id: '', noTenant: false, amount: '', date_start: format(new Date(), 'yyyy-MM-dd'),
     category: 'canone_locazione', description: '', is_recurring: false, months: '12',
     already_paid: false, payment_method: 'bonifico', conto_id: '',
   });
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // Conto precompilato con l'ultimo usato: è il default giusto quasi sempre
+  // e evita gli incassi "senza conto" che spariscono dalla Cassa.
+  useEffect(() => {
+    if (createOpen) {
+      const last = localStorage.getItem('pm-ultimo-conto-incasso') || '';
+      setForm(f => (f.conto_id ? f : { ...f, conto_id: last }));
+      setMoreOpen(false);
+    }
+  }, [createOpen]);
 
   // ── edit form ──
   const [editForm, setEditForm] = useState({ amount: '', date_start: '', category: '', description: '' });
@@ -241,19 +259,18 @@ export default function Revenue() {
     if (!revenues) return [];
     return revenues.filter(r => {
       if (filterGestione !== 'all') {
-        const gid = (r as any).bookings?.properties_real?.gestione_id;
+        const gid = (r as any).bookings?.properties_real?.gestione_id ?? (r as any).properties_real?.gestione_id;
         if (gid !== filterGestione) return false;
       }
       if (filterProp !== 'all') {
-        const propId = r.bookings?.property_id || (r as any).property_real_id;
-        // match by property name since we don't have direct property_id on row easily
-        if (r.bookings?.properties_real?.nome !== properties?.find(p => p.id === filterProp)?.nome) return false;
+        const propId = r.bookings?.property_id || (r as any).property_id;
+        if (propId !== filterProp) return false;
       }
       if (filterCat !== 'all' && r.category !== filterCat) return false;
       if (search.trim()) {
         const q = search.toLowerCase();
         const hay = [
-          r.bookings?.nome_ospite, r.bookings?.properties_real?.nome,
+          r.bookings?.nome_ospite, r.bookings?.properties_real?.nome, (r as any).properties_real?.nome,
           r.description, r.notes, String(r.importo),
         ].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(q)) return false;
@@ -284,12 +301,14 @@ export default function Revenue() {
 
   // ── handlers ──
   const handleCreate = async () => {
-    if (!form.booking_id || !form.amount) {
+    if ((!form.booking_id && !form.noTenant) || !form.amount || (form.noTenant && !selectedProp)) {
       toast({ title: 'Compila tutti i campi obbligatori', variant: 'destructive' });
       return;
     }
+    if (form.already_paid && form.conto_id) localStorage.setItem('pm-ultimo-conto-incasso', form.conto_id);
     await createPaymentPlan.mutateAsync({
-      booking_id: form.booking_id,
+      booking_id: form.noTenant ? '' : form.booking_id,
+      property_id: form.noTenant ? selectedProp : undefined,
       amount: parseFloat(form.amount),
       date_start: new Date(form.date_start),
       category: form.category,
@@ -301,7 +320,7 @@ export default function Revenue() {
       conto_id: form.conto_id,
     });
     setCreateOpen(false);
-    setForm({ booking_id: '', amount: '', date_start: format(new Date(), 'yyyy-MM-dd'), category: 'canone_locazione', description: '', is_recurring: false, months: '12', already_paid: false, payment_method: 'bonifico', conto_id: '' });
+    setForm({ booking_id: '', noTenant: false, amount: '', date_start: format(new Date(), 'yyyy-MM-dd'), category: 'canone_locazione', description: '', is_recurring: false, months: '12', already_paid: false, payment_method: 'bonifico', conto_id: '' });
     setSelectedProp('');
   };
 
@@ -410,20 +429,24 @@ export default function Revenue() {
         </div>
       </PageHeader>
 
-      {/* ── KPI ── */}
+      {/* ── KPI: cliccabili, filtrano le tab ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <KpiCard label="Incassato" value={fmt(totalPaid)} sub={`${paid.length} pagamenti`}
+          onClick={() => setTab('paid')} active={tab === 'paid'}
           color="border-green-200 bg-green-50" icon={<CheckCircle className="w-6 h-6 text-green-600" />} />
         <KpiCard label="In Attesa" value={fmt(totalPending)} sub={`${upcoming.length} rate`}
+          onClick={() => setTab('upcoming')} active={tab === 'upcoming'}
           color="border-amber-200 bg-amber-50" icon={<Clock className="w-6 h-6 text-amber-600" />} />
         <KpiCard label="Scaduto" value={fmt(totalOverdue)} sub={overdue.length > 0 ? `${overdue.length} rate in ritardo` : 'Tutto in regola ✓'}
+          onClick={() => setTab('overdue')} active={tab === 'overdue'}
           color={totalOverdue > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200'} icon={<AlertTriangle className={`w-6 h-6 ${totalOverdue > 0 ? 'text-red-600' : 'text-slate-400'}`} />} />
         <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.flatMap(g => g.items).length + thisMonth.length} scadenze`}
+          onClick={() => setTab('upcoming')} active={false}
           color="border-blue-200 bg-blue-50" icon={<TrendingUp className="w-6 h-6 text-blue-600" />} />
       </div>
 
       {/* ── Tabs ── */}
-      <Tabs defaultValue={overdue.length > 0 ? 'overdue' : 'upcoming'}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid w-full grid-cols-3 h-auto">
           <TabsTrigger value="overdue" className="gap-1 sm:gap-2 text-xs sm:text-sm px-1 sm:px-3">
             {overdue.length > 0 && <span className="bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shrink-0">{overdue.length}</span>}
@@ -604,31 +627,34 @@ export default function Revenue() {
               </div>
             </div>
 
-            {/* Step 2: Inquilino */}
+            {/* Step 2: Inquilino (opzionale) */}
             {selectedProp && (
               <div className="grid gap-2">
-                <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">2. Inquilino</Label>
-                {activeTenants.length === 0 ? (
-                  <p className="text-sm text-slate-400 bg-slate-50 border rounded p-3">Nessun booking per questa proprietà.</p>
-                ) : (
-                  <div className="grid gap-1.5 max-h-32 overflow-y-auto">
-                    {activeTenants.map((t: any) => (
-                      <button
-                        key={t.id}
-                        onClick={() => setForm(f => ({ ...f, booking_id: t.id }))}
-                        className={`text-left p-2.5 rounded-lg border text-sm transition-all
-                          ${form.booking_id === t.id ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400' : 'border-slate-200 hover:bg-slate-50'}`}
-                      >
-                        👤 {t.nome_ospite}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">2. Inquilino <span className="normal-case font-normal text-slate-400">(opzionale)</span></Label>
+                <div className="grid gap-1.5 max-h-40 overflow-y-auto">
+                  <button
+                    onClick={() => setForm(f => ({ ...f, noTenant: true, booking_id: '' }))}
+                    className={`text-left p-2.5 rounded-lg border text-sm transition-all
+                      ${form.noTenant ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                  >
+                    💶 Incasso libero — solo sulla proprietà
+                  </button>
+                  {activeTenants.map((t: any) => (
+                    <button
+                      key={t.id}
+                      onClick={() => setForm(f => ({ ...f, booking_id: t.id, noTenant: false }))}
+                      className={`text-left p-2.5 rounded-lg border text-sm transition-all
+                        ${form.booking_id === t.id ? 'border-blue-500 bg-blue-50 text-blue-700 ring-1 ring-blue-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                    >
+                      👤 {t.nome_ospite}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
 
-            {/* Step 3: Dettagli */}
-            {form.booking_id && (
+            {/* Step 3: L'essenziale */}
+            {(form.booking_id || form.noTenant) && (
               <>
                 <div className="grid gap-2">
                   <Label className="text-xs font-bold uppercase text-slate-500 tracking-wide">3. Dettagli</Label>
@@ -658,51 +684,71 @@ export default function Revenue() {
                       <Input type="date" value={form.date_start} onChange={e => setForm(f => ({ ...f, date_start: e.target.value }))} />
                     </div>
                   </div>
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs">Categoria</Label>
-                    <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {Object.entries(CATEGORY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <Label className="text-xs">Note</Label>
-                    <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Es. Affitto maggio 2026" />
-                  </div>
-                </div>
-
-                {/* Step 4: Pagamento (già incassato) oppure Ricorrenza */}
-                {form.already_paid ? (
-                  <div className="bg-slate-50 border rounded-lg p-3 space-y-3">
+                  {form.already_paid && (
                     <div className="grid gap-1.5">
-                      <Label className="text-xs">Metodo di pagamento</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {METHOD_OPTIONS.map(m => (
-                          <button
-                            key={m.value}
-                            type="button"
-                            onClick={() => setForm(f => ({ ...f, payment_method: m.value }))}
-                            className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm font-medium transition-all
-                              ${form.payment_method === m.value ? 'border-green-500 bg-green-50 text-green-700 ring-1 ring-green-400' : 'border-slate-200 hover:bg-slate-50'}`}
-                          >
-                            {m.icon} {m.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="grid gap-1.5">
-                      <Label className="text-xs">Conto <span className="text-slate-400 font-normal">(opzionale)</span></Label>
+                      <Label className="text-xs">Su quale conto è entrato? *</Label>
                       <Select value={form.conto_id} onValueChange={v => setForm(f => ({ ...f, conto_id: v }))}>
-                        <SelectTrigger><SelectValue placeholder="Su quale conto è entrato…" /></SelectTrigger>
+                        <SelectTrigger className={form.conto_id ? '' : 'border-amber-300 bg-amber-50'}>
+                          <SelectValue placeholder="Scegli il conto…" />
+                        </SelectTrigger>
                         <SelectContent>
                           {(conti as any[]).map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      {!form.conto_id && <p className="text-[11px] text-amber-600">Senza conto l'incasso non comparirà nei saldi della Cassa.</p>}
                     </div>
-                  </div>
-                ) : (
+                  )}
+                </div>
+
+                {/* Altri dettagli — ripiegati: categoria, note, metodo */}
+                <div className="border rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors"
+                    onClick={() => setMoreOpen(o => !o)}
+                  >
+                    <span>Altri dettagli <span className="text-slate-400">(categoria, note{form.already_paid ? ', metodo' : ''})</span></span>
+                    {moreOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {moreOpen && (
+                    <div className="p-3 space-y-3">
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs">Categoria</Label>
+                        <Select value={form.category} onValueChange={v => setForm(f => ({ ...f, category: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(CATEGORY_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid gap-1.5">
+                        <Label className="text-xs">Note</Label>
+                        <Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Es. Affitto maggio 2026" />
+                      </div>
+                      {form.already_paid && (
+                        <div className="grid gap-1.5">
+                          <Label className="text-xs">Metodo di pagamento</Label>
+                          <div className="grid grid-cols-2 gap-2">
+                            {METHOD_OPTIONS.map(m => (
+                              <button
+                                key={m.value}
+                                type="button"
+                                onClick={() => setForm(f => ({ ...f, payment_method: m.value }))}
+                                className={`flex items-center gap-2 p-2.5 rounded-lg border text-sm font-medium transition-all
+                                  ${form.payment_method === m.value ? 'border-green-500 bg-green-50 text-green-700 ring-1 ring-green-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                              >
+                                {m.icon} {m.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Ricorrenza — solo per "da incassare" */}
+                {!form.already_paid && (
                   <div className="bg-slate-50 border rounded-lg p-3 space-y-3">
                     <div className="flex items-center justify-between">
                       <Label className="flex items-center gap-2 cursor-pointer text-sm">
@@ -731,7 +777,7 @@ export default function Revenue() {
               <Button
                 className="bg-green-600 hover:bg-green-700 font-bold"
                 onClick={handleCreate}
-                disabled={!form.booking_id || !form.amount || createPaymentPlan.isPending}
+                disabled={(!form.booking_id && !form.noTenant) || !form.amount || createPaymentPlan.isPending}
               >
                 {createPaymentPlan.isPending ? 'Registrazione...' : form.already_paid ? 'Registra incasso' : form.is_recurring ? `Genera ${form.months} rate` : 'Registra'}
               </Button>

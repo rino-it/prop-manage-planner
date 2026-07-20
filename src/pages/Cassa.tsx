@@ -106,7 +106,7 @@ async function buildEstrattoGestione(
     const [{ data: incassi }, { data: spese }, { data: giroconti }] = await Promise.all([
       supabase
         .from('tenant_payments')
-        .select('importo, payment_date, data_scadenza, description, notes, stato, booking_id, bookings(nome_ospite, property_id, properties_real(nome, gestione_id))')
+        .select('importo, payment_date, data_scadenza, description, notes, stato, booking_id, properties_real(nome), bookings(nome_ospite, property_id, properties_real(nome, gestione_id))')
         .eq('conto_id', conto.id)
         .eq('stato', 'pagato'),
       supabase
@@ -129,7 +129,7 @@ async function buildEstrattoGestione(
       const dateStr = (dataIncasso(inc) || '').slice(0, 10);
       if (!dateStr) continue;
       const booking = inc.bookings as any;
-      const propNome = booking?.properties_real?.nome || '';
+      const propNome = booking?.properties_real?.nome || (inc.properties_real as any)?.nome || '';
       const importo = Number(inc.importo);
       movs.push({
         dateStr,
@@ -258,11 +258,11 @@ async function buildEstrattoProprieta(
   if (!target.isMobile) {
     const { data: incassi } = await supabase
       .from('tenant_payments')
-      .select('importo, payment_date, data_scadenza, description, notes, conto_id, stato, bookings(property_id)')
+      .select('importo, payment_date, data_scadenza, description, notes, conto_id, stato, property_id, bookings(property_id)')
       .eq('stato', 'pagato');
     for (const inc of incassi || []) {
       const booking = inc.bookings as any;
-      if (booking?.property_id !== target.id) continue;
+      if (booking?.property_id !== target.id && (inc as any).property_id !== target.id) continue;
       const dateStr: string = dataIncasso(inc) || '';
       if (!inPeriod(dateStr, preset, from, to, SENTINEL)) continue;
       movs.push({ data: dateStr, descrizione: inc.description || inc.notes || 'Incasso', conto_id: inc.conto_id ?? null, entrata: Number(inc.importo), uscita: 0 });
@@ -282,7 +282,7 @@ async function buildReportProprieta(preset: string, from: string, to: string) {
       .eq('stato', 'pagato'),
     supabase
       .from('tenant_payments')
-      .select('importo, payment_date, data_scadenza, stato, bookings(properties_real(nome))')
+      .select('importo, payment_date, data_scadenza, stato, properties_real(nome), bookings(properties_real(nome))')
       .eq('stato', 'pagato'),
   ]);
 
@@ -294,7 +294,7 @@ async function buildReportProprieta(preset: string, from: string, to: string) {
   }
   for (const inc of incassi || []) {
     if (!inPeriod(dataIncasso(inc), preset, from, to, SENTINEL)) continue;
-    const nome = (inc.bookings as any)?.properties_real?.nome || '';
+    const nome = (inc.bookings as any)?.properties_real?.nome || (inc.properties_real as any)?.nome || '';
     movs.push({ proprieta: nome, entrata: Number(inc.importo), uscita: 0 });
   }
   return aggregaReportProprieta(movs);

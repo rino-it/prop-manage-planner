@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
@@ -82,11 +82,16 @@ const fmt = (n: number) => '€' + n.toLocaleString('it-IT', { minimumFractionDi
 const fmtFull = (n: number) => n.toLocaleString('it-IT', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 // ─── KpiCard ──────────────────────────────────────────────────────────────────
-function KpiCard({ label, value, sub, color, icon }: {
+function KpiCard({ label, value, sub, color, icon, onClick, active }: {
   label: string; value: string; sub?: string; color: string; icon: React.ReactNode;
+  onClick?: () => void; active?: boolean;
 }) {
   return (
-    <Card className={`border ${color}`}>
+    <Card
+      className={`border ${color} ${onClick ? 'cursor-pointer transition-shadow hover:shadow-md' : ''} ${active ? 'ring-2 ring-offset-1 ring-slate-400' : ''}`}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+    >
       <CardContent className="p-5 flex items-center gap-4">
         <div className={`p-3 rounded-full ${color.replace('border-', 'bg-').replace('-200', '-100')} shrink-0`}>
           {icon}
@@ -254,7 +259,11 @@ export default function Expenses() {
 
   // UI state
   const [sheetOpen, setSheetOpen]       = useState(false);
+  const [moreOpen, setMoreOpen]         = useState(false);
   const [editingId, setEditingId]       = useState<string | null>(null);
+  const dataPagamentoRef = useRef<string>('');
+
+  useEffect(() => { if (sheetOpen) setMoreOpen(false); }, [sheetOpen]);
   const [confirmTarget, setConfirmTarget] = useState<any>(null);
   const [confirmDate, setConfirmDate]   = useState(format(new Date(), 'yyyy-MM-dd'));
   const [confirmMethod, setConfirmMethod] = useState('bonifico');
@@ -266,6 +275,7 @@ export default function Expenses() {
   const [filterGestione, setFilterGestione] = useState('all');
   const [collapsedMonths, setCollapsedMonths] = useState<Record<string, boolean>>({});
   const [search, setSearch] = useState('');
+  const [tab, setTab] = useState('upcoming');
   const [uploadingAllegato, setUploadingAllegato] = useState(false);
   // consolidamento spese in piano di rientro
   const [selMode, setSelMode] = useState(false);
@@ -338,11 +348,13 @@ export default function Expenses() {
         conto_id: form.conto_id || null,
         allegato_url: form.allegato_url || null,
       };
-      // Se la spesa viene salvata come pagata senza passare dal flusso "Paga",
-      // fissiamo la data pagamento a oggi: evita voci pagate con data_pagamento null
-      // che nello Storico verrebbero datate sulla scadenza (date incoerenti).
+      // Per una spesa già pagata la data del form È la data del pagamento;
+      // in modifica si preserva la data pagamento originale del record.
       if (form.stato === 'pagato') {
-        payload.data_pagamento = format(new Date(), 'yyyy-MM-dd');
+        payload.data_pagamento = editingId
+          ? (dataPagamentoRef.current || form.scadenza)
+          : form.scadenza;
+        if (form.conto_id) localStorage.setItem('pm-ultimo-conto-spesa', form.conto_id);
       }
       if (editingId) {
         const { error } = await supabase.from('payments').update(payload).eq('id', editingId);
@@ -428,6 +440,7 @@ export default function Expenses() {
       allegato_url: exp.allegato_url || '',
     });
     originalAllegatoRef.current = exp.allegato_url || '';
+    dataPagamentoRef.current = exp.data_pagamento || '';
     setSheetOpen(true);
   };
 
@@ -613,15 +626,19 @@ export default function Expenses() {
         </div>
       </PageHeader>
 
-      {/* ── KPI ── */}
+      {/* ── KPI: cliccabili, filtrano le tab ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard label="Pagate" value={fmt(totalPaid)} sub={`${paid.length} spese`}
+          onClick={() => setTab('paid')} active={tab === 'paid'}
           color="border-green-200 bg-green-50" icon={<CheckCircle className="w-6 h-6 text-green-600" />} />
         <KpiCard label="In Attesa" value={fmt(totalPending)} sub={`${upcoming.length} in sospeso`}
+          onClick={() => setTab('upcoming')} active={tab === 'upcoming'}
           color="border-amber-200 bg-amber-50" icon={<Clock className="w-6 h-6 text-amber-600" />} />
         <KpiCard label="Scadute" value={fmt(totalOverdue)} sub={overdue.length > 0 ? `${overdue.length} in ritardo` : 'Tutto in regola ✓'}
+          onClick={() => setTab('overdue')} active={tab === 'overdue'}
           color={totalOverdue > 0 ? 'border-red-200 bg-red-50' : 'border-slate-200'} icon={<AlertTriangle className={`w-6 h-6 ${totalOverdue > 0 ? 'text-red-600' : 'text-slate-400'}`} />} />
         <KpiCard label="Prossimi 30gg" value={fmt(totalNext30)} sub={`${thisWeek.flatMap(g => g.items).length + thisMonth.length} scadenze`}
+          onClick={() => setTab('upcoming')} active={false}
           color="border-blue-200 bg-blue-50" icon={<TrendingDown className="w-6 h-6 text-blue-600" />} />
       </div>
 
@@ -643,7 +660,7 @@ export default function Expenses() {
       </div>
 
       {/* ── Tabs ── */}
-      <Tabs defaultValue={overdue.length > 0 ? 'overdue' : 'upcoming'}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="grid w-full grid-cols-5">
           <TabsTrigger value="overdue" className="gap-2">
             {overdue.length > 0 && (
@@ -902,28 +919,28 @@ export default function Expenses() {
           </SheetHeader>
 
           <div className="space-y-4 pt-4">
-            {/* Toggle Anticipo da rimborsare */}
-            <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm font-semibold text-emerald-800 flex items-center gap-1.5">
-                    <HandCoins className="w-4 h-4" /> Anticipo da rimborsare
-                  </Label>
-                  <p className="text-xs text-emerald-700 mt-0.5">Spesa pagata per conto di terzi, di cui aspetti il rimborso</p>
-                </div>
-                <Switch
-                  checked={form.is_advance}
-                  onCheckedChange={v => setForm(f => ({ ...f, is_advance: v, debtor_name: v ? f.debtor_name : '' }))}
-                />
-              </div>
-              {form.is_advance && (
-                <div className="grid gap-1.5">
-                  <Label className="text-sm sm:text-xs">Chi deve rimborsare</Label>
-                  <Input placeholder="Nome del debitore (es. Mario Rossi, Condominio, ecc.)"
-                    value={form.debtor_name}
-                    onChange={e => setForm(f => ({ ...f, debtor_name: e.target.value }))} />
-                </div>
-              )}
+            {/* La decisione chiave, per prima: già pagata o da pagare? */}
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { v: 'da_pagare', label: form.is_advance ? '🟠 Da rimborsare' : 'Da pagare' },
+                { v: 'pagato', label: form.is_advance ? '🟢 Rimborsato' : 'Già pagata' },
+              ].map(opt => (
+                <button
+                  key={opt.v}
+                  type="button"
+                  onClick={() => setForm(f => ({
+                    ...f,
+                    stato: opt.v,
+                    conto_id: opt.v === 'pagato' && !f.conto_id
+                      ? (localStorage.getItem('pm-ultimo-conto-spesa') || '')
+                      : f.conto_id,
+                  }))}
+                  className={`p-2.5 rounded-lg border text-sm font-medium transition-all
+                    ${form.stato === opt.v ? 'border-red-500 bg-red-50 text-red-700 ring-1 ring-red-400' : 'border-slate-200 hover:bg-slate-50'}`}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
 
             {/* Tipo: immobile / veicolo */}
@@ -967,7 +984,7 @@ export default function Expenses() {
                 </div>
               </div>
               <div className="grid gap-1.5">
-                <Label className="text-sm sm:text-xs">{form.is_advance ? 'Data anticipo *' : 'Scadenza *'}</Label>
+                <Label className="text-sm sm:text-xs">{form.is_advance ? 'Data anticipo *' : form.stato === 'pagato' ? 'Data pagamento *' : 'Scadenza *'}</Label>
                 <Input type="date" value={form.scadenza} onChange={e => setForm(f => ({ ...f, scadenza: e.target.value }))} />
               </div>
             </div>
@@ -979,7 +996,60 @@ export default function Expenses() {
                 onChange={e => setForm(f => ({ ...f, descrizione: e.target.value }))} />
             </div>
 
-            {/* Categoria + Stato */}
+            {/* Conto — solo quando la spesa è già pagata */}
+            {form.stato === 'pagato' && (
+              <div className="grid gap-1.5">
+                <Label className="text-sm sm:text-xs">Da quale conto è uscita? *</Label>
+                <Select value={form.conto_id} onValueChange={v => setForm(f => ({ ...f, conto_id: v }))}>
+                  <SelectTrigger className={form.conto_id ? '' : 'border-amber-300 bg-amber-50'}>
+                    <SelectValue placeholder="Scegli il conto…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {conti.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                {!form.conto_id && <p className="text-[11px] text-amber-600">Senza conto la spesa non comparirà nei saldi della Cassa.</p>}
+              </div>
+            )}
+
+            {/* Altri dettagli — ripiegati */}
+            <div className="border rounded-lg overflow-hidden">
+              <button
+                type="button"
+                className="w-full flex items-center justify-between px-3 py-2.5 text-sm text-slate-600 bg-slate-50 hover:bg-slate-100 transition-colors"
+                onClick={() => setMoreOpen(o => !o)}
+              >
+                <span>Altri dettagli <span className="text-slate-400">(categoria, metodo, anticipo, allegato…)</span></span>
+                {moreOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </button>
+              {moreOpen && (
+              <div className="p-3 space-y-4">
+
+            {/* Anticipo da rimborsare */}
+            <div className="border border-emerald-200 bg-emerald-50 rounded-lg p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <Label className="text-sm font-semibold text-emerald-800 flex items-center gap-1.5">
+                    <HandCoins className="w-4 h-4" /> Anticipo da rimborsare
+                  </Label>
+                  <p className="text-xs text-emerald-700 mt-0.5">Spesa pagata per conto di terzi, di cui aspetti il rimborso</p>
+                </div>
+                <Switch
+                  checked={form.is_advance}
+                  onCheckedChange={v => setForm(f => ({ ...f, is_advance: v, debtor_name: v ? f.debtor_name : '' }))}
+                />
+              </div>
+              {form.is_advance && (
+                <div className="grid gap-1.5">
+                  <Label className="text-sm sm:text-xs">Chi deve rimborsare</Label>
+                  <Input placeholder="Nome del debitore (es. Mario Rossi, Condominio, ecc.)"
+                    value={form.debtor_name}
+                    onChange={e => setForm(f => ({ ...f, debtor_name: e.target.value }))} />
+                </div>
+              )}
+            </div>
+
+            {/* Categoria + Metodo */}
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
                 <Label className="text-sm sm:text-xs">Categoria</Label>
@@ -990,20 +1060,6 @@ export default function Expenses() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid gap-1.5">
-                <Label className="text-sm sm:text-xs">Stato</Label>
-                <Select value={form.stato} onValueChange={v => setForm(f => ({ ...f, stato: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="da_pagare">{form.is_advance ? '🟠 Da Rimborsare' : '🔴 Da Pagare'}</SelectItem>
-                    <SelectItem value="pagato">{form.is_advance ? '🟢 Rimborsato' : '🟢 Pagato'}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Metodo + Competenza */}
-            <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
                 <Label className="text-sm sm:text-xs">Metodo pagamento</Label>
                 <Select value={form.payment_method} onValueChange={v => setForm(f => ({ ...f, payment_method: v }))}>
@@ -1017,30 +1073,19 @@ export default function Expenses() {
                   </SelectContent>
                 </Select>
               </div>
-              {!form.is_advance && (
-                <div className="grid gap-1.5">
-                  <Label className="text-sm sm:text-xs">A carico di</Label>
-                  <Select value={form.competence} onValueChange={v => setForm(f => ({ ...f, competence: v as 'owner' | 'tenant' }))}>
-                    <SelectTrigger className={form.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="owner">🏠 Proprietario</SelectItem>
-                      <SelectItem value="tenant">👤 Inquilino</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
             </div>
 
-            {/* Conto — solo quando la spesa è già pagata */}
-            {form.stato === 'pagato' && (
+            {/* Competenza */}
+            {!form.is_advance && (
               <div className="grid gap-1.5">
-                <Label className="text-sm sm:text-xs">Conto</Label>
-                <Select value={form.conto_id} onValueChange={v => setForm(f => ({ ...f, conto_id: v }))}>
-                  <SelectTrigger><SelectValue placeholder="Da quale conto è uscita…" /></SelectTrigger>
+                <Label className="text-sm sm:text-xs">A carico di</Label>
+                <Select value={form.competence} onValueChange={v => setForm(f => ({ ...f, competence: v as 'owner' | 'tenant' }))}>
+                  <SelectTrigger className={form.competence === 'tenant' ? 'bg-purple-50 border-purple-200 text-purple-700' : ''}>
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
-                    {conti.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+                    <SelectItem value="owner">🏠 Proprietario</SelectItem>
+                    <SelectItem value="tenant">👤 Inquilino</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -1114,6 +1159,10 @@ export default function Expenses() {
                 )}
               </div>
             )}
+
+              </div>
+              )}
+            </div>
 
             {/* Actions */}
             <div className="flex gap-2 pt-2">

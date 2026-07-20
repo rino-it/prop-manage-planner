@@ -26,7 +26,7 @@ export function normalizeUnassigned(spese: any[], incassi: any[]): MovSenzaConto
   }
 
   for (const inc of incassi || []) {
-    const real = inc.bookings?.properties_real;
+    const real = inc.bookings?.properties_real || inc.properties_real;
     out.push({
       id: inc.id,
       tipo: 'incasso',

@@ -34,6 +34,7 @@ export const useRevenue = () => {
         .from('tenant_payments')
         .select(`
           *,
+          properties_real (nome, gestione_id),
           bookings (
             nome_ospite,
             property_id,
@@ -51,6 +52,7 @@ export const useRevenue = () => {
   const createPaymentPlan = useMutation({
     mutationFn: async (params: {
         booking_id: string,
+        property_id?: string,
         amount: number,
         date_start: Date,
         months: number,
@@ -61,7 +63,7 @@ export const useRevenue = () => {
         payment_method?: string,
         conto_id?: string,
     }) => {
-      const { booking_id, amount, date_start, months, category, description,
+      const { booking_id, property_id, amount, date_start, months, category, description,
               is_recurring, already_paid, payment_method, conto_id } = params;
 
       // RECUPERO UTENTE SICURO
@@ -72,7 +74,7 @@ export const useRevenue = () => {
 
       const groupId = is_recurring ? crypto.randomUUID() : null;
       const rows = buildPaymentRows(
-        { booking_id, amount, date_start, months, category, description,
+        { booking_id, property_id, amount, date_start, months, category, description,
           is_recurring, already_paid, payment_method, conto_id },
         user.id,
         groupId,
