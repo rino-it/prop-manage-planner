@@ -82,13 +82,15 @@ function KpiCard({ label, value, sub, color, icon }: {
   );
 }
 
-function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate }: {
+function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate, conti, onChangeConto }: {
   rev: any;
   onIncassa?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onCalendar?: () => void;
   showPaidDate?: boolean;
+  conti?: any[];
+  onChangeConto?: (contoId: string) => void;
 }) {
   const overdueDays = rev.stato === 'da_pagare' && isPast(parseISO(rev.data_scadenza)) && !isToday(parseISO(rev.data_scadenza))
     ? daysDiff(rev.data_scadenza)
@@ -149,11 +151,25 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
             <CheckCircle className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> Incassa
           </Button>
         )}
-        {rev.stato === 'pagato' && (
+        {rev.stato === 'pagato' && (conti && onChangeConto ? (
+          <Select value={rev.conto_id || ''} onValueChange={onChangeConto}>
+            <SelectTrigger
+              className={`h-7 w-auto gap-1 px-2 text-xs border rounded-full ${rev.conto_id
+                ? 'text-green-600 border-green-200 bg-green-50'
+                : 'text-amber-700 border-amber-200 bg-amber-50'}`}
+              title="Conto su cui è entrato l'incasso"
+            >
+              <SelectValue placeholder="Senza conto" />
+            </SelectTrigger>
+            <SelectContent>
+              {conti.map((c: any) => <SelectItem key={c.id} value={c.id}>{c.nome}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        ) : (
           <Badge variant="outline" className="text-green-600 border-green-200 bg-green-50 h-7 px-2 text-xs">
             Pagato
           </Badge>
-        )}
+        ))}
 
         {onCalendar && (
           <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-blue-400 hover:text-blue-700 hover:bg-blue-50" onClick={onCalendar} title="Aggiungi a calendario">
@@ -177,7 +193,7 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
 
 // ─── main component ───────────────────────────────────────────────────────────
 export default function Revenue() {
-  const { revenues, createPaymentPlan, confirmPayment, updatePayment, deletePayment, isLoading } = useRevenue();
+  const { revenues, createPaymentPlan, confirmPayment, updatePayment, deletePayment, changeConto, isLoading } = useRevenue();
   const { data: properties } = usePropertiesReal();
   const { data: gestioni = [] } = useGestioni();
   const { data: conti = [] } = useConti();
@@ -546,6 +562,8 @@ export default function Revenue() {
                     <div className="divide-y bg-white">
                       {items.map(r => (
                         <RevenueRow key={r.id} rev={r} showPaidDate
+                          conti={conti as any[]}
+                          onChangeConto={contoId => changeConto.mutate({ id: r.id, contoId })}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
                         />
                       ))}

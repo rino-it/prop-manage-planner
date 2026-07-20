@@ -161,6 +161,24 @@ export const useRevenue = () => {
     onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
   });
 
+  // 7. CAMBIA CONTO (incasso già registrato)
+  const changeConto = useMutation({
+    mutationFn: async ({ id, contoId }: { id: string; contoId: string | null }) => {
+      const { error } = await supabase
+        .from('tenant_payments')
+        .update({ conto_id: contoId })
+        .eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['revenue-payments'] });
+      queryClient.invalidateQueries({ queryKey: ['cassa'] });
+      queryClient.invalidateQueries({ queryKey: ['movimenti-senza-conto'] });
+      toast({ title: 'Conto aggiornato', description: 'Il movimento è stato spostato sul nuovo conto.' });
+    },
+    onError: (err: any) => toast({ title: 'Errore', description: err.message, variant: 'destructive' }),
+  });
+
   return {
     revenues,
     isLoading,
@@ -168,6 +186,7 @@ export const useRevenue = () => {
     markAsPaid,
     confirmPayment,
     updatePayment,
-    deletePayment
+    deletePayment,
+    changeConto
   };
 };
