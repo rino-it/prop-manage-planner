@@ -7,6 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { buildRowsProprieta, type MovProprieta } from '@/utils/estrattoProprieta';
 import { dataIncasso } from '@/utils/cassa';
+import { hasIncassiLiberi } from '@/lib/dbFeatures';
 import { aggregaReportProprieta, type MovReport } from '@/utils/reportProprieta';
 import { downloadReportProprieta } from '@/components/ReportProprietaPDF';
 import { Card, CardContent } from '@/components/ui/card';
@@ -99,6 +100,7 @@ async function buildEstrattoGestione(
   // anche i movimenti antecedenti l'apertura del conto entrano nello storico.
   const NO_APERTURA = '0000-00-00';
 
+  const free = await hasIncassiLiberi();
   for (const conto of conti) {
     const apertura: string = (conto.data_apertura || '0000-00-00').slice(0, 10);
 
@@ -106,9 +108,10 @@ async function buildEstrattoGestione(
     const [{ data: incassi }, { data: spese }, { data: giroconti }] = await Promise.all([
       supabase
         .from('tenant_payments')
-        .select('importo, payment_date, data_scadenza, description, notes, stato, booking_id, properties_real(nome), bookings(nome_ospite, property_id, properties_real(nome, gestione_id))')
+        .select(`importo, payment_date, data_scadenza, description, notes, stato, booking_id, ${free ? 'properties_real(nome), ' : ''}bookings(nome_ospite, property_id, properties_real(nome, gestione_id))`)
         .eq('conto_id', conto.id)
-        .eq('stato', 'pagato'),
+        .eq('stato', 'pagato')
+        .returns<any[]>(),
       supabase
         .from('payments')
         .select('importo, data_pagamento, descrizione, stato, properties_real(nome), properties_mobile(veicolo)')
@@ -243,6 +246,7 @@ async function buildEstrattoProprieta(
 ): Promise<{ rows: EstrattoRow[]; totEntrate: number; totUscite: number; saldoFinale: number }> {
   const SENTINEL = '1900-01-01';
   const movs: MovProprieta[] = [];
+  const free = await hasIncassiLiberi();
 
   const { data: spese } = await supabase
     .from('payments')
@@ -258,8 +262,9 @@ async function buildEstrattoProprieta(
   if (!target.isMobile) {
     const { data: incassi } = await supabase
       .from('tenant_payments')
-      .select('importo, payment_date, data_scadenza, description, notes, conto_id, stato, property_id, bookings(property_id)')
-      .eq('stato', 'pagato');
+      .select(`importo, payment_date, data_scadenza, description, notes, conto_id, stato, ${free ? 'property_id, ' : ''}bookings(property_id)`)
+      .eq('stato', 'pagato')
+      .returns<any[]>();
     for (const inc of incassi || []) {
       const booking = inc.bookings as any;
       if (booking?.property_id !== target.id && (inc as any).property_id !== target.id) continue;
@@ -275,6 +280,7 @@ async function buildEstrattoProprieta(
 // ─── property report builder ──────────────────────────────────────────────────
 async function buildReportProprieta(preset: string, from: string, to: string) {
   const SENTINEL = '1900-01-01';
+  const free = await hasIncassiLiberi();
   const [{ data: spese }, { data: incassi }] = await Promise.all([
     supabase
       .from('payments')
@@ -282,8 +288,9 @@ async function buildReportProprieta(preset: string, from: string, to: string) {
       .eq('stato', 'pagato'),
     supabase
       .from('tenant_payments')
-      .select('importo, payment_date, data_scadenza, stato, properties_real(nome), bookings(properties_real(nome))')
-      .eq('stato', 'pagato'),
+      .select(`importo, payment_date, data_scadenza, stato, ${free ? 'properties_real(nome), ' : ''}bookings(properties_real(nome))`)
+      .eq('stato', 'pagato')
+      .returns<any[]>(),
   ]);
 
   const movs: MovReport[] = [];

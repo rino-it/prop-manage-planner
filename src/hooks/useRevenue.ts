@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import { buildPaymentRows } from '@/utils/incassi';
+import { hasIncassiLiberi } from '@/lib/dbFeatures';
 
 export interface PaymentEntry {
   id: string;
@@ -30,11 +31,12 @@ export const useRevenue = () => {
   const { data: revenues, isLoading } = useQuery({
     queryKey: ['revenue-payments'],
     queryFn: async () => {
+      const free = await hasIncassiLiberi();
       const { data, error } = await supabase
         .from('tenant_payments')
         .select(`
           *,
-          properties_real (nome, gestione_id),
+          ${free ? 'properties_real (nome, gestione_id),' : ''}
           bookings (
             nome_ospite,
             property_id,
@@ -42,7 +44,7 @@ export const useRevenue = () => {
           )
         `)
         .order('data_scadenza', { ascending: true });
-      
+
       if (error) throw error;
       return data;
     },
@@ -70,6 +72,10 @@ export const useRevenue = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         throw new Error("Utente non loggato. Ricarica la pagina.");
+      }
+
+      if (!booking_id && !(await hasIncassiLiberi())) {
+        throw new Error("Per gli incassi senza inquilino serve la migrazione del database (colonna property_id): esegui la SQL in supabase/migrations/20260720_tenant_payments_property_id.sql.");
       }
 
       const groupId = is_recurring ? crypto.randomUUID() : null;

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeUnassigned, type MovSenzaConto } from '@/utils/movimentiSenzaConto';
+import { hasIncassiLiberi } from '@/lib/dbFeatures';
 
 export function useMovimentiSenzaConto() {
   const qc = useQueryClient();
@@ -8,6 +9,7 @@ export function useMovimentiSenzaConto() {
   const list = useQuery<MovSenzaConto[]>({
     queryKey: ['movimenti-senza-conto'],
     queryFn: async () => {
+      const free = await hasIncassiLiberi();
       const [{ data: spese }, { data: incassi }] = await Promise.all([
         supabase
           .from('payments')
@@ -16,7 +18,7 @@ export function useMovimentiSenzaConto() {
           .eq('stato', 'pagato'),
         supabase
           .from('tenant_payments')
-          .select('id, importo, payment_date, data_scadenza, description, notes, properties_real(nome, gestione_id), bookings(properties_real(nome, gestione_id))')
+          .select(`id, importo, payment_date, data_scadenza, description, notes, ${free ? 'properties_real(nome, gestione_id), ' : ''}bookings(properties_real(nome, gestione_id))`)
           .is('conto_id', null)
           .eq('stato', 'pagato'),
       ]);
