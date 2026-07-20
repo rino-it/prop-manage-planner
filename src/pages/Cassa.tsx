@@ -7,6 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { buildRowsProprieta, type MovProprieta } from '@/utils/estrattoProprieta';
 import { dataIncasso } from '@/utils/cassa';
+import { aggregaReportProprieta, type MovReport } from '@/utils/reportProprieta';
+import { downloadReportProprieta } from '@/components/ReportProprietaPDF';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -270,6 +272,34 @@ async function buildEstrattoProprieta(
   return buildRowsProprieta(movs, target.nome, contoNome);
 }
 
+// ─── property report builder ──────────────────────────────────────────────────
+async function buildReportProprieta(preset: string, from: string, to: string) {
+  const SENTINEL = '1900-01-01';
+  const [{ data: spese }, { data: incassi }] = await Promise.all([
+    supabase
+      .from('payments')
+      .select('importo, data_pagamento, stato, properties_real(nome), properties_mobile(veicolo)')
+      .eq('stato', 'pagato'),
+    supabase
+      .from('tenant_payments')
+      .select('importo, payment_date, data_scadenza, stato, bookings(properties_real(nome))')
+      .eq('stato', 'pagato'),
+  ]);
+
+  const movs: MovReport[] = [];
+  for (const sp of spese || []) {
+    if (!inPeriod(sp.data_pagamento, preset, from, to, SENTINEL)) continue;
+    const nome = (sp.properties_real as any)?.nome || (sp.properties_mobile as any)?.veicolo || '';
+    movs.push({ proprieta: nome, entrata: 0, uscita: Number(sp.importo) });
+  }
+  for (const inc of incassi || []) {
+    if (!inPeriod(dataIncasso(inc), preset, from, to, SENTINEL)) continue;
+    const nome = (inc.bookings as any)?.properties_real?.nome || '';
+    movs.push({ proprieta: nome, entrata: Number(inc.importo), uscita: 0 });
+  }
+  return aggregaReportProprieta(movs);
+}
+
 // ─── EstrattoDialog ───────────────────────────────────────────────────────────
 interface EstrattoTarget { level: 'gestione' | 'proprieta'; id: string; nome: string; isMobile?: boolean }
 
@@ -283,7 +313,7 @@ function EstrattoDialog({
   contiByGestione: (gid: string) => any[];
   conti: any[];
 }) {
-  const [level, setLevel] = useState<'gestione' | 'proprieta'>('gestione');
+  const [level, setLevel] = useState<'gestione' | 'proprieta' | 'report'>('gestione');
   const [gestioneId, setGestioneId] = useState('');
   const [propertyId, setPropertyId] = useState('');
   const [preset, setPreset] = useState<'tutto' | 'anno' | 'mese' | 'custom'>('tutto');
@@ -305,6 +335,12 @@ function EstrattoDialog({
   const handleDownload = async () => {
     setLoading(true);
     try {
+      if (level === 'report') {
+        const report = await buildReportProprieta(preset, from, to);
+        await downloadReportProprieta({ periodo: periodLabel(preset, from, to), ...report }, 'report-proprieta.pdf');
+        onClose();
+        return;
+      }
       let result;
       let titolo: string;
       let filename: string;
@@ -329,7 +365,7 @@ function EstrattoDialog({
     }
   };
 
-  const canDownload = level === 'gestione' ? !!gestioneId : !!propertyId;
+  const canDownload = level === 'report' ? true : level === 'gestione' ? !!gestioneId : !!propertyId;
 
   return (
     <Dialog open={!!target} onOpenChange={o => !o && onClose()}>
@@ -348,9 +384,17 @@ function EstrattoDialog({
               className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${level === 'proprieta' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
               onClick={() => setLevel('proprieta')}
             >Per proprietà</button>
+            <button
+              className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${level === 'report' ? 'bg-white shadow text-blue-600' : 'text-slate-500'}`}
+              onClick={() => setLevel('report')}
+            >Report</button>
           </div>
 
-          {level === 'gestione' ? (
+          {level === 'report' ? (
+            <p className="text-xs text-slate-500">
+              Entrate, uscite e netto di <strong>tutte le proprietà</strong> a confronto, una riga ciascuna.
+            </p>
+          ) : level === 'gestione' ? (
             <div className="grid gap-1.5">
               <Label>Gestione</Label>
               <Select value={gestioneId} onValueChange={setGestioneId}>
