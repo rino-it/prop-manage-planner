@@ -30,7 +30,7 @@ export function normalizeUnassigned(spese: any[], incassi: any[]): MovSenzaConto
     out.push({
       id: inc.id,
       tipo: 'incasso',
-      data: inc.payment_date || '',
+      data: inc.payment_date || inc.data_scadenza || '',
       descrizione: inc.description || inc.notes || 'Incasso',
       proprieta: real?.nome || '',
       gestione_id: real?.gestione_id ?? null,

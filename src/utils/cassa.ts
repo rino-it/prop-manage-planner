@@ -1,7 +1,13 @@
 export interface ContoBase { id: string; saldo_iniziale: number; data_apertura: string; }
-export interface Incasso { conto_id?: string | null; importo: number; payment_date?: string | null; stato?: string | null; }
+export interface Incasso { conto_id?: string | null; importo: number; payment_date?: string | null; data_scadenza?: string | null; stato?: string | null; }
 export interface Spesa   { conto_id?: string | null; importo: number; data_pagamento?: string | null; stato?: string | null; }
 export interface Giroconto { conto_from: string; conto_to: string; importo: number; data: string; }
+
+// Data effettiva di un incasso: il webhook Stripe deployato marca "pagato"
+// senza valorizzare payment_date, quindi si ripiega su data_scadenza.
+export function dataIncasso(i: Pick<Incasso, 'payment_date' | 'data_scadenza'>): string | null {
+  return i.payment_date || i.data_scadenza || null;
+}
 
 export function saldoConto(
   conto: ContoBase,
@@ -13,7 +19,7 @@ export function saldoConto(
   let saldo = Number(conto.saldo_iniziale) || 0;
 
   for (const i of mov.incassi)
-    if (i.conto_id === conto.id && i.stato === 'pagato' && after(i.payment_date)) saldo += Number(i.importo);
+    if (i.conto_id === conto.id && i.stato === 'pagato' && after(dataIncasso(i))) saldo += Number(i.importo);
 
   for (const s of mov.spese)
     if (s.conto_id === conto.id && s.stato === 'pagato' && after(s.data_pagamento)) saldo -= Number(s.importo);

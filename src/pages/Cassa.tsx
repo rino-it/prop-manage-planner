@@ -6,6 +6,7 @@ import { usePropertiesReal } from '@/hooks/useProperties';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { buildRowsProprieta, type MovProprieta } from '@/utils/estrattoProprieta';
+import { dataIncasso } from '@/utils/cassa';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -103,7 +104,7 @@ async function buildEstrattoGestione(
     const [{ data: incassi }, { data: spese }, { data: giroconti }] = await Promise.all([
       supabase
         .from('tenant_payments')
-        .select('importo, payment_date, description, notes, stato, booking_id, bookings(nome_ospite, property_id, properties_real(nome, gestione_id))')
+        .select('importo, payment_date, data_scadenza, description, notes, stato, booking_id, bookings(nome_ospite, property_id, properties_real(nome, gestione_id))')
         .eq('conto_id', conto.id)
         .eq('stato', 'pagato'),
       supabase
@@ -123,7 +124,7 @@ async function buildEstrattoGestione(
     const movs: Array<{ dateStr: string; signed: number; row: EstrattoRow }> = [];
 
     for (const inc of incassi || []) {
-      const dateStr = (inc.payment_date || '').slice(0, 10);
+      const dateStr = (dataIncasso(inc) || '').slice(0, 10);
       if (!dateStr) continue;
       const booking = inc.bookings as any;
       const propNome = booking?.properties_real?.nome || '';
@@ -255,12 +256,12 @@ async function buildEstrattoProprieta(
   if (!target.isMobile) {
     const { data: incassi } = await supabase
       .from('tenant_payments')
-      .select('importo, payment_date, description, notes, conto_id, stato, bookings(property_id)')
+      .select('importo, payment_date, data_scadenza, description, notes, conto_id, stato, bookings(property_id)')
       .eq('stato', 'pagato');
     for (const inc of incassi || []) {
       const booking = inc.bookings as any;
       if (booking?.property_id !== target.id) continue;
-      const dateStr: string = inc.payment_date || '';
+      const dateStr: string = dataIncasso(inc) || '';
       if (!inPeriod(dateStr, preset, from, to, SENTINEL)) continue;
       movs.push({ data: dateStr, descrizione: inc.description || inc.notes || 'Incasso', conto_id: inc.conto_id ?? null, entrata: Number(inc.importo), uscita: 0 });
     }

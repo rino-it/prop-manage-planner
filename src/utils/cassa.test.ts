@@ -28,6 +28,25 @@ describe('saldoConto', () => {
     expect(r).toBe(1000);
   });
 
+  it('conta gli incassi pagati senza payment_date usando data_scadenza (Stripe)', () => {
+    const r = saldoConto(conto, {
+      incassi: [
+        { conto_id: 'c1', importo: 87.5, payment_date: null, data_scadenza: '2026-07-18', stato: 'pagato' },
+        { conto_id: 'c1', importo: 300, payment_date: null, data_scadenza: '2026-07-01', stato: 'pre_autorizzato' },
+      ],
+      spese: [], giroconti: [],
+    });
+    expect(r).toBe(1087.5);
+  });
+
+  it('ignora incassi pagati senza alcuna data', () => {
+    const r = saldoConto(conto, {
+      incassi: [{ conto_id: 'c1', importo: 100, payment_date: null, stato: 'pagato' }],
+      spese: [], giroconti: [],
+    });
+    expect(r).toBe(1000);
+  });
+
   it('applica i giroconti in entrata e uscita', () => {
     const r = saldoConto(conto, {
       incassi: [], spese: [],
