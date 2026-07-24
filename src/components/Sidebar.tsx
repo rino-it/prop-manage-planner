@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard, CalendarDays, CalendarRange, Wallet, Banknote, Wrench,
   LogOut, FileText, UserPlus, Home, Users, Truck, Ticket,
-  Search, ChevronRight, MessageCircle, DoorOpen, BarChart3, Globe, Store, Tag, PiggyBank
+  Search, ChevronRight, MessageCircle, DoorOpen, BarChart3, Globe, Store, Tag, PiggyBank, KeyRound
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/useAuth';
@@ -46,6 +46,7 @@ const menuSections: MenuSection[] = [
       { id: 'properties', label: 'Proprieta', icon: Home, path: '/properties' },
       { id: 'tenants', label: 'Inquilini', icon: UserPlus, path: '/tenants' },
       { id: 'accoglienza', label: 'Accoglienza', icon: DoorOpen, path: '/accoglienza' },
+      { id: 'collaboratori', label: 'Collaboratori', icon: KeyRound, path: '/collaboratori' },
       { id: 'prezzi', label: 'Prezzi', icon: Tag, path: '/prezzi' },
       { id: 'mobile-properties', label: 'Parco Mezzi', icon: Truck, path: '/mobile-properties' },
     ],

@@ -23,6 +23,7 @@ import GuestAutoCreate from "./pages/GuestAutoCreate";
 import GuestPortal from "./pages/GuestPortal";
 import TenantPortal from "./pages/TenantPortal";
 import Team from "./components/Team";
+import Collaboratori from "./pages/Collaboratori";
 import Services from "./components/Services";
 import Activities from "./components/Activities";
 import Revenue from "./components/Revenue";
@@ -91,6 +92,7 @@ const App = () => (
               <Route path="bookings" element={<BookingsWrapper />} />
               <Route path="activities" element={<Activities />} />
               <Route path="team" element={<Team />} />
+              <Route path="collaboratori" element={<Collaboratori />} />
               <Route path="services" element={<Services />} />
               <Route path="statistiche" element={<Statistics />} />
               <Route path="messaggi" element={<Messages />} />

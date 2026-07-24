@@ -321,6 +321,81 @@ export type Database = {
           },
         ]
       }
+      collaboratori: {
+        Row: {
+          attivo: boolean
+          created_at: string | null
+          id: string
+          nome: string
+          note: string | null
+          telefono: string | null
+          user_id: string | null
+        }
+        Insert: {
+          attivo?: boolean
+          created_at?: string | null
+          id?: string
+          nome: string
+          note?: string | null
+          telefono?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          attivo?: boolean
+          created_at?: string | null
+          id?: string
+          nome?: string
+          note?: string | null
+          telefono?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      collaboratori_condizioni: {
+        Row: {
+          attivo: boolean
+          collaboratore_id: string
+          created_at: string | null
+          id: string
+          importo: number
+          property_id: string | null
+          tipo: string
+        }
+        Insert: {
+          attivo?: boolean
+          collaboratore_id: string
+          created_at?: string | null
+          id?: string
+          importo: number
+          property_id?: string | null
+          tipo: string
+        }
+        Update: {
+          attivo?: boolean
+          collaboratore_id?: string
+          created_at?: string | null
+          id?: string
+          importo?: number
+          property_id?: string | null
+          tipo?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "collaboratori_condizioni_collaboratore_id_fkey"
+            columns: ["collaboratore_id"]
+            isOneToOne: false
+            referencedRelation: "collaboratori"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "collaboratori_condizioni_property_id_fkey"
+            columns: ["property_id"]
+            isOneToOne: false
+            referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       conti: {
         Row: {
           archived: boolean
@@ -889,6 +964,7 @@ export type Database = {
         Row: {
           allegato_url: string | null
           categoria: string | null
+          collaboratore_id: string | null
           competence: string | null
           conto_id: string | null
           consolidato_in_piano_id: string | null
@@ -915,6 +991,7 @@ export type Database = {
           reimbursement_note: string | null
           ricorrenza_tipo: string
           scadenza: string
+          source_booking_id: string | null
           stato: string | null
           tenant_booking_id: string | null
           ticket_id: string | null
@@ -925,6 +1002,7 @@ export type Database = {
         Insert: {
           allegato_url?: string | null
           categoria?: string | null
+          collaboratore_id?: string | null
           competence?: string | null
           conto_id?: string | null
           consolidato_in_piano_id?: string | null
@@ -951,6 +1029,7 @@ export type Database = {
           reimbursement_note?: string | null
           ricorrenza_tipo?: string
           scadenza: string
+          source_booking_id?: string | null
           stato?: string | null
           tenant_booking_id?: string | null
           ticket_id?: string | null
@@ -961,6 +1040,7 @@ export type Database = {
         Update: {
           allegato_url?: string | null
           categoria?: string | null
+          collaboratore_id?: string | null
           competence?: string | null
           conto_id?: string | null
           consolidato_in_piano_id?: string | null
@@ -987,6 +1067,7 @@ export type Database = {
           reimbursement_note?: string | null
           ricorrenza_tipo?: string
           scadenza?: string
+          source_booking_id?: string | null
           stato?: string | null
           tenant_booking_id?: string | null
           ticket_id?: string | null
@@ -995,6 +1076,13 @@ export type Database = {
           visible_tenant?: boolean | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_collaboratore_id_fkey"
+            columns: ["collaboratore_id"]
+            isOneToOne: false
+            referencedRelation: "collaboratori"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_conto_id_fkey"
             columns: ["conto_id"]
@@ -1014,6 +1102,13 @@ export type Database = {
             columns: ["property_real_id"]
             isOneToOne: false
             referencedRelation: "properties_real"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_source_booking_id_fkey"
+            columns: ["source_booking_id"]
+            isOneToOne: false
+            referencedRelation: "bookings"
             referencedColumns: ["id"]
           },
           {
