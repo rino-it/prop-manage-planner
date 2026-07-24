@@ -42,6 +42,19 @@ export function bucketByScadenza<T extends Record<string, any>>(
     later.push(i);
   }
 
+  // Ordinamenti garantiti: liste aperte per scadenza crescente,
+  // pagati per data pagamento (o scadenza) decrescente. Sort stabile
+  // su stringhe ISO troncate al giorno.
+  const dueKey = (i: T) => (getDate(i) || '').slice(0, 10);
+  const asc = (a: T, b: T) => dueKey(a).localeCompare(dueKey(b));
+  overdue.sort(asc);
+  week.sort(asc);
+  month.sort(asc);
+  later.sort(asc);
+
+  const paidKey = (i: T) => ((i.payment_date ?? i.data_pagamento ?? getDate(i)) || '').slice(0, 10);
+  paid.sort((a, b) => paidKey(b).localeCompare(paidKey(a)));
+
   const byDay: Record<string, T[]> = {};
   for (const i of week) {
     const key = format(parseISO(getDate(i)), 'yyyy-MM-dd');

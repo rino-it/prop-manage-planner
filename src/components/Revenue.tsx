@@ -58,6 +58,10 @@ function groupByMonth(items: any[]) {
     if (!map[key]) map[key] = [];
     map[key].push(r);
   });
+  // Dentro ogni mese: data pagamento (o scadenza) decrescente, il più recente in alto.
+  Object.values(map).forEach(items => {
+    items.sort((a, b) => (b.payment_date || b.data_scadenza || '').localeCompare(a.payment_date || a.data_scadenza || ''));
+  });
   return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
@@ -87,12 +91,13 @@ function KpiCard({ label, value, sub, color, icon, onClick, active }: {
   );
 }
 
-function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate, conti, onChangeConto }: {
+function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, onRowClick, showPaidDate, conti, onChangeConto }: {
   rev: any;
   onIncassa?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   onCalendar?: () => void;
+  onRowClick?: () => void;
   showPaidDate?: boolean;
   conti?: any[];
   onChangeConto?: (contoId: string) => void;
@@ -103,7 +108,10 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
   const propNome = rev.bookings?.properties_real?.nome || rev.properties_real?.nome;
 
   return (
-    <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${overdueDays ? 'bg-red-50/40' : ''}`}>
+    <div
+      className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${overdueDays ? 'bg-red-50/40' : ''} ${onRowClick ? 'cursor-pointer' : ''}`}
+      onClick={onRowClick}
+    >
       {/* Left */}
       <div className="flex items-start gap-3 flex-1 min-w-0">
         <div className={`w-1 self-stretch rounded-full shrink-0 mt-1 ${
@@ -153,7 +161,7 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
         </span>
 
         {rev.stato !== 'pagato' && onIncassa && (
-          <Button size="sm" className="h-9 sm:h-8 text-xs bg-green-600 hover:bg-green-700 gap-1" onClick={onIncassa}>
+          <Button size="sm" className="h-9 sm:h-8 text-xs bg-green-600 hover:bg-green-700 gap-1" onClick={e => { e.stopPropagation(); onIncassa(); }}>
             <CheckCircle className="w-3.5 h-3.5 sm:w-3 sm:h-3" /> Incassa
           </Button>
         )}
@@ -164,6 +172,7 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
                 ? 'text-green-600 border-green-200 bg-green-50'
                 : 'text-amber-700 border-amber-200 bg-amber-50'}`}
               title="Conto su cui è entrato l'incasso"
+              onClick={e => e.stopPropagation()}
             >
               <SelectValue placeholder="Senza conto" />
             </SelectTrigger>
@@ -178,17 +187,17 @@ function RevenueRow({ rev, onIncassa, onEdit, onDelete, onCalendar, showPaidDate
         ))}
 
         {onCalendar && (
-          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-blue-400 hover:text-blue-700 hover:bg-blue-50" onClick={onCalendar} title="Aggiungi a calendario">
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-blue-400 hover:text-blue-700 hover:bg-blue-50" onClick={e => { e.stopPropagation(); onCalendar(); }} title="Aggiungi a calendario">
             <CalendarPlus className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </Button>
         )}
         {onEdit && (
-          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={e => { e.stopPropagation(); onEdit(); }}>
             <Pencil className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </Button>
         )}
         {onDelete && (
-          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={onDelete}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={e => { e.stopPropagation(); onDelete(); }}>
             <Trash2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
           </Button>
         )}
@@ -476,6 +485,7 @@ export default function Revenue() {
               <CardContent className="p-0 divide-y">
                 {overdue.map(r => (
                   <RevenueRow key={r.id} rev={r}
+                    onRowClick={() => handleEdit(r)}
                     onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                     onEdit={() => handleEdit(r)}
                     onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
@@ -504,6 +514,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {group.items.map(r => (
                         <RevenueRow key={r.id} rev={r}
+                          onRowClick={() => handleEdit(r)}
                           onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
@@ -522,6 +533,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(r => (
                         <RevenueRow key={r.id} rev={r}
+                          onRowClick={() => handleEdit(r)}
                           onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
@@ -540,6 +552,7 @@ export default function Revenue() {
                     <CardContent className="p-0 divide-y">
                       {later.map(r => (
                         <RevenueRow key={r.id} rev={r}
+                          onRowClick={() => handleEdit(r)}
                           onIncassa={() => { setConfirmTarget(r); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmConto(''); }}
                           onEdit={() => handleEdit(r)}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}
@@ -585,6 +598,7 @@ export default function Revenue() {
                     <div className="divide-y bg-white">
                       {items.map(r => (
                         <RevenueRow key={r.id} rev={r} showPaidDate
+                          onRowClick={() => handleEdit(r)}
                           conti={conti as any[]}
                           onChangeConto={contoId => changeConto.mutate({ id: r.id, contoId })}
                           onDelete={() => { if (confirm('Eliminare?')) deletePayment.mutate(r.id); }}

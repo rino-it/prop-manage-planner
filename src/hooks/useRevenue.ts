@@ -43,7 +43,8 @@ export const useRevenue = () => {
             properties_real (nome, gestione_id)
           )
         `)
-        .order('data_scadenza', { ascending: true });
+        .order('data_scadenza', { ascending: true })
+        .returns<any[]>();
 
       if (error) throw error;
       return data;
@@ -86,7 +87,7 @@ export const useRevenue = () => {
         groupId,
       );
 
-      const { error } = await supabase.from('tenant_payments').insert(rows);
+      const { error } = await supabase.from('tenant_payments').insert(rows as any);
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
@@ -158,7 +159,7 @@ export const useRevenue = () => {
     }) => {
       const { error } = await supabase
         .from('tenant_payments')
-        .update({ importo, data_scadenza, category, description })
+        .update({ importo, data_scadenza, category: category as any, description })
         .eq('id', id);
       if (error) throw error;
     },

@@ -30,6 +30,7 @@ import {
 } from 'date-fns';
 import { it } from 'date-fns/locale';
 import { bucketByScadenza } from '@/utils/scadenze';
+import { hasCollaboratori } from '@/lib/dbFeatures';
 import { isAllegatoTypeValid, buildAllegatoPath, displayNameFromPath, ALLEGATO_MAX_BYTES } from '@/utils/allegato';
 import RientriTab from '@/components/RientriTab';
 import { PianoRientroDialog } from '@/components/PianoRientroDialog';
@@ -75,6 +76,10 @@ function groupByMonth(items: any[]) {
     if (!map[key]) map[key] = [];
     map[key].push(r);
   });
+  // Dentro ogni mese: data pagamento (o scadenza) decrescente.
+  Object.values(map).forEach(g =>
+    g.sort((a, b) => (b.data_pagamento || b.scadenza || '').localeCompare(a.data_pagamento || a.scadenza || '')),
+  );
   return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0]));
 }
 
@@ -107,11 +112,12 @@ function KpiCard({ label, value, sub, color, icon, onClick, active }: {
 }
 
 // ─── ExpenseRow ───────────────────────────────────────────────────────────────
-function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate, selectable, selected, onToggleSelect }: {
+function ExpenseRow({ exp, onPaga, onEdit, onDelete, onRowClick, showPaidDate, selectable, selected, onToggleSelect }: {
   exp: any;
   onPaga?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  onRowClick?: () => void;
   showPaidDate?: boolean;
   selectable?: boolean;
   selected?: boolean;
@@ -128,11 +134,14 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate, selectable, s
   const isMobile = !!exp.property_mobile_id;
 
   return (
-    <div className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${overdueDays ? 'bg-red-50/40' : ''}`}>
+    <div
+      className={`flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 px-4 py-3 border-b last:border-0 hover:bg-slate-50 transition-colors ${overdueDays ? 'bg-red-50/40' : ''} ${onRowClick ? 'cursor-pointer' : ''}`}
+      onClick={onRowClick}
+    >
       {/* Left */}
       <div className="flex items-start gap-3 flex-1 min-w-0">
         {selectable && (
-          <Checkbox checked={!!selected} onCheckedChange={() => onToggleSelect?.()} className="mt-1 shrink-0" />
+          <Checkbox checked={!!selected} onCheckedChange={() => onToggleSelect?.()} onClick={e => e.stopPropagation()} className="mt-1 shrink-0" />
         )}
         <div className={`w-1 self-stretch rounded-full shrink-0 mt-1 ${
           exp.stato === 'pagato' ? 'bg-green-400' :
@@ -147,6 +156,11 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate, selectable, s
               {isMobile ? <Car className="w-3 h-3 inline mr-1" /> : <Home className="w-3 h-3 inline mr-1" />}
               {propName}
             </span>
+            {exp.collaboratori?.nome && (
+              <span className="text-xs bg-indigo-50 border border-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                🧹 {exp.collaboratori.nome}
+              </span>
+            )}
             <span className="text-xs text-slate-400">
               {CATEGORY_LABELS[exp.categoria] || exp.categoria || 'Altro'}
             </span>
@@ -194,7 +208,7 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate, selectable, s
         </span>
 
         {exp.stato !== 'pagato' && onPaga && (
-          <Button size="sm" className={`h-9 sm:h-8 text-xs gap-1 ${exp.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`} onClick={onPaga}>
+          <Button size="sm" className={`h-9 sm:h-8 text-xs gap-1 ${exp.is_advance ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-green-600 hover:bg-green-700'}`} onClick={e => { e.stopPropagation(); onPaga(); }}>
             {exp.is_advance ? <><Undo2 className="w-3 h-3" /> Rimborsato</> : <><CheckCircle className="w-3 h-3" /> Paga</>}
           </Button>
         )}
@@ -209,19 +223,19 @@ function ExpenseRow({ exp, onPaga, onEdit, onDelete, showPaidDate, selectable, s
             variant="ghost"
             size="icon"
             className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50"
-            onClick={() => openAllegato(exp.allegato_url)}
+            onClick={e => { e.stopPropagation(); openAllegato(exp.allegato_url); }}
             title="Apri allegato"
           >
             <Paperclip className="w-3.5 h-3.5" />
           </Button>
         )}
         {onEdit && (
-          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={onEdit}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-400 hover:text-blue-700 hover:bg-blue-50" onClick={e => { e.stopPropagation(); onEdit(); }}>
             <Pencil className="w-3.5 h-3.5" />
           </Button>
         )}
         {onDelete && (
-          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={onDelete}>
+          <Button variant="ghost" size="icon" className="h-9 w-9 sm:h-8 sm:w-8 text-slate-300 hover:text-red-600 hover:bg-red-50" onClick={e => { e.stopPropagation(); onDelete(); }}>
             <Trash2 className="w-3.5 h-3.5" />
           </Button>
         )}
@@ -316,10 +330,13 @@ export default function Expenses() {
   const { data: expenses = [], isLoading } = useQuery({
     queryKey: ['unified-expenses'],
     queryFn: async () => {
+      // L'embed collaboratori(nome) solo a migrazione eseguita (probe cached).
+      const withCollaboratori = await hasCollaboratori();
       const { data, error } = await supabase
         .from('payments')
-        .select('*, properties_real(nome), properties_mobile(veicolo, targa)')
-        .order('scadenza', { ascending: false });
+        .select(`*, properties_real(nome), properties_mobile(veicolo, targa)${withCollaboratori ? ', collaboratore_id, collaboratori(nome)' : ''}`)
+        .order('scadenza', { ascending: false })
+        .returns<any[]>();
       if (error) throw error;
       return data || [];
     },
@@ -706,6 +723,7 @@ export default function Expenses() {
               <CardContent className="p-0 divide-y">
                 {overdue.map(ex => (
                   <ExpenseRow key={ex.id} exp={ex}
+                    onRowClick={() => openEdit(ex)}
                     selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                     onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                     onEdit={() => openEdit(ex)}
@@ -736,6 +754,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {group.items.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
+                          onRowClick={() => openEdit(ex)}
                           selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
@@ -753,6 +772,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {thisMonth.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
+                          onRowClick={() => openEdit(ex)}
                           selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
@@ -770,6 +790,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {later.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
+                          onRowClick={() => openEdit(ex)}
                           selectable={selMode} selected={sel.has(ex.id)} onToggleSelect={() => toggleSel(ex.id)}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
@@ -821,6 +842,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {advancesPending.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex}
+                          onRowClick={() => openEdit(ex)}
                           onPaga={() => { setConfirmTarget(ex); setConfirmDate(format(new Date(), 'yyyy-MM-dd')); setConfirmMethod('bonifico'); setConfirmNote(''); setConfirmConto(''); }}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare questo anticipo?')) deleteExpense.mutate(ex.id); }}
@@ -837,6 +859,7 @@ export default function Expenses() {
                     <CardContent className="p-0 divide-y">
                       {advancesRefunded.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex} showPaidDate
+                          onRowClick={() => openEdit(ex)}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
@@ -881,6 +904,7 @@ export default function Expenses() {
                     <div className="divide-y bg-white">
                       {items.map(ex => (
                         <ExpenseRow key={ex.id} exp={ex} showPaidDate
+                          onRowClick={() => openEdit(ex)}
                           onEdit={() => openEdit(ex)}
                           onDelete={() => { if (confirm('Eliminare?')) deleteExpense.mutate(ex.id); }}
                         />
