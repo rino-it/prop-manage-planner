@@ -32,7 +32,11 @@ function fmtDate(iso: string | null): string {
 
 const TIPO_LABEL: Record<string, string> = {
   checkin: 'Check-in',
+  checkout: 'Check-out',
   pulizia: 'Pulizia',
+  lenzuola_matrimoniale: 'Lenzuola matrimoniale',
+  lenzuola_singolo: 'Lenzuola singolo',
+  kit_asciugamani: 'Kit asciugamani',
   mensile: 'Mensile',
 };
 
@@ -143,7 +147,11 @@ function CondizioneDialog({
               <SelectTrigger><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="checkin">Check-in (per prenotazione)</SelectItem>
+                <SelectItem value="checkout">Check-out (per prenotazione)</SelectItem>
                 <SelectItem value="pulizia">Pulizia (per prenotazione)</SelectItem>
+                <SelectItem value="lenzuola_matrimoniale">Lenzuola matrimoniale (per prenotazione)</SelectItem>
+                <SelectItem value="lenzuola_singolo">Lenzuola singolo (per prenotazione)</SelectItem>
+                <SelectItem value="kit_asciugamani">Kit asciugamani (per prenotazione)</SelectItem>
                 <SelectItem value="mensile">Mensile (generale)</SelectItem>
               </SelectContent>
             </Select>
